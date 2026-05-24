@@ -84,6 +84,23 @@ def _get_job(job_id: str) -> dict[str, object] | None:
         return deepcopy(job) if job else None
 
 
+def _get_current_update_job() -> dict[str, object] | None:
+    with _jobs_lock:
+        active_jobs = [
+            job
+            for job in _update_jobs.values()
+            if job.get("status") in {"queued", "running"}
+        ]
+        if active_jobs:
+            latest_active = max(active_jobs, key=lambda item: str(item.get("updated_at") or ""))
+            return deepcopy(latest_active)
+
+        if not _update_jobs:
+            return None
+        latest_job = max(_update_jobs.values(), key=lambda item: str(item.get("updated_at") or ""))
+        return deepcopy(latest_job)
+
+
 def _csv_order(item: dict[str, object]) -> int:
     try:
         return int(str(item.get("csv_order") or item.get("news_id") or item.get("id") or "0"))
@@ -380,6 +397,10 @@ def update_today_news():
 
 @router.post("/update-news/jobs")
 def start_update_today_news_job():
+    current_job = _get_current_update_job()
+    if current_job and current_job.get("status") in {"queued", "running"}:
+        return current_job
+
     job = _new_update_job()
     job_id = str(job["job_id"])
     with _jobs_lock:
@@ -388,6 +409,14 @@ def start_update_today_news_job():
     thread = Thread(target=_run_update_job, args=(job_id,), daemon=True)
     thread.start()
     return _get_job(job_id)
+
+
+@router.get("/update-news/jobs/current")
+def get_current_update_today_news_job():
+    job = _get_current_update_job()
+    if not job:
+        raise HTTPException(status_code=404, detail="News update job not found")
+    return job
 
 
 @router.get("/update-news/jobs/{job_id}")
@@ -415,6 +444,11 @@ def news_detail(
     for item in response.get("items", []):
         if str(item.get("news_id")) == news_id:
             return item
+    if date:
+        fallback_response = _news("all", 0)
+        for item in fallback_response.get("items", []):
+            if str(item.get("news_id")) == news_id:
+                return item
     raise HTTPException(status_code=404, detail="News item not found")
 
 
@@ -436,4 +470,9 @@ def coin_detail(
     for item in response.get("items", []):
         if str(item.get("symbol", "")).upper() == normalized_symbol:
             return item
+    if date:
+        fallback_response = _coins("all", 0)
+        for item in fallback_response.get("items", []):
+            if str(item.get("symbol", "")).upper() == normalized_symbol:
+                return item
     raise HTTPException(status_code=404, detail="Coin item not found")

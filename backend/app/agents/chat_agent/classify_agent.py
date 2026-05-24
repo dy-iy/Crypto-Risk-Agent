@@ -8,6 +8,8 @@ WITHDRAWAL_HALT_TERMS = ["暂停所有提现", "暂停提现", "停止提现", "
 EXCHANGE_CONTEXT_TERMS = ["交易所", "exchange", "平台"]
 CONFIRMED_ATTACK_TERMS = ["遭受攻击", "遭攻击", "攻击事件", "漏洞攻击", "漏洞利用", "攻击者", "投毒", "伪造消息", "被盗", "盗取", "exploit", "hack"]
 LOSS_TERMS = ["损失", "被盗", "盗取", "窃取", "转出", "drained", "stolen", "lost"]
+UNAUTHORIZED_MINT_TERMS = ["未授权铸造", "未经授权铸造", "攻击者铸造", "伪造", "增发", "铸造", "minted", "unauthorized mint", "forged"]
+EXFILTRATION_TERMS = ["Tornado Cash", "混币", "跨链", "桥接", "兑换", "提取资金", "作为抵押", "借出", "launder", "bridge", "swap"]
 INFRASTRUCTURE_ATTACK_TERMS = ["RPC", "基础设施", "DVN", "验证网络", "签名与验证", "跨链", "预言机", "oracle"]
 
 
@@ -20,8 +22,10 @@ def _has_confirmed_attack_with_loss(text: str) -> bool:
     lowered = text.lower()
     has_attack = any(term in text or term.lower() in lowered for term in CONFIRMED_ATTACK_TERMS)
     has_loss = any(term in text or term.lower() in lowered for term in LOSS_TERMS)
+    has_unauthorized_mint = has_attack and any(term in text or term.lower() in lowered for term in UNAUTHORIZED_MINT_TERMS)
+    has_exfiltration = any(term in text or term.lower() in lowered for term in EXFILTRATION_TERMS)
     has_amount = any(unit in text for unit in ["美元", "美金", "USD", "亿", "万"])
-    return has_attack and has_loss and has_amount
+    return has_attack and (has_loss or has_unauthorized_mint or has_exfiltration) and has_amount
 
 
 def _has_infrastructure_attack_path(text: str) -> bool:

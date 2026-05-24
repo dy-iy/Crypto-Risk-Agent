@@ -60,6 +60,8 @@ class RiskReport(BaseModel):
     risk_score: int = Field(0, ge=0, le=100)
     final_risk_score: int = Field(0, ge=0, le=100)
     risk_level: str = "低风险"
+    confidence_level: str = "低"
+    score_dimension_note: str = ""
     risk_categories: list[str] = Field(default_factory=list)
     primary_category: str | None = None
     secondary_categories: list[str] = Field(default_factory=list)
@@ -107,6 +109,7 @@ class RiskReport(BaseModel):
     has_conflict: bool = False
     review_issues: list[str] = Field(default_factory=list)
     revision_suggestions: list[str] = Field(default_factory=list)
+    structured_review_result: dict[str, object] = Field(default_factory=dict)
     calibration_rules: list[str] = Field(default_factory=list)
     risk_explanation: str = ""
     merged_result: dict[str, object] = Field(default_factory=dict)

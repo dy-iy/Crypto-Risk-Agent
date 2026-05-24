@@ -60,19 +60,37 @@ def risk_calibration_agent(state: CryptoRiskState) -> CryptoRiskState:
 
     if _has_confirmed_attack(text):
         major_factors = _major_confirmed_security_factors(text)
-        if major_factors.get("large_loss_over_100m") and next_score < 80:
+        high_risk_laundering_event = (
+            major_factors.get("large_exposure_over_50m")
+            and major_factors.get("unauthorized_mint_or_forged_asset")
+            and major_factors.get("exfiltration_or_laundering")
+        )
+        if high_risk_laundering_event and next_score < 85:
+            rules.append("触发高危攻击硬规则：已发生攻击 + 大额资产异常 + 资金外流/跨链/兑换/Tornado Cash/mixer 清洗信号，risk_score 不得低于 85。")
+            next_score = 85
+        elif major_factors.get("large_loss_over_100m") and next_score < 80:
             rules.append("触发大额攻击硬规则：已确认攻击且损失超过 1 亿美元，评分不得低于 80。")
+            next_score = 80
+        elif (
+            major_factors.get("large_exposure_over_50m")
+            and major_factors.get("unauthorized_mint_or_forged_asset")
+            and next_score < 80
+        ):
+            rules.append("触发未授权铸造硬规则：已确认攻击且伪造/铸造资产敞口超过 5000 万美元，评分不得低于 80。")
             next_score = 80
         if major_factors.get("actual_loss_usd"):
             severity_score = max(severity_score, 85 if major_factors.get("large_loss_over_100m") else 76)
             urgency_score = max(urgency_score, 78)
+            if major_factors.get("exfiltration_or_laundering"):
+                urgency_score = max(urgency_score, 82)
+                contagion_score = max(contagion_score, 65)
             state = {**state, "risk_status": "confirmed_risk"}
 
     if state.get("evidence_quality") in {"weak", "none"} and severity_score >= 70:
         old_confidence = confidence_score
         confidence_score = min(confidence_score, 60)
         if old_confidence != confidence_score:
-            rules.append("证据不足只降低 confidence_score，不直接降低 severity_score。")
+            rules.append("证据不足只降低 confidence_score，不直接降低 risk_score 或 severity_score。")
     confidence_score = _confidence_after_uncertainty(state, confidence_score)
 
     next_score = _clamp(next_score)
@@ -87,6 +105,12 @@ def risk_calibration_agent(state: CryptoRiskState) -> CryptoRiskState:
     score_factors = {
         **score_factors,
         "calibration_applied": bool(rules),
+        "calibration_principles": [
+            "risk_score 表示事件风险严重性。",
+            "confidence_score 表示信息可信度。",
+            "不确定性只能降低 confidence_score，不能直接降低 risk_score。",
+            "不得因官方尚未确认、信息来源有限、仍在发展中而把高危攻击事件降为中风险。",
+        ],
         "calibration_rules": rules,
         "severity_score": severity_score,
         "confidence_score": confidence_score,

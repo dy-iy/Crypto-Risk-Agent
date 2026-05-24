@@ -75,6 +75,7 @@ class CryptoRiskState(TypedDict, total=False):
     risk_score: int
     severity_score: int
     confidence_score: int
+    confidence_level: str
     urgency_score: int
     contagion_score: int
     final_risk_score: int
@@ -102,6 +103,7 @@ class CryptoRiskState(TypedDict, total=False):
     has_conflict: bool
     review_issues: list[str]
     revision_suggestions: list[str]
+    structured_review_result: dict[str, object]
     merged_result: MergedRiskResult
     calibrated_result: CalibratedRiskResult
     calibration_rules: list[str]

@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AgentProgress, LoadingDots } from "@/components/ui/loading-states";
 import {
   clearApiCache,
   CoinRankingItem,
   fetchCoinRanking,
+  fetchCurrentNewsUpdateJob,
   fetchNewsUpdateJob,
   fetchNewsRanking,
   fetchRiskOverview,
@@ -183,6 +184,7 @@ const viewRoutes: Record<ActiveView, string> = {
 const analysisRecordsStorageKey = "cryptorisk.analysisRecords";
 const selectedRecordStorageKey = "cryptorisk.selectedRecordId";
 const chatMessagesStorageKey = "cryptorisk.chatMessages";
+const newsUpdateJobStorageKey = "cryptorisk.newsUpdateJobId";
 
 const initialChatMessages: ChatMessage[] = [
   {
@@ -222,16 +224,35 @@ function readStoredChatMessages() {
   }
 }
 
+function isActiveNewsUpdateJob(job: NewsUpdateJob | null) {
+  return Boolean(job && (job.status === "queued" || job.status === "running"));
+}
+
+function readStoredNewsUpdateJobId() {
+  if (typeof window === "undefined") return "";
+  return window.sessionStorage.getItem(newsUpdateJobStorageKey) || "";
+}
+
+function storeNewsUpdateJobId(jobId: string) {
+  if (typeof window === "undefined" || !jobId) return;
+  window.sessionStorage.setItem(newsUpdateJobStorageKey, jobId);
+}
+
+function clearStoredNewsUpdateJobId() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(newsUpdateJobStorageKey);
+}
+
 function readCachedOverview() {
   return readCachedRiskOverview(readRankingRange());
 }
 
 function readCachedNewsItems() {
-  return readCachedNewsRanking(0, readRankingRange())?.items || [];
+  return readCachedNewsRanking(10, readRankingRange())?.items || [];
 }
 
 function readCachedCoinItems() {
-  return readCachedCoinRanking(0, readRankingRange())?.items || [];
+  return readCachedCoinRanking(10, readRankingRange())?.items || [];
 }
 
 export default function RiskDashboard({ initialView = "home" }: { initialView?: ActiveView }) {
@@ -247,6 +268,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [newsUpdateError, setNewsUpdateError] = useState("");
   const [newsUpdateResult, setNewsUpdateResult] = useState<NewsUpdateResponse | null>(null);
   const [newsUpdateJob, setNewsUpdateJob] = useState<NewsUpdateJob | null>(null);
+  const updatePollGenerationRef = useRef(0);
 
   const [message, setMessage] = useState(examplePrompts[0]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => readStoredChatMessages());
@@ -260,9 +282,9 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   useEffect(() => {
     let ignore = false;
 
-    async function loadRankings(silent = false) {
-      const hasCachedData = Boolean(readCachedRiskOverview(rankingRange) || readCachedNewsRanking(0, rankingRange)?.items.length || readCachedCoinRanking(0, rankingRange)?.items.length);
-      if (!silent && !hasCachedData) setRankingLoading(true);
+    async function loadRankings() {
+      const hasCachedData = Boolean(readCachedRiskOverview(rankingRange) || newsRanking.length || coinRanking.length);
+      if (!hasCachedData) setRankingLoading(true);
       setRankingError("");
       try {
         const [overviewData, newsData, coinData] = await Promise.all([
@@ -282,18 +304,14 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
           setCoinRanking(fallbackCoins);
         }
       } finally {
-        if (!ignore && !silent) setRankingLoading(false);
+        if (!ignore) setRankingLoading(false);
       }
     }
 
     loadRankings();
-    const rankingTimer = window.setInterval(() => {
-      void loadRankings(true);
-    }, 30000);
 
     return () => {
       ignore = true;
-      window.clearInterval(rankingTimer);
     };
   }, [rankingRange]);
 
@@ -310,6 +328,54 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   useEffect(() => {
     window.localStorage.setItem(chatMessagesStorageKey, JSON.stringify(chatMessages));
   }, [chatMessages]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function resumeNewsUpdateJob() {
+      const storedJobId = readStoredNewsUpdateJobId();
+      let job: NewsUpdateJob | null = null;
+
+      if (storedJobId) {
+        try {
+          job = await fetchNewsUpdateJob(storedJobId);
+        } catch {
+          job = null;
+        }
+      }
+
+      if (!job || !isActiveNewsUpdateJob(job)) {
+        try {
+          job = await fetchCurrentNewsUpdateJob();
+        } catch {
+          job = null;
+        }
+      }
+
+      if (ignore || !job) return;
+      if (isActiveNewsUpdateJob(job)) {
+        void pollNewsUpdateJob(job).catch((error) => {
+          console.error(error);
+          if (!ignore) {
+            setNewsUpdateError(error instanceof Error ? `更新失败：${error.message}` : "更新任务恢复失败。");
+            setNewsUpdateLoading(false);
+          }
+        });
+        return;
+      }
+
+      setNewsUpdateJob(job);
+      if (job.status === "success" && job.result) setNewsUpdateResult(job.result);
+      clearStoredNewsUpdateJobId();
+    }
+
+    void resumeNewsUpdateJob();
+
+    return () => {
+      ignore = true;
+      updatePollGenerationRef.current += 1;
+    };
+  }, []);
 
   const displayNews = newsRanking;
   const displayCoins = coinRanking;
@@ -352,39 +418,56 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }
 
   async function handleUpdateTodayNews() {
+    if (newsUpdateLoading) return;
     setNewsUpdateLoading(true);
     setNewsUpdateError("");
     setNewsUpdateResult(null);
     setNewsUpdateJob(null);
     try {
-      let job = await startNewsUpdateJob();
-      setNewsUpdateJob(job);
-
-      while (job.status === "queued" || job.status === "running") {
-        await new Promise((resolve) => window.setTimeout(resolve, 900));
-        job = await fetchNewsUpdateJob(job.job_id);
-        setNewsUpdateJob(job);
-        if (job.stage === "agent" || job.stage === "ranking") {
-          void refreshRankingsAfterUpdate(true);
-        }
-      }
-
-      if (job.status === "error") {
-        throw new Error(job.error || job.message || "新闻更新任务失败");
-      }
-
-      if (job.result) setNewsUpdateResult(job.result);
-      await refreshRankingsAfterUpdate();
+      const job = await startNewsUpdateJob();
+      await pollNewsUpdateJob(job);
     } catch (error) {
       console.error(error);
       setNewsUpdateError(
         error instanceof Error
           ? `更新失败：${error.message}`
-          : "更新失败，请检查后端日志、DeepSeek API Key 或 Binance 新闻源网络。"
+          : "更新失败，请稍后重试。"
       );
     } finally {
       setNewsUpdateLoading(false);
     }
+  }
+
+  async function pollNewsUpdateJob(initialJob: NewsUpdateJob) {
+    const generation = updatePollGenerationRef.current + 1;
+    updatePollGenerationRef.current = generation;
+    setNewsUpdateLoading(isActiveNewsUpdateJob(initialJob));
+    setNewsUpdateJob(initialJob);
+    storeNewsUpdateJobId(initialJob.job_id);
+
+    let job = initialJob;
+    while (isActiveNewsUpdateJob(job)) {
+      await new Promise((resolve) => window.setTimeout(resolve, 900));
+      if (updatePollGenerationRef.current !== generation) return;
+
+      job = await fetchNewsUpdateJob(job.job_id);
+      if (updatePollGenerationRef.current !== generation) return;
+
+      setNewsUpdateJob(job);
+      storeNewsUpdateJobId(job.job_id);
+      if (job.stage === "agent" || job.stage === "ranking") {
+        void refreshRankingsAfterUpdate(true);
+      }
+    }
+
+    clearStoredNewsUpdateJobId();
+    if (job.status === "error") {
+      throw new Error(job.error || job.message || "新闻更新任务失败");
+    }
+
+    if (job.result) setNewsUpdateResult(job.result);
+    setNewsUpdateLoading(false);
+    await refreshRankingsAfterUpdate();
   }
 
   async function runAnalysis(input: string) {
@@ -489,7 +572,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
             <div className="min-w-0 space-y-5">
               {rankingError && <Notice tone="amber" text={rankingError} />}
 
-              {activeView !== "chat" && activeView !== "reports" && (
+              {activeView !== "chat" && activeView !== "reports" && activeView !== "settings" && (
                 <MetricGrid
                   activeView={activeView}
                   coinItems={displayCoins}
@@ -564,15 +647,13 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
           </div>
 
-          {activeView !== "chat" && activeView !== "reports" && (
-            <AssistantPanel
-              activeView={activeView}
-              chatLoading={chatLoading}
-              latestReport={latestReport}
-              topCoin={topCoin}
-              topNews={topNews}
-            />
-          )}
+          <AssistantPanel
+            activeView={activeView}
+            chatLoading={chatLoading}
+            latestReport={latestReport}
+            topCoin={topCoin}
+            topNews={topNews}
+          />
 
           <footer className="px-4 pb-6 text-center text-xs text-slate-500 sm:px-6 2xl:px-8">
             粤ICP备2026061707号-1
@@ -1123,8 +1204,8 @@ function NewsView({
 }) {
   const [filter, setFilter] = useState<NewsFilter>(() => readRankingFilter("news", "filter", "top10", isNewsFilter));
   const [sort, setSort] = useState<NewsSort>(() => readRankingFilter("news", "sort", "score_desc", isNewsSort));
-  const visibleItems = getVisibleNewsItems(items, filter, sort);
-  const distribution = getNewsDistribution(items);
+  const visibleItems = useMemo(() => getVisibleNewsItems(items, filter, sort), [filter, items, sort]);
+  const distribution = useMemo(() => getNewsDistribution(items), [items]);
 
   useEffect(() => {
     syncRankingUrl("news", { filter, sort, range });
@@ -1172,8 +1253,8 @@ function CoinView({
 }) {
   const [filter, setFilter] = useState<CoinFilter>(() => readRankingFilter("coin", "filter", "top10", isCoinFilter));
   const [sort, setSort] = useState<CoinSort>(() => readRankingFilter("coin", "sort", "score_desc", isCoinSort));
-  const visibleItems = getVisibleCoinItems(items, filter, sort);
-  const distribution = getCoinDistribution(items);
+  const visibleItems = useMemo(() => getVisibleCoinItems(items, filter, sort), [filter, items, sort]);
+  const distribution = useMemo(() => getCoinDistribution(items), [items]);
 
   useEffect(() => {
     syncRankingUrl("coin", { filter, sort, range });
@@ -1527,7 +1608,7 @@ function SettingsView({
     job_id: "",
     status: updateLoading ? "running" : "queued",
     stage: updateLoading ? "crawler" : "idle",
-    message: updateLoading ? "正在启动新闻更新任务" : "等待点击更新今日新闻",
+    message: updateLoading ? "正在启动新闻更新任务" : "等待点击更新新闻",
     crawler: {
       label: "爬虫",
       status: updateLoading ? "running" : "pending",
@@ -1566,85 +1647,152 @@ function SettingsView({
     updated_at: "",
     finished_at: "",
   };
+  const progressItems = [fallbackJob.crawler, fallbackJob.dedupe, fallbackJob.agent, fallbackJob.ranking];
+  const completedStages = progressItems.filter((progress) => progress.status === "success").length;
+  const activeStage = progressItems.find((progress) => progress.status === "running")?.label || "待命";
+  const hasWarning = Boolean(updateResult?.crawler.crawler_error || progressItems.some((progress) => progress.status === "warning"));
+  const hasError = Boolean(updateError || progressItems.some((progress) => progress.status === "error"));
+  const agentStatusText = hasError ? "异常" : hasWarning ? "降级运行" : "正常";
+  const agentStatusStyle = hasError
+    ? "border-rose-200 bg-rose-50 text-rose-700"
+    : hasWarning
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const agentCards = [
+    { name: "新闻采集 Agent", detail: "监听新闻更新", status: fallbackJob.crawler.status },
+    { name: "风险识别 Agent", detail: "识别攻击与异常", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
+    { name: "证据抽取 Agent", detail: "提取关键证据", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
+    { name: "评分校准 Agent", detail: "校准风险等级", status: fallbackJob.agent.status === "running" ? "running" : hasWarning ? "warning" : "success" },
+    { name: "排行榜 Agent", detail: "刷新风险榜单", status: fallbackJob.ranking.status },
+    { name: "报告生成 Agent", detail: "生成风控报告", status: hasError ? "error" : "success" },
+  ] satisfies Array<{ name: string; detail: string; status: NewsUpdateProgress["status"] }>;
 
   return (
-    <div className="space-y-5">
-      <section className="risk-card rounded-lg p-5">
+    <section className="risk-card overflow-hidden rounded-lg border border-blue-100 bg-white">
+      <div className="border-b border-blue-100 bg-gradient-to-r from-white via-blue-50/70 to-emerald-50/60 px-5 py-5 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <PanelTitle icon={<GearIcon />} title="系统设置" />
-          <button
-            type="button"
-            onClick={onUpdateTodayNews}
-            disabled={updateLoading}
-            className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm shadow-blue-200 transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshIcon />
-            {updateLoading ? "更新中" : "更新今日新闻"}
-          </button>
+          <div>
+            <PanelTitle icon={<GearIcon />} title="系统设置" />
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-bold ${agentStatusStyle}`}>
+                <span className="h-2 w-2 rounded-full bg-current" />
+                Agent 状态：{agentStatusText}
+              </span>
+              <span className="inline-flex h-9 items-center rounded-lg border border-blue-100 bg-blue-50 px-3 text-sm font-bold text-blue-700">
+                当前阶段：{activeStage}
+              </span>
+              <span className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-600">
+                已完成 {completedStages}/4
+              </span>
+            </div>
+          </div>
         </div>
+      </div>
 
-        {updateError && <div className="mt-4"><Notice tone="red" text={updateError} /></div>}
+      <div className="bg-gradient-to-br from-white via-slate-50 to-blue-50/70 px-5 py-5 sm:px-6">
+        {updateError && <Notice tone="red" text={updateError} />}
         {updateResult && (
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+          <div className="mb-5 rounded-lg border border-emerald-200 bg-white/80 p-4 text-sm leading-6 text-emerald-900 shadow-sm">
             <p className="font-bold">{updateResult.message}</p>
             <p className="mt-1">
               新抓取 {updateResult.crawler.fetched_count} 条，净新增 {updateResult.crawler.added_count} 条，Agent 本次处理 {updateResult.agent.processed_count} 条。
             </p>
-            <p className="mt-1">
-              代理状态：{updateResult.crawler.proxy_enabled ? `已启用（${updateResult.crawler.proxy_source || "环境变量"}）` : "未启用"}
-            </p>
-            <p className="mt-1">
-              新闻源地址：{updateResult.crawler.news_url_overridden ? "使用自定义反代地址" : "使用 Binance 默认地址"}
-            </p>
             {updateResult.crawler.crawler_error && (
               <p className="mt-1 text-amber-800">
-                新闻源连接失败：{updateResult.crawler.crawler_error}
+                新闻更新遇到网络波动，已保留现有数据。
               </p>
             )}
           </div>
         )}
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          {[
-            ["模型配置", "deepseek-v4-pro", "已通过 .env 读取 DEEPSEEK_API_KEY"],
-            ["Agent 工作流", "8 个节点", "风险识别、分类、证据、评分、影响、建议、报告"],
-            ["数据源", "Binance 新闻 + mastered_news.csv", "点击按钮后增量抓取并写入主新闻集"],
-            ["风控边界", "非投资建议", "仅输出风险识别和处置建议"],
-          ].map(([title, value, desc]) => (
-            <div key={title} className="rounded-lg border border-blue-100 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-500">{title}</p>
-              <p className="mt-2 text-xl font-bold text-slate-900">{value}</p>
-              <p className="mt-2 text-sm text-slate-500">{desc}</p>
+        <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.42fr)_minmax(0,0.58fr)]">
+          <div className="rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Agent Health</p>
+                <h3 className="mt-1 text-lg font-bold text-slate-950">Agent 运行状态</h3>
+              </div>
+              <span className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-bold ${agentStatusStyle}`}>
+                {agentStatusText}
+              </span>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {agentCards.map((agent) => (
+                <AgentStatusCard key={agent.name} agent={agent} />
+              ))}
+            </div>
+          </div>
 
-      <section className="risk-card rounded-lg p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <PanelTitle icon={<ChartIcon />} title="新闻更新流水线" />
-          <div className="rounded-lg border border-blue-100 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
-            {fallbackJob.message}
+          <div className="rounded-lg border border-blue-100 bg-white/80 p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Pipeline</p>
+                <h3 className="mt-1 text-lg font-bold text-slate-950">新闻更新流水线</h3>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-lg border border-blue-100 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+                  {fallbackJob.message}
+                </span>
+                <button
+                  type="button"
+                  onClick={onUpdateTodayNews}
+                  disabled={updateLoading}
+                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-bold text-white shadow-sm shadow-emerald-200 transition-colors duration-200 hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <RefreshIcon />
+                  {updateLoading ? "更新中" : "更新新闻"}
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 divide-y divide-blue-50">
+              {progressItems.map((progress) => (
+                <UpdateProgressRow key={progress.label} progress={progress} />
+              ))}
+            </div>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 xl:grid-cols-4">
-          <UpdateProgressCard progress={fallbackJob.crawler} />
-          <UpdateProgressCard progress={fallbackJob.dedupe} />
-          <UpdateProgressCard progress={fallbackJob.agent} />
-          <UpdateProgressCard progress={fallbackJob.ranking} />
-        </div>
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
-function UpdateProgressCard({ progress }: { progress: NewsUpdateProgress }) {
+function AgentStatusCard({ agent }: { agent: { name: string; detail: string; status: NewsUpdateProgress["status"] } }) {
+  const palette = {
+    pending: "border-slate-200 bg-slate-50 text-slate-600",
+    running: "border-blue-200 bg-blue-50 text-blue-700",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-amber-200 bg-amber-50 text-amber-700",
+    error: "border-rose-200 bg-rose-50 text-rose-700",
+  }[agent.status];
+  const label = {
+    pending: "待命",
+    running: "运行中",
+    success: "正常",
+    warning: "降级",
+    error: "异常",
+  }[agent.status];
+
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-colors duration-200 hover:border-blue-200 hover:bg-blue-50/40">
+      <div className="flex items-start justify-between gap-3">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${palette}`}>
+          <BotIcon />
+        </span>
+        <span className={`rounded-md border px-2 py-0.5 text-xs font-bold ${palette}`}>{label}</span>
+      </div>
+      <h4 className="mt-3 text-sm font-bold text-slate-950">{agent.name}</h4>
+      <p className="mt-1 text-xs font-semibold text-slate-500">{agent.detail}</p>
+    </article>
+  );
+}
+
+function UpdateProgressRow({ progress }: { progress: NewsUpdateProgress }) {
   const statusStyle = {
-    pending: "bg-slate-100 text-slate-600",
-    running: "bg-blue-50 text-blue-700",
-    success: "bg-emerald-50 text-emerald-700",
-    warning: "bg-amber-50 text-amber-700",
-    error: "bg-rose-50 text-rose-700",
+    pending: "border-slate-200 bg-slate-50 text-slate-600",
+    running: "border-blue-200 bg-blue-50 text-blue-700",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-amber-200 bg-amber-50 text-amber-700",
+    error: "border-rose-200 bg-rose-50 text-rose-700",
   }[progress.status];
   const barStyle = {
     pending: "bg-slate-300",
@@ -1657,17 +1805,20 @@ function UpdateProgressCard({ progress }: { progress: NewsUpdateProgress }) {
   const counter = progress.total > 0 ? `${progress.current}/${progress.total}` : progress.status === "running" ? "..." : "0/0";
 
   return (
-    <article className="rounded-lg border border-blue-100 bg-white p-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-bold text-slate-950">{progress.label}</p>
-        <span className={`rounded-lg px-2.5 py-1 text-xs font-bold ${statusStyle}`}>
-          {progress.status === "running" ? "运行中" : progress.status === "success" ? "完成" : progress.status === "warning" ? "警告" : progress.status === "error" ? "失败" : "待命"}
+    <div className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[150px_minmax(0,1fr)_72px] md:items-center">
+      <div className="flex items-center gap-3">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${statusStyle}`}>
+          <span className="h-2 w-2 rounded-full bg-current" />
         </span>
+        <div>
+          <p className="text-sm font-bold text-slate-950">{progress.label}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-400">{counter}</p>
+        </div>
       </div>
-      <div className="mt-4">
-        <div className="flex items-center justify-between text-xs font-mono font-bold text-slate-500">
-          <span>{counter}</span>
-          <span>{percent}%</span>
+      <div className="min-w-0">
+        <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-500">
+          <span className="truncate">{progress.message}</span>
+          <span className="font-mono">{percent}%</span>
         </div>
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
           <div
@@ -1676,11 +1827,15 @@ function UpdateProgressCard({ progress }: { progress: NewsUpdateProgress }) {
           />
         </div>
       </div>
-      <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-slate-500">{progress.message}</p>
-      {typeof progress.fetched_count === "number" && (
-        <p className="mt-2 text-xs font-semibold text-slate-400">已抓取 {progress.fetched_count} 条</p>
-      )}
-    </article>
+      <div className="flex items-center justify-between gap-3 md:block md:text-right">
+        <span className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-bold ${statusStyle}`}>
+          {progress.status === "running" ? "运行中" : progress.status === "success" ? "完成" : progress.status === "warning" ? "警告" : progress.status === "error" ? "失败" : "待命"}
+        </span>
+        {typeof progress.fetched_count === "number" && (
+          <p className="mt-0 text-xs font-semibold text-slate-400 md:mt-2">抓取 {progress.fetched_count}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1707,7 +1862,7 @@ function AssistantPanel({
     {
       id: "assistant-welcome",
       role: "assistant",
-      content: "可以问我金融基础知识、币种风险原因、风险分来源、相似事件和需要核验的证据。",
+      content: "可以问我金融市场、加密资产、DeFi 风险、交易所事件、项目基本面、宏观影响和当前页面里的风险线索。",
     },
   ]);
 
@@ -1719,13 +1874,23 @@ function AssistantPanel({
     const trimmed = text.trim();
     if (!trimmed || assistantLoading) return;
 
-    const context = {
+    const shouldUsePageContext = shouldAttachAssistantPageContext(trimmed, {
+      activeView,
+      latestReport,
+      topCoin,
+      topNews,
+    });
+    const context = shouldUsePageContext ? {
       active_view: activeView,
       topic,
       risk_score: score,
       latest_report: latestReport,
       top_coin: topCoin,
       top_news: topNews,
+    } : {
+      active_view: activeView,
+      page_context_available: true,
+      page_context_omitted: "用户问题未明确指向当前页面，避免用页面数据污染回答。",
     };
 
     setAssistantMessages((items) => [
@@ -1752,7 +1917,7 @@ function AssistantPanel({
     } catch (error) {
       console.error(error);
       setAssistantMessages((items) => items.filter((item) => item.id !== replyId));
-      setAssistantError("助手请求失败，请检查 FastAPI 后端是否可访问，或配置 NEXT_PUBLIC_API_BASE_URL。");
+      setAssistantError("助手暂时无法回答，请稍后重试。");
     } finally {
       setAssistantLoading(false);
     }
@@ -1800,7 +1965,7 @@ function AssistantPanel({
             </div>
             <div>
               <p className="font-bold text-slate-950">AI风控助手</p>
-              <p className="text-xs text-slate-500">实时解读风险与疑问</p>
+              <p className="text-xs text-slate-500">金融与加密风险问答</p>
             </div>
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
           </div>
@@ -1826,7 +1991,7 @@ function AssistantPanel({
                   }`}
                 >
                   {message.role === "assistant" ? (
-                    message.content ? <MarkdownMessage content={message.content} /> : <LoadingDots label="DeepSeek 正在分析" />
+                    message.content ? <MarkdownMessage content={message.content} /> : <LoadingDots label="正在整理回答" />
                   ) : (
                     message.content
                   )}
@@ -1848,7 +2013,7 @@ function AssistantPanel({
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none placeholder:text-slate-400"
-              placeholder="输入你的问题..."
+              placeholder="问金融、币种、风险或当前页面..."
             />
             <button
               type="submit"
@@ -2203,23 +2368,35 @@ function ReportDocument({
             <div className="mt-4 flex justify-center"><RiskBadge level={report.risk_level} /></div>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
+            <MetaTile label="风险等级" value={report.risk_level || "待确认"} />
+            <MetaTile label="信息置信度" value={`${clampScore(report.confidence_score ?? 0)}/100 · ${report.confidence_level || "待确认"}`} />
             <MetaTile label="风险类别" value={categories.join(" / ")} />
             <MetaTile label="输入类型" value={report.input_type || "事件文本"} />
             <MetaTile label="是否存在风险" value={report.has_risk ? "存在风险" : "暂未确认"} />
           </div>
         </section>
-
         <ReportSection title="事件结论" icon={<ShieldIcon />}>
-          <p className="text-sm leading-7 text-slate-700">{report.summary || "暂无事件结论。"}</p>
+          <EventConclusion report={report} categories={categories} />
         </ReportSection>
 
         <ReportSection title="证据摘要" icon={<FileIcon />}>
-          <div className="space-y-4">
+          <div className="grid gap-3">
             {evidenceItems.map((item, index) => (
-              <div key={`${item.evidence_text}-${index}`} className="rounded-lg bg-slate-50 p-4">
-                <p className="text-xs font-bold text-blue-700">{item.risk_category || categories[0]}</p>
-                <p className="mt-2 text-sm leading-7 text-slate-700">{item.evidence_text}</p>
-                {item.explanation && <p className="mt-2 text-sm leading-6 text-slate-500">{item.explanation}</p>}
+              <div key={`${item.evidence_text}-${index}`} className="rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-blue-700 shadow-sm">
+                    证据 {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span className="rounded-md border border-blue-200 bg-white/70 px-2.5 py-1 text-xs font-bold text-slate-600">
+                    {formatEvidenceCategory(item.risk_category || categories[0])}
+                  </span>
+                  {item.explanation && (
+                    <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                      {formatEvidenceSignal(item.explanation)}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-3 text-sm leading-7 text-slate-800">{item.evidence_text}</p>
               </div>
             ))}
           </div>
@@ -2264,6 +2441,70 @@ function MetaTile({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg bg-white p-4 shadow-sm">
       <p className="text-xs font-semibold text-slate-500">{label}</p>
       <p className="mt-2 text-sm font-bold leading-6 text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function formatEvidenceCategory(value: string) {
+  const normalized = value.trim();
+  const labels: Record<string, string> = {
+    confirmed_risk: "支持已确认风险",
+    potential_risk: "支持潜在风险",
+    systemic_risk: "支持系统性风险",
+    resolved_risk: "风险已缓解",
+    no_risk: "暂未发现风险",
+    uncertain: "信息仍待确认",
+  };
+  return labels[normalized] || normalized || "风险证据";
+}
+
+function formatEvidenceSignal(value: string) {
+  const normalized = value.trim();
+  const labels: Record<string, string> = {
+    confirmed_attack: "已确认攻击",
+    actual_loss: "资产损失",
+    unauthorized_mint: "异常铸造",
+    asset_exfiltration: "资金外流",
+    withdrawal_pause: "提现暂停",
+    user_impact: "用户影响",
+    market_impact: "市场影响",
+    operation_issue: "运营异常",
+    potential_threat: "潜在威胁",
+    regulatory_signal: "监管信号",
+    discussion: "讨论信息",
+    other: "其他证据",
+  };
+  return labels[normalized] || normalized || "证据类型";
+}
+
+function EventConclusion({ categories, report }: { categories: string[]; report: RiskReport }) {
+  const summary = compactReportSummary(report.summary);
+  const signals = (report.risk_signals || []).map(compactReportSummary).filter(Boolean).slice(0, 3);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white">{report.risk_level || "待确认"}</span>
+          <span className="rounded-md border border-blue-200 bg-white px-2.5 py-1 text-xs font-bold text-blue-700">
+            风险 {clampScore(report.risk_score)}/100
+          </span>
+          <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
+            置信度 {clampScore(report.confidence_score ?? 0)}/100
+          </span>
+        </div>
+        <p className="mt-3 text-base font-bold leading-7 text-slate-950">{summary || "暂无事件结论。"}</p>
+        <p className="mt-2 text-sm font-semibold text-slate-500">{categories.join(" / ")}</p>
+      </div>
+      {signals.length > 0 && (
+        <div className="grid gap-2 md:grid-cols-3">
+          {signals.map((signal, index) => (
+            <div key={`${signal}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold leading-6 text-slate-700">
+              {signal}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2479,7 +2720,7 @@ function getPageMeta(view: ActiveView) {
     news: ["新闻风险榜", "基于新闻文本与风险规则的实时风险排行"],
     coin: ["币种风险榜", "基于新闻、公告与链上事件聚合的币种风险排行"],
     reports: ["分析报告", "查看、管理与导出风险分析结果报告"],
-    settings: ["系统设置", "模型、Agent 工作流与数据源配置"],
+    settings: ["系统设置", "Agent 运行状态与新闻更新"],
   } satisfies Record<ActiveView, [string, string]>;
 
   return { title: map[view][0], subtitle: map[view][1] };
@@ -2739,17 +2980,86 @@ function newsTimeValue(item: NewsRankingItem) {
   return Number(timeMatch[1]) * 60 + Number(timeMatch[2]);
 }
 
+function shouldAttachAssistantPageContext(
+  question: string,
+  context: {
+    activeView: ActiveView;
+    latestReport: RiskReport | null;
+    topCoin: CoinRankingItem;
+    topNews: NewsRankingItem;
+  }
+) {
+  const normalized = question.toLowerCase();
+  const directPageTerms = [
+    "当前页面",
+    "这个页面",
+    "页面",
+    "这里",
+    "这个",
+    "这条",
+    "这篇",
+    "当前",
+    "上面",
+    "右侧",
+    "左侧",
+  ];
+  const pageDataTerms = [
+    "风险分",
+    "风险评分",
+    "排行榜",
+    "榜单",
+    "证据",
+    "报告",
+  ];
+  if (directPageTerms.some((term) => normalized.includes(term.toLowerCase()))) return true;
+
+  const symbols = [
+    context.topCoin.symbol,
+    context.topCoin.name,
+    ...(context.topNews.coins || []),
+  ]
+    .filter(Boolean)
+    .map((item) => String(item).toLowerCase());
+  const matchesCurrentAsset = symbols.some((symbol) => symbol && normalized.includes(symbol));
+  return matchesCurrentAsset && pageDataTerms.some((term) => normalized.includes(term.toLowerCase()));
+}
+
+function compactReportSummary(value: string) {
+  const blockedPatterns = [
+    /右侧已生成[^。]*。?/g,
+    /可点击查看完整报告。?/g,
+    /风险严重性和信息置信度[^。]*。?/g,
+    /risk_score[^。；;]*[。；;]?/g,
+    /confidence_score[^。；;]*[。；;]?/g,
+    /严重性得分[^。；;]*[。；;]?/g,
+    /置信度得分[^。；;]*[。；;]?/g,
+    /紧急度得分[^。；;]*[。；;]?/g,
+    /传染性得分[^。；;]*[。；;]?/g,
+    /建议优先执行[:：]?/g,
+    /简要分析[:：]?/g,
+  ];
+  let cleaned = (value || "").replace(/\s+/g, " ").trim();
+  for (const pattern of blockedPatterns) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+  cleaned = cleaned.replace(/\s+/g, " ").replace(/^[，。；;、\s]+/, "").trim();
+  const sentence = cleaned.split(/[。；;]/).map((item) => item.trim()).find(Boolean) || cleaned;
+  if (sentence.length <= 88) return sentence;
+  return `${sentence.slice(0, 86)}...`;
+}
+
 function buildBriefAnalysis(record: AnalysisRecord) {
   const report = record.report;
   const categories = report.risk_categories?.length ? report.risk_categories.join(" / ") : "综合风险";
-  const signals = report.risk_signals?.slice(0, 2).join("、");
+  const summary = compactReportSummary(report.summary) || "事件已完成结构化风险研判";
+  const signals = report.risk_signals?.map(compactReportSummary).filter(Boolean).slice(0, 2).join("、");
   const advice = sanitizeAdvice(report.advice || []).slice(0, 2).join("；");
 
   return [
-    `简要分析：${report.summary || "事件已完成结构化风险研判。"}`,
-    `风险评分为 ${clampScore(report.risk_score)}/100，等级为「${report.risk_level || "待确认"}」，主要风险类别为「${categories}」。`,
-    signals ? `关键风险信号包括：${signals}。` : "",
-    advice ? `建议优先执行：${advice}。右侧已生成精简报告卡片，可点击查看完整报告。` : "右侧已生成精简报告卡片，可点击查看完整报告。",
+    `${summary}。`,
+    `风险 ${clampScore(report.risk_score)}/100（${report.risk_level || "待确认"}），置信度 ${clampScore(report.confidence_score ?? 0)}/100。`,
+    signals ? `关键信号：${signals}。` : `类别：${categories}。`,
+    advice ? `建议：${advice}。` : "",
   ].filter(Boolean).join("\n");
 }
 

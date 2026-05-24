@@ -13,32 +13,30 @@ def _clamp_score(score: int, low: int, high: int) -> int:
     return max(low, min(high, score))
 
 
-def _apply_basic_revisions(state: CryptoRiskState, issues: list[str]) -> CryptoRiskState:
+def _rule_review_issues(state: CryptoRiskState) -> list[str]:
+    issues: list[str] = []
+    from app.agents.chat_agent.score_agent import _event_score_floor, risk_level_from_score
+
     status = state.get("risk_status", "uncertain")
     evidence_quality = state.get("evidence_quality", "none")
     score = int(state.get("risk_score", 0))
-    next_score = score
-    from app.agents.chat_agent.score_agent import _event_score_floor, risk_level_from_score
-
     event_floor = _event_score_floor(state)
 
     if event_floor and score < event_floor:
-        issues.append(f"重大已确认风险事件评分低于校准下限 {event_floor}，已上调评分。")
-        next_score = event_floor
+        issues.append(f"高危信号明显但评分偏低：当前 risk_score={score}，规则下限={event_floor}。")
 
-    if status == "no_risk" and next_score > 10:
-        issues.append("risk_status 为 no_risk，但评分高于 10，已下调评分。")
-        next_score = 10
-    if status == "potential_risk" and next_score > 35 and not event_floor:
-        issues.append("risk_status 为 potential_risk，但评分高于推荐区间，已下调到 35。")
-        next_score = 35
-    if evidence_quality == "none" and next_score > 45 and not event_floor:
-        issues.append("evidence_quality 为 none，但评分偏高，已下调到 45。")
-        next_score = min(next_score, 45)
+    if status == "no_risk" and score > 10:
+        issues.append("risk_status 为 no_risk，但 risk_score 高于 10。")
+    if status == "potential_risk" and score > 35 and not event_floor:
+        issues.append("risk_status 为 potential_risk，但 risk_score 高于推荐区间。")
+    if evidence_quality == "none" and score > 45 and not event_floor:
+        issues.append("evidence_quality 为 none，但 risk_score 偏高。")
 
-    if next_score != score:
-        return {**state, "risk_score": _clamp_score(next_score, 0, 100), "risk_level": risk_level_from_score(next_score)}
-    return state
+    level = state.get("risk_level", "")
+    expected_level = risk_level_from_score(score)
+    if level and level != expected_level:
+        issues.append(f"risk_level 与 risk_score 不一致：当前等级={level}，按分数应为={expected_level}。")
+    return issues
 
 
 def consistency_review_agent(state: CryptoRiskState) -> CryptoRiskState:
@@ -90,17 +88,26 @@ def consistency_review_agent(state: CryptoRiskState) -> CryptoRiskState:
         )
     )
 
-    issues = _string_list(llm_result.get("issues"))
+    issues = list(dict.fromkeys([*_rule_review_issues(state), *_string_list(llm_result.get("issues"))]))
     suggestions = _string_list(llm_result.get("revision_suggestions"))
-    revised_state = _apply_basic_revisions(state, issues)
     has_conflict = bool(llm_result.get("has_conflict", False)) or bool(issues)
+    structured_review_result = {
+        "has_conflict": has_conflict,
+        "issues": issues,
+        "revision_suggestions": suggestions,
+        "score_overridden": False,
+    }
 
-    raw_outputs = revised_state.get("raw_agent_outputs", {})
-    raw_outputs["consistency_review_agent"] = llm_result
+    raw_outputs = state.get("raw_agent_outputs", {})
+    raw_outputs["consistency_review_agent"] = {
+        "llm_result": llm_result,
+        "structured_review_result": structured_review_result,
+    }
     return {
-        **revised_state,
+        **state,
         "has_conflict": has_conflict,
         "review_issues": issues,
         "revision_suggestions": suggestions,
+        "structured_review_result": structured_review_result,
         "raw_agent_outputs": raw_outputs,
     }

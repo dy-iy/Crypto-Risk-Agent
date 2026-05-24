@@ -18,6 +18,9 @@ export type RiskReport = {
   has_risk: boolean;
   risk_score: number;
   risk_level: string;
+  confidence_score?: number;
+  confidence_level?: string;
+  score_dimension_note?: string;
   risk_categories: string[];
   risk_signals: string[];
   evidence: EvidenceItem[];
@@ -172,6 +175,12 @@ function apiCacheKey(path: string) {
   return `${apiCachePrefix}${path}`;
 }
 
+function shouldPersistApiCache(path: string) {
+  if (path.startsWith("/api/rankings/news?") && path.includes("limit=0")) return false;
+  if (path.startsWith("/api/rankings/coins?") && path.includes("limit=0")) return false;
+  return true;
+}
+
 function readCachedJson<T>(path: string): T | null {
   const now = Date.now();
   const memoryEntry = memoryCache.get(path);
@@ -179,7 +188,7 @@ function readCachedJson<T>(path: string): T | null {
     return memoryEntry.data as T;
   }
 
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined" || !shouldPersistApiCache(path)) return null;
 
   try {
     const raw = window.sessionStorage.getItem(apiCacheKey(path));
@@ -201,7 +210,7 @@ function writeCachedJson<T>(path: string, data: T) {
   const entry = { expiresAt: Date.now() + apiCacheTtlMs, data };
   memoryCache.set(path, entry);
 
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !shouldPersistApiCache(path)) return;
   try {
     window.sessionStorage.setItem(apiCacheKey(path), JSON.stringify(entry));
   } catch {
@@ -291,6 +300,10 @@ export function fetchNewsUpdateJob(jobId: string) {
   return requestJson<NewsUpdateJob>(
     `/api/rankings/update-news/jobs/${encodeURIComponent(jobId)}`
   );
+}
+
+export function fetchCurrentNewsUpdateJob() {
+  return requestJson<NewsUpdateJob>("/api/rankings/update-news/jobs/current");
 }
 
 export async function streamRiskAssistant(

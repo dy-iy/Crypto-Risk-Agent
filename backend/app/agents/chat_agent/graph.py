@@ -10,6 +10,7 @@ from app.agents.chat_agent.merge_agent import merge_results
 from app.agents.chat_agent.report_agent import report_agent
 from app.agents.chat_agent.risk_calibration_agent import risk_calibration_agent
 from app.agents.chat_agent.risk_explanation_agent import risk_explanation_agent
+from app.agents.chat_agent.risk_triage_agent import risk_triage_agent
 from app.agents.chat_agent.score_agent import score_agent
 from app.agents.chat_agent.uncertainty_agent import uncertainty_agent
 from app.state import CryptoRiskState
@@ -96,6 +97,7 @@ def _run_parallel(
 class EvidenceGroundedChatWorkflow:
     def invoke(self, initial_state: CryptoRiskState) -> CryptoRiskState:
         state = prepare_chat_input(initial_state)
+        state = risk_triage_agent(state)
         state = evidence_agent(state)
 
         state = _run_parallel(

@@ -56,6 +56,8 @@ def _merge_raw_and_scored_news(
 def persist_scored_dataset(state: RankingAgentState) -> RankingAgentState:
     if state.get("raw_dataset_empty"):
         return state
+    if not state.get("score_missing", True):
+        return state
 
     existing_by_id = {
         str(item.get("news_id") or item.get("id")): item

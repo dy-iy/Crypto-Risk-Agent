@@ -9,6 +9,8 @@ EXCHANGE_CONTEXT_TERMS = ["交易所", "exchange", "平台"]
 USER_IMPACT_TERMS = ["大量无法提现", "大量无法提款", "用户反馈", "社群反馈", "社群出现大量", "无法提款反馈"]
 CONFIRMED_ATTACK_TERMS = ["遭受攻击", "遭攻击", "攻击事件", "漏洞攻击", "漏洞利用", "攻击者", "投毒", "伪造消息", "被盗", "盗取", "exploit", "hack"]
 LOSS_TERMS = ["损失", "被盗", "盗取", "窃取", "转出", "drained", "stolen", "lost"]
+UNAUTHORIZED_MINT_TERMS = ["未授权铸造", "未经授权铸造", "攻击者铸造", "伪造", "增发", "铸造", "minted", "unauthorized mint", "forged"]
+EXFILTRATION_TERMS = ["Tornado Cash", "混币", "跨链", "桥接", "兑换", "提取资金", "作为抵押", "借出", "launder", "bridge", "swap"]
 
 
 def _dict_list(value: object, keys: list[str]) -> list[dict[str, str]]:
@@ -125,8 +127,10 @@ def _has_confirmed_attack_with_loss(text: str) -> bool:
     lowered = text.lower()
     has_attack = any(term in text or term.lower() in lowered for term in CONFIRMED_ATTACK_TERMS)
     has_loss = any(term in text or term.lower() in lowered for term in LOSS_TERMS)
+    has_unauthorized_mint = has_attack and any(term in text or term.lower() in lowered for term in UNAUTHORIZED_MINT_TERMS)
+    has_exfiltration = any(term in text or term.lower() in lowered for term in EXFILTRATION_TERMS)
     has_amount = any(unit in text for unit in ["美元", "美金", "USD", "亿", "万"])
-    return has_attack and has_loss and has_amount
+    return has_attack and (has_loss or has_unauthorized_mint or has_exfiltration) and has_amount
 
 
 def _calibrate_confirmed_attack_evidence(
@@ -185,6 +189,47 @@ def _calibrate_confirmed_attack_evidence(
                     "text": context,
                     "source_type": "原文事实",
                     "signal_type": "actual_loss",
+                    "supports": "confirmed_risk",
+                }
+            )
+            break
+    for term in UNAUTHORIZED_MINT_TERMS:
+        context = _context_window(text, term)
+        if context:
+            next_supporting.append(
+                {
+                    "text": context,
+                    "supports": "confirmed_risk",
+                    "evidence_type": "unauthorized_mint",
+                }
+            )
+            next_facts.append(context)
+            next_signals.append("攻击者未授权铸造/伪造资产，形成可量化风险敞口")
+            next_items.append(
+                {
+                    "text": context,
+                    "source_type": "原文事实",
+                    "signal_type": "unauthorized_mint",
+                    "supports": "confirmed_risk",
+                }
+            )
+            break
+    for term in EXFILTRATION_TERMS:
+        context = _context_window(text, term)
+        if context:
+            next_supporting.append(
+                {
+                    "text": context,
+                    "supports": "confirmed_risk",
+                    "evidence_type": "asset_exfiltration",
+                }
+            )
+            next_signals.append("攻击者已出现抵押、借款、跨链、兑换或混币转移动作")
+            next_items.append(
+                {
+                    "text": context,
+                    "source_type": "原文事实",
+                    "signal_type": "asset_exfiltration",
                     "supports": "confirmed_risk",
                 }
             )

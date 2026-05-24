@@ -128,6 +128,15 @@ def load_scored_news(path_value: str | None = None) -> list[dict[str, object]]:
     if not path.exists() or path.stat().st_size == 0:
         return []
 
+    stat = path.stat()
+    return _load_scored_news_cached(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+@lru_cache(maxsize=8)
+def _load_scored_news_cached(path_value: str, mtime_ns: int, size: int) -> list[dict[str, object]]:
+    del mtime_ns, size
+    path = Path(path_value)
+
     with path.open("r", encoding="utf-8") as file:
         try:
             data = json.load(file)
@@ -163,6 +172,7 @@ def save_scored_news(items: list[dict[str, object]], path_value: str | None = No
         path,
         json.dumps(items, ensure_ascii=False, indent=2),
     )
+    _load_scored_news_cached.cache_clear()
 
 
 def clear_raw_news_queue(path_value: str | None = None) -> None:

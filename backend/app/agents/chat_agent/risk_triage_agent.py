@@ -11,6 +11,8 @@ USER_IMPACT_TERMS = ["大量无法提现", "大量无法提款", "用户反馈",
 RESOLVED_TERMS = ["已恢复", "恢复提现", "已修复", "已解决", "已缓解"]
 CONFIRMED_ATTACK_TERMS = ["遭受攻击", "遭攻击", "攻击事件", "漏洞攻击", "漏洞利用", "攻击者", "投毒", "伪造消息", "被盗", "盗取", "exploit", "hack"]
 LOSS_TERMS = ["损失", "被盗", "盗取", "窃取", "转出", "drained", "stolen", "lost"]
+UNAUTHORIZED_MINT_TERMS = ["未授权铸造", "未经授权铸造", "攻击者铸造", "伪造", "增发", "铸造", "minted", "unauthorized mint", "forged"]
+EXFILTRATION_TERMS = ["Tornado Cash", "混币", "跨链", "桥接", "兑换", "提取资金", "作为抵押", "借出", "launder", "bridge", "swap"]
 HIGH_ATTRIBUTION_TERMS = ["Lazarus", "朝鲜黑客", "黑客集团"]
 
 
@@ -27,7 +29,7 @@ def _fallback_status(state: CryptoRiskState) -> str:
         return "uncertain"
     if any(term in text for term in ["已修复", "已恢复", "已缓解", "完成赔付", "漏洞修复"]):
         return "resolved_risk"
-    if any(term in text for term in ["被盗", "攻击者", "资金池转出", "暂停提现", "无法提现", "脱锚"]):
+    if any(term in text for term in ["被盗", "攻击者", "资金池转出", "暂停提现", "无法提现", "脱锚", "未授权铸造", "伪造", "增发", "Tornado Cash"]):
         return "confirmed_risk"
     if any(term in lowered for term in ["potential", "可能", "或将", "长期", "讨论", "风险提示"]):
         return "potential_risk"
@@ -53,8 +55,10 @@ def _has_confirmed_attack_with_loss(text: str) -> bool:
     lowered = text.lower()
     has_attack = any(term in text or term.lower() in lowered for term in CONFIRMED_ATTACK_TERMS)
     has_loss = any(term in text or term.lower() in lowered for term in LOSS_TERMS)
+    has_unauthorized_mint = has_attack and any(term in text or term.lower() in lowered for term in UNAUTHORIZED_MINT_TERMS)
+    has_exfiltration = any(term in text or term.lower() in lowered for term in EXFILTRATION_TERMS)
     has_amount = any(unit in text for unit in ["美元", "美金", "USD", "亿", "万"])
-    return has_attack and has_loss and has_amount
+    return has_attack and (has_loss or has_unauthorized_mint or has_exfiltration) and has_amount
 
 
 def _has_high_confidence_attribution(text: str) -> bool:
@@ -84,8 +88,13 @@ def _calibrate_status(state: CryptoRiskState, status: str, risk_signals: list[st
 
     if _has_confirmed_attack_with_loss(text):
         calibrated_signals = list(risk_signals)
-        if "原文明确描述已发生攻击并造成资产损失" not in calibrated_signals:
-            calibrated_signals.append("原文明确描述已发生攻击并造成资产损失")
+        if "原文明确描述已发生攻击并造成资产损失或可量化风险敞口" not in calibrated_signals:
+            calibrated_signals.append("原文明确描述已发生攻击并造成资产损失或可量化风险敞口")
+        lowered = text.lower()
+        if any(term in text or term.lower() in lowered for term in UNAUTHORIZED_MINT_TERMS):
+            calibrated_signals.append("攻击者未授权铸造/伪造资产，形成可变现风险敞口")
+        if any(term in text or term.lower() in lowered for term in EXFILTRATION_TERMS):
+            calibrated_signals.append("攻击者已出现抵押、借款、跨链、兑换或混币转移动作")
         if _has_high_confidence_attribution(text) and "原文包含高置信度攻击者归因" not in calibrated_signals:
             calibrated_signals.append("原文包含高置信度攻击者归因")
         calibrated_non_risk = [
@@ -93,7 +102,7 @@ def _calibrate_status(state: CryptoRiskState, status: str, risk_signals: list[st
             for item in non_risk_factors
             if "影响有限" not in item and "仅限" not in item
         ]
-        reason = "原文明确描述攻击事件、实际资产损失和事件处置线索，属于已确认链上安全风险；影响范围有限只能限制扩散判断，不能否定事件严重性。"
+        reason = "原文明确描述攻击事件、实际资产损失或可量化风险敞口，并出现资产处置/转移线索，属于已确认链上安全风险；影响范围有限只能限制扩散判断，不能否定事件严重性。"
         return "confirmed_risk", calibrated_signals, calibrated_non_risk, reason
 
     return status, risk_signals, non_risk_factors, None

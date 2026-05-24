@@ -24,19 +24,21 @@ const coinDescriptions: Record<string, string> = {
 
 export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: string; symbol: string }) {
   const normalizedSymbol = symbol.toUpperCase();
-  const [item, setItem] = useState<CoinRankingItem | null>(() => readCachedCoinDetail(normalizedSymbol));
-  const [loading, setLoading] = useState(() => !readCachedCoinDetail(normalizedSymbol));
+  const safeReturnTo = safeInternalPath(returnTo);
+  const detailRange = readRankingRangeFromPath(safeReturnTo, "coin");
+  const [item, setItem] = useState<CoinRankingItem | null>(() => readCachedCoinDetail(normalizedSymbol, detailRange));
+  const [loading, setLoading] = useState(() => !readCachedCoinDetail(normalizedSymbol, detailRange));
   const [error, setError] = useState("");
-  const backHref = ensureRankingState(safeInternalPath(returnTo) || "/coins", "coin");
+  const backHref = ensureRankingState(safeReturnTo || "/coins", "coin");
 
   useEffect(() => {
     let ignore = false;
 
     async function loadCoinDetail() {
-      if (!readCachedCoinDetail(normalizedSymbol)) setLoading(true);
+      if (!readCachedCoinDetail(normalizedSymbol, detailRange)) setLoading(true);
       setError("");
       try {
-        const data = await fetchCoinDetail(normalizedSymbol);
+        const data = await fetchCoinDetail(normalizedSymbol, detailRange);
         if (!ignore) setItem(data);
       } catch (detailError) {
         console.error(detailError);
@@ -50,7 +52,7 @@ export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: s
     return () => {
       ignore = true;
     };
-  }, [normalizedSymbol]);
+  }, [detailRange, normalizedSymbol]);
 
   const description = useMemo(() => {
     if (!item) return "";
@@ -200,10 +202,25 @@ function ensureRankingState(path: string, scope: "news" | "coin") {
   const searchParams = new URLSearchParams(search);
   const storedFilter = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:filter`);
   const storedSort = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:sort`);
+  const storedRange = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:range`);
   if (!searchParams.get("filter") && storedFilter) searchParams.set("filter", storedFilter);
   if (!searchParams.get("sort") && storedSort) searchParams.set("sort", storedSort);
+  if (!searchParams.get("range") && storedRange && isRankingRange(storedRange)) searchParams.set("range", storedRange);
   const nextSearch = searchParams.toString();
   return `${pathname}${nextSearch ? `?${nextSearch}` : ""}`;
+}
+
+function readRankingRangeFromPath(path: string, scope: "news" | "coin") {
+  if (typeof window === "undefined") return "24h";
+  const [, search = ""] = path.split("?");
+  const value = new URLSearchParams(search).get("range");
+  if (value && isRankingRange(value)) return value;
+  const storedRange = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:range`);
+  return storedRange && isRankingRange(storedRange) ? storedRange : "24h";
+}
+
+function isRankingRange(value: string) {
+  return value === "24h" || value === "7d";
 }
 
 function IconSvg({ children }: { children: ReactNode }) {

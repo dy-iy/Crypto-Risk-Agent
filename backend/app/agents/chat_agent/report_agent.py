@@ -10,7 +10,20 @@ def _default_summary(state: CryptoRiskState) -> str:
     level = state.get("risk_level", "低风险")
     status = state.get("risk_status", "uncertain")
     category_text = "、".join(categories) if categories else state.get("primary_category") or "综合风险"
-    return f"风险状态为 {status}，主要类别为{category_text}，综合风险评分为 {score}，风险等级为{level}。"
+    confidence_score = int(state.get("confidence_score", 0))
+    confidence_level = _confidence_level_from_score(confidence_score)
+    return (
+        f"风险状态为 {status}，主要类别为{category_text}，风险严重性评分为 {score}，风险等级为{level}；"
+        f"信息置信度评分为 {confidence_score}，置信度等级为{confidence_level}。"
+    )
+
+
+def _confidence_level_from_score(score: int) -> str:
+    if score >= 80:
+        return "高"
+    if score >= 50:
+        return "中"
+    return "低"
 
 
 def _impact_to_strings(value: object) -> list[str]:
@@ -31,6 +44,8 @@ def _impact_to_strings(value: object) -> list[str]:
 
 def report_agent(state: CryptoRiskState) -> CryptoRiskState:
     summary = str(state.get("risk_explanation") or _default_summary(state))
+    confidence_score = int(state.get("confidence_score", 0))
+    confidence_level = _confidence_level_from_score(confidence_score)
     impact = state.get("impact", [])
     advice = state.get("advice", [])
 
@@ -53,6 +68,9 @@ def report_agent(state: CryptoRiskState) -> CryptoRiskState:
         "risk_score": int(state.get("risk_score", 0)),
         "final_risk_score": int(state.get("final_risk_score", state.get("risk_score", 0))),
         "risk_level": state.get("risk_level", "低风险"),
+        "confidence_score": confidence_score,
+        "confidence_level": confidence_level,
+        "score_dimension_note": "",
         "risk_categories": state.get("risk_categories", []),
         "primary_category": state.get("primary_category"),
         "secondary_categories": state.get("secondary_categories", []),
@@ -73,7 +91,7 @@ def report_agent(state: CryptoRiskState) -> CryptoRiskState:
         "evidence_quality": state.get("evidence_quality", "none"),
         "evidence": state.get("evidence", []),
         "severity_score": state.get("severity_score", 0),
-        "confidence_score": state.get("confidence_score", 0),
+        "confidence_score": confidence_score,
         "urgency_score": state.get("urgency_score", 0),
         "contagion_score": state.get("contagion_score", 0),
         "score_breakdown": state.get("score_breakdown", {}),
@@ -100,6 +118,7 @@ def report_agent(state: CryptoRiskState) -> CryptoRiskState:
         "has_conflict": state.get("has_conflict", False),
         "review_issues": state.get("review_issues", []),
         "revision_suggestions": state.get("revision_suggestions", []),
+        "structured_review_result": state.get("structured_review_result", {}),
         "calibration_rules": state.get("calibration_rules", []),
         "risk_explanation": state.get("risk_explanation", ""),
         "merged_result": state.get("merged_result", {}),
