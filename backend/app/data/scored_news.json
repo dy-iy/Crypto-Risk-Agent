@@ -415,11 +415,11 @@
     "content": "鲸鱼Evaded转向做多ZEC，亏损76.3万美元 据 ChainCatcher 报道，Lookonchain 监测显示，鲸鱼Evaded平掉比特币空头头寸，亏损32万美元后，全仓做多ZEC。目前其持有53,500枚ZEC多头头寸，亏损76.3万美元。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 10:19:08",
-    "risk_score": 0,
+    "risk_score": 20,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "鲸鱼Evaded平仓比特币空头头寸，亏损32万美元后，全仓做多ZEC，持有53,500枚ZEC多头头寸，当前亏损76.3万美元。该大额仓位变动可能引发市场关注。",
+    "summary": "鲸鱼Evaded做多ZEC发生大额亏损，仓位变动可能影响短期市场情绪。",
     "coins": [
       "BTC"
     ],
@@ -428,7 +428,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -577,9 +577,9 @@
     "published_at": "2026-05-24 09:00:50",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Aave创始人强调未来12个月营收策略，认为营收生成是可持续DeFi发展的关键，属于正常项目发展方向，未披露任何风险事件。",
+    "summary": "项目方发布常规营收策略，无风险迹象。",
     "coins": [
       "AAVE"
     ],
@@ -602,11 +602,11 @@
     "content": "白宫外枪击事件后比特币反弹 白宫外发生枪击事件，导致总统府短暂封锁，期间正进行美伊和平协议的谈判。特朗普表示，结束与伊朗战争的协议已基本谈妥。据 NS3 报道，特朗普当天早些时候的伊朗言论后，比特币从一个月低点反弹至75000美元以上。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 08:57:20",
-    "risk_score": 0,
-    "risk_level": "低风险",
+    "risk_score": 55,
+    "risk_level": "中风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "白宫外发生枪击事件导致总统府短暂封锁，期间正在进行美伊和平协议谈判，比特币从一个月低点反弹至75000美元以上，行情受突发地缘政治事件影响出现快速波动。",
+    "summary": "白宫枪击事件引发市场情绪波动，比特币出现V型反弹，存在异常行情波动风险。",
     "coins": [
       "BTC"
     ],
@@ -615,7 +615,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -628,11 +628,11 @@
     "content": "白宫枪击事件扰乱美伊和平谈判 周六白宫外发生枪击事件，导致总统府短暂封锁，并影响了美伊和平协议的关键谈判。据 BeInCrypto 报道，事件发生在特朗普总统宣布与伊朗的战争协议已基本谈妥后不久。特勤局在宾夕法尼亚大道附近与枪手交火，枪手被击毙，一名旁观者受伤。此事件加剧了特朗普政府面临的安全压力，同时也为金融市场带来不确定性，尽管此前特朗普的言论曾推动比特币反弹。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 08:54:53",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 82,
+    "risk_level": "高风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "白宫突发枪击事件导致总统府封锁，扰乱美伊和平谈判进程，给金融市场带来不确定性，此前特朗普言论曾推动比特币反弹，事件影响可能逆转乐观情绪。",
+    "summary": "白宫枪击事件升级地缘政治安全压力，冲击美伊和平谈判，引发市场高度不确定性。",
     "coins": [
       "BTC"
     ],
@@ -641,7 +641,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -654,11 +654,11 @@
     "content": "比特币价格波动或引发清算潮 据 ChainCatcher 报道，Coinglass 数据显示，若 BTC 跌破 72,843 美元，主流 CEX 累计多单清算强度将达 18.42 亿美元。若 BTC 突破 80,443 美元，主流 CEX 累计空单清算强度将达 7.32 亿美元。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 08:43:47",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "爆仓 / 清算风险",
+    "evidence": "Coinglass数据显示，若BTC跌破72,843美元，主流CEX累计多单清算强度将达18.42亿美元；若BTC突破80,443美元，空单清算强度将达7.32亿美元。",
+    "summary": "比特币价格接近关键清算点位，多空双爆风险显著，可能引发大规模强制平仓潮。",
     "coins": [
       "BTC"
     ],
@@ -667,8 +667,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "BTC",
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -681,11 +680,11 @@
     "content": "美伊草案或解冻数十亿美元伊朗资金 据 NS3 报道，一份即将出台的美伊草案协议包括解冻数十亿美元的伊朗冻结资金。草案还涉及重新开放霍尔木兹海峡和撤出美国在伊朗邻近地区的部队。双方将有30天时间就核问题达成协议。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 08:36:09",
-    "risk_score": 0,
+    "risk_score": 20,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻披露美伊草案协议计划解冻数十亿美元伊朗冻结资金，并涉及重新开放霍尔木兹海峡和撤出美军，可能影响全球地缘风险情绪，但对加密货币市场的直接冲击较小。",
+    "summary": "美伊草案协议若达成可能缓和地区紧张局势，属于宏观政策事件，对加密市场整体风险影响有限。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -697,11 +696,11 @@
     "content": "伊朗否认霍尔木兹海峡恢复正常 伊朗驳斥特朗普关于霍尔木兹海峡恢复正常的说法。据 NS3 报道，伊朗表示，即使交通再次增加，仍将完全控制航运路线、时间表、许可和航行规则。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 08:36:00",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 78,
+    "risk_level": "高风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "伊朗驳斥特朗普关于霍尔木兹海峡恢复正常的说法，宣称仍将完全控制航运路线、时间表、许可和航行规则，表明地缘政治紧张局势可能加剧，影响全球原油运输和供应链，可能引发金融市场波动。",
+    "summary": "霍尔木兹海峡地缘政治紧张升级，可能冲击全球市场并传导至加密货币。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -713,11 +712,11 @@
     "content": "法国发生41起加密绑架事件 Bitcoin记者Joe Nakamoto表示，约70%的加密勒索攻击发生在法国。据NS3报道，他称截至2026年，法国已发生41起与加密货币相关的绑架事件。Nakamoto将这些攻击与主要数据泄露后存储在集中服务器上的客户身份验证数据联系起来。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 07:16:50",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "法国发生41起加密绑架事件，约70%的加密勒索攻击发生在该国，与集中服务器数据泄露导致的客户身份数据暴露有关，可能引发监管机构严厉打击和用户恐慌。",
+    "summary": "法国连续发生多起加密绑架事件，揭示用户数据泄露带来的严重法律与安全风险，或引发强力监管。",
     "coins": [
       "BTC"
     ],
@@ -739,13 +738,31 @@
     "content": "特朗普称美伊和平协议\"已基本谈妥\" 即将对外公布 据彭博社报道，美国总统特朗普周六表示，与伊朗的和平协议\"已基本谈妥\"，他计划很快宣布一项将重新开放霍尔木兹海峡的协议。该关键全球能源通道自2月28日冲突爆发以来基本处于关闭状态。特朗普在社交媒体发文称，协议\"有待美国、伊朗及其他相关国家最终确认\"，此前他与沙特、阿联酋、卡塔尔、巴基斯坦、土耳其及以色列领导人进行了磋商。国务卿卢比奥表示\"取得了一些进展\"，未来数日或有公告，但伊朗核计划、制裁解除及海峡管理等关键分歧仍未解决。受冲突影响，油价持续高于每桶100美元，特朗普在11月中期选举前面临日益加大的国内政治压力。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 06:11:43",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
-    "coins": [],
-    "coin_details": [],
+    "risk_score": 75,
+    "risk_level": "中风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "特朗普宣称与伊朗的和平协议“已基本谈妥”，但伊朗核计划、制裁解除及霍尔木兹海峡管理等关键分歧仍未解决；该海峡自冲突以来基本关闭，油价持续高于100美元/桶，协议能否最终达成存在高度不确定性，可能引发全球能源市场和宏观金融波动。",
+    "summary": "美伊和平协议关键分歧未解，地缘政治不确定性仍高，可能冲击全球宏观市场。",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
     "llm_source": "scored_dataset"
   },
   {
@@ -757,9 +774,9 @@
     "published_at": "2026-05-24 05:22:24",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅涉及美国参议员质疑马斯克的全民高收入计划和提出的财富税法案，未提及任何加密货币或直接相关的市场影响。",
+    "summary": "美国政治人物讨论税收与全民高收入，与加密货币市场无直接关联，风险极低。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -771,11 +788,11 @@
     "content": "Michaël van de Poppe：比特币或跌至6万美元 MN Capital创办人Michaël van de Poppe表示，比特币在跌破75,000至76,000美元支撑区后，可能会跌至60,000美元。据NS3报道，Polymarket的赔率显示，比特币在2026年跌至55,000美元的概率为51%。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 05:16:13",
-    "risk_score": 0,
+    "risk_score": 30,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "分析师预测比特币可能跌破支撑位并跌至60,000美元，预测市场显示2026年跌至55,000美元的概率为51%，消息增加了短期看空情绪。",
+    "summary": "分析师预测比特币可能进一步下跌，但尚未发生实际异常波动，风险较低。",
     "coins": [
       "BTC"
     ],
@@ -784,7 +801,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -797,11 +814,11 @@
     "content": "BTC突破76000美元，特朗普称美伊协议基本达成 BTC突破76000美元，交易价格达到76800美元，此前特朗普表示美伊协议基本达成。ETH反弹至2100美元以上，交易价格为2130美元。据NS3报道，Coinglass数据显示，过去一小时全网总清算额达1.03亿美元。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 05:04:13",
-    "risk_score": 0,
-    "risk_level": "低风险",
+    "risk_score": 70,
+    "risk_level": "中风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "BTC突破76800美元，ETH反弹至2130美元，过去一小时全网总清算额达1.03亿美元，表明市场出现剧烈价格波动，导致大量杠杆头寸清算。",
+    "summary": "BTC和ETH剧烈波动，1小时清算1.03亿美元，存在异常行情波动风险。",
     "coins": [
       "BTC",
       "ETH"
@@ -811,14 +828,14 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "BTC"
+          "LLM"
         ]
       },
       {
         "symbol": "ETH",
         "name": "Ethereum",
         "matched_terms": [
-          "ETH"
+          "LLM"
         ]
       }
     ],
@@ -865,28 +882,20 @@
     "content": "BTC 突破 77,000 USDT，24 小时涨幅1.36% 据币安行情数据显示，BTC 突破 77,000 USDT，现报价 77,045.328125 USDT，24 小时涨幅1.36%。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 04:56:07",
-    "risk_score": 0,
+    "risk_score": 5,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "BTC突破77,000 USDT，24小时涨幅1.36%，属于正常市场价格波动，未出现剧烈波动或异常交易信号。",
+    "summary": "BTC小幅上涨，市场表现平稳，无显著风险。",
     "coins": [
-      "BTC",
-      "USDT"
+      "BTC"
     ],
     "coin_details": [
       {
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "BTC"
-        ]
-      },
-      {
-        "symbol": "USDT",
-        "name": "Tether",
-        "matched_terms": [
-          "USDT"
+          "LLM"
         ]
       }
     ],
@@ -899,11 +908,11 @@
     "content": "期货市场24小时爆仓7亿美元 据 NS3 报道，主要交易所在过去一小时内发生了价值1.04亿美元的期货爆仓。过去24小时内，期货爆仓总额达到7.02亿美元。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 04:54:20",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "爆仓 / 清算风险",
+    "evidence": "过去24小时期货市场爆仓总额达7.02亿美元，其中主要交易所在过去一小时内出现1.04亿美元爆仓。大规模爆仓通常伴随剧烈行情波动与流动性挤压，对市场参与者和交易平台构成显著风险。",
+    "summary": "24小时期货爆仓7亿美元，市场波动剧烈，多头或空头集中清算风险高企。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -915,11 +924,11 @@
     "content": "特朗普称伊朗协议基本谈妥，比特币上涨 美国总统特朗普宣布与伊朗及其他中东国家达成协议后，比特币价格大幅上涨。据CoinDesk报道，特朗普在Truth Social上表示，该协议已基本谈妥，霍尔木兹海峡将重新开放。此消息推动比特币价格从周六早些时候的约74,000美元上涨至76,700美元。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 04:52:48",
-    "risk_score": 0,
+    "risk_score": 5,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "特朗普宣布伊朗协议基本谈妥，霍尔木兹海峡重新开放，推动比特币从约74,000美元上涨至76,700美元，构成地缘政治事件带来的价格波动。",
+    "summary": "伊朗协议谈判进展推动比特币短线波动，属宏观政策引发的常规行情，并未伴有直接风险。",
     "coins": [
       "BTC"
     ],
@@ -928,7 +937,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -944,25 +953,17 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "ETH 价格突破 2,100 USDT，24 小时涨幅 2.28%，属于常规日内波动，未发现链上异常、大额转账或系统性风险信号。",
+    "summary": "ETH 常规行情波动，无显著风险。",
     "coins": [
-      "ETH",
-      "USDT"
+      "ETH"
     ],
     "coin_details": [
       {
         "symbol": "ETH",
         "name": "Ethereum",
         "matched_terms": [
-          "ETH"
-        ]
-      },
-      {
-        "symbol": "USDT",
-        "name": "Tether",
-        "matched_terms": [
-          "USDT"
+          "LLM"
         ]
       }
     ],
@@ -1009,11 +1010,11 @@
     "content": "伊朗关闭领空预测市场波动 据 ChainCatcher 报道，预测市场 Polymarket 上关于“伊朗会在__关闭其领空？”的子市场“6 月 15 日”选项中，“是”选项的胜率在一小时内从 55.9% 暴跌至 40.9%，波动幅度达 15%。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 03:23:45",
-    "risk_score": 0,
+    "risk_score": 30,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "预测市场 Polymarket 上关于“伊朗会在__关闭其领空”的子市场“6 月 15 日”选项中，“是”选项的胜率在一小时内从 55.9% 暴跌至 40.9%，波动幅度达 15 个百分点。",
+    "summary": "预测市场子市场胜率出现剧烈波动，间接反映市场对地缘政治事件的预期变化，对加密市场直接影响有限。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1041,11 +1042,11 @@
     "content": "Risk Dimensions CIO：通胀与高油价压力下，比特币将再度跑赢股债 据CoinDesk报道，比特币可能即将进入新一轮跑赢传统资产的周期。Risk Dimensions首席投资官、瑞信前全球投资组合管理主管Mark Connors表示，比特币已结束其历史上最长的142天跑输标普500的时期，进入跑赢阶段。在通胀顽固、油价高企及利率\"更高更久\"的环境下，债券市场承压，而比特币往往先受冲击再率先反弹。Connors将当前格局类比2020年——黄金先行上涨后比特币强势回归，称\"黄金的行情已过，比特币正迎来复兴。\"",
     "date": "2026-05-24",
     "published_at": "2026-05-24 03:01:44",
-    "risk_score": 0,
+    "risk_score": 10,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "前瑞信高管Mark Connors表示，比特币已结束史上最长142天跑输标普500的时期，在通胀顽固、油价高企、利率“更高更久”的环境下，比特币往往先受冲击再率先反弹，当前格局类比2020年比特币强势回归。",
+    "summary": "分析师观点认为比特币将进入跑赢传统资产周期，无明显负面风险信号。",
     "coins": [
       "BTC"
     ],
@@ -1054,7 +1055,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -1102,25 +1103,17 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "BNB 突破 650 USDT，24 小时跌幅仅 1.27%，属于正常行情波动，无明显负面风险。",
+    "summary": "BNB 价格短期突破 650 USDT，跌幅较小，无显著风险。",
     "coins": [
-      "BNB",
-      "USDT"
+      "BNB"
     ],
     "coin_details": [
       {
         "symbol": "BNB",
         "name": "BNB",
         "matched_terms": [
-          "BNB"
-        ]
-      },
-      {
-        "symbol": "USDT",
-        "name": "Tether",
-        "matched_terms": [
-          "USDT"
+          "LLM"
         ]
       }
     ],
@@ -1133,11 +1126,11 @@
     "content": "Bologna FC 胜率飙升至 76.5% 据 ChainCatcher 报道，预测市场 Polymarket 上，“Bologna FC 1909 vs. FC Internazionale Milano”事件中，子市场 “Bologna FC 1909” 的 “是” 选项胜率在 1 小时内从 28.5% 飙升至 76.5%。",
     "date": "2026-05-24",
     "published_at": "2026-05-24 01:53:35",
-    "risk_score": 0,
+    "risk_score": 20,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "预测市场Polymarket上“Bologna FC 1909”胜率在1小时内从28.5%飙升至76.5%，短时波动异常。",
+    "summary": "体育预测市场胜率短时异常飙升，属行情波动，无直接加密资产风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1184,8 +1177,8 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "新闻内容为美光科技（Micron）的股价预测，属于传统股票分析，未涉及任何加密货币或区块链相关事件。",
+    "summary": "传统股票分析，无加密货币风险",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1200,8 +1193,8 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "预测市场 Polymarket 上 OG Anunoby 助攻选项胜率在一小时内从 48.5% 飙升至 80.5%，未涉及加密货币资产或链上数据。",
+    "summary": "体育赛事预测市场胜率异常波动，与加密市场直接风险无关。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1213,13 +1206,31 @@
     "content": "特朗普称伊朗提案谈判结果五五开 特朗普表示，谈判代表将在当天晚些时候讨论伊朗的最新提案，达成良好协议的机会为50/50。据 NS3 报道，特朗普称他可能会在周日决定是否恢复战争。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 23:39:04",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
-    "coins": [],
-    "coin_details": [],
+    "risk_score": 80,
+    "risk_level": "高风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "特朗普称伊朗提案谈判达成良好协议的机会为50/50，并可能于周日决定是否恢复战争，地缘冲突升级预期可能引发全球市场避险情绪和加密货币剧烈波动。",
+    "summary": "美伊谈判破裂与战争恢复风险上升，可能触发宏观冲击并导致加密市场大幅动荡。",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
     "llm_source": "scored_dataset"
   },
   {
@@ -1245,11 +1256,11 @@
     "content": "XRP年初至今下跌26%，引发市场争议 XRP价格在2026年下跌26%，引发加密市场的广泛讨论。据BeInCrypto报道，尽管Ripple在法律和市场方面取得了一些进展，如与SEC的法律和解及推出XRP现货ETF，但XRP价格仍然疲软，交易价格在1.36至1.37美元之间，较2025年7月的历史高点3.65美元低62%。市场观察者认为，1.30至1.35美元可能成为关键支撑区，若跌破该区间，可能面临更大下行风险。社交媒体上，投资者对XRP的长期表现表示失望，质疑其市场定位与实际结果不符。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 23:12:38",
-    "risk_score": 0,
-    "risk_level": "低风险",
+    "risk_score": 65,
+    "risk_level": "中风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "XRP年初至今下跌26%，价格远低于历史高点，市场关注1.30-1.35美元关键支撑，若跌破可能面临更大下行风险，社交媒体投资者对长期表现失望。",
+    "summary": "XRP年初至今价格下跌26%，市场担忧跌破关键支撑引发进一步回调。",
     "coins": [
       "XRP"
     ],
@@ -1258,8 +1269,7 @@
         "symbol": "XRP",
         "name": "XRP",
         "matched_terms": [
-          "XRP",
-          "Ripple"
+          "LLM"
         ]
       }
     ],
@@ -1274,9 +1284,9 @@
     "published_at": "2026-05-23 23:10:34",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅涉及阿根廷人力资本部推出的数字孪生计划引发公关争议、议员质询与隐私治理框架缺失，未提及任何加密货币市场、交易或监管，对加密资产无直接或间接冲击。",
+    "summary": "阿根廷数字孪生计划争议与加密市场无关，无风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1288,11 +1298,11 @@
     "content": "伊朗与美国接近确认谅解备忘录 伊朗外交部发言人Baghaei表示，伊朗与美国正处于确认谅解备忘录的最后阶段。据NS3报道，Baghaei称，数周的对话使双方更加一致。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 23:10:24",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 60,
+    "risk_level": "中风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "伊朗与美国接近确认谅解备忘录，数周对话使双方更一致，这一地缘政治事件可能引发市场对全球宏观环境的重新评估，增加短期不确定性。",
+    "summary": "美伊关系缓和的地缘政治事件可能引发加密货币市场宏观层面的波动风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1304,37 +1314,60 @@
     "content": "Toncoin跨链桥将于2026年9月关闭 Toncoin官方宣布，其跨链桥及Token Bridge将于2026年9月1日永久关闭。据Odaily星球日报报道，在关闭前的过渡期内，所有按比例收取的跨链手续费已被取消。官方提醒用户需尽快检查钱包，并在截止日期前完成未处理或未回收资产的提取。2026年9月1日之后，该跨链桥将停止所有转账功能。用户若在Ethereum或BNB Smart Chain中持有Wrapped TON，应在截止前通过bridge-v3.ton.org重新桥回TON网络；若持有jUSDT、jUSDC、jDAI、jWBTC等j-tokens，则需桥回Ethereum网络。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 23:03:39",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 70,
+    "risk_level": "中风险",
+    "risk_type": "基础设施 / 协议层异常风险",
+    "evidence": "Toncoin官方宣布跨链桥及Token Bridge将于2026年9月1日永久关闭，过渡期已取消手续费但提醒用户尽快处理资产，逾期将无法转账。涉及Wrapped TON、jUSDT、jUSDC、jDAI、jWBTC等资产，用户需自行桥回以避免损失。",
+    "summary": "Toncoin跨链桥永久关闭将导致用户未及时提取的资产被锁定，存在资产损失风险。",
     "coins": [
+      "TON",
       "ETH",
       "BNB",
-      "TON"
+      "USDT",
+      "USDC",
+      "BTC"
     ],
     "coin_details": [
+      {
+        "symbol": "TON",
+        "name": "Toncoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
       {
         "symbol": "ETH",
         "name": "Ethereum",
         "matched_terms": [
-          "Ethereum"
+          "LLM"
         ]
       },
       {
         "symbol": "BNB",
         "name": "BNB",
         "matched_terms": [
-          "BNB"
+          "LLM"
         ]
       },
       {
-        "symbol": "TON",
-        "name": "Toncoin",
+        "symbol": "USDT",
+        "name": "Tether",
         "matched_terms": [
-          "TON",
-          "Toncoin"
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "USDC",
+        "name": "Circle USD",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
         ]
       }
     ],
@@ -1347,11 +1380,11 @@
     "content": "Peter Schiff 再批评 Strategy 投资策略 Peter Schiff 表示，Strategy 投入约640亿美元于比特币，但整体回报为负。据 NS3 报道，Schiff 指出，STRC 依赖比特币每年约30%的升值来支付11.5%的股息。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 22:48:18",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 30,
+    "risk_level": "中风险",
+    "risk_type": "偿付能力 / 储备 / 流动性风险",
+    "evidence": "Peter Schiff 批评 Strategy 投入约640亿美元于比特币但整体回报为负，并指出其依赖比特币每年约30%的升值来支付11.5%的股息，若比特币升值不及预期可能引发偿付压力。",
+    "summary": "知名批评者质疑Strategy的比特币投资回报与股息支付可持续性，暴露潜在流动性或偿付压力。",
     "coins": [
       "BTC"
     ],
@@ -1360,7 +1393,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -1391,9 +1424,9 @@
     "published_at": "2026-05-23 22:15:28",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "华尔街资产管理公司正通过现货比特币 ETF 增持比特币，机构需求强劲，但未触发实际风险事件。",
+    "summary": "华尔街机构增持比特币，暂无风险。",
     "coins": [
       "BTC"
     ],
@@ -1402,7 +1435,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -1418,8 +1451,8 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "该新闻为谷歌（GOOGL）股票分析师评级及目标价，提及过去股价波动，但与加密货币市场无直接关联，不构成加密货币金融风险。",
+    "summary": "非加密货币相关新闻，无实质风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1433,9 +1466,9 @@
     "published_at": "2026-05-23 22:12:12",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "该新闻为传统股票市场持仓变动，未涉及加密货币相关资产或事件，无直接风险。",
+    "summary": "传统基金持仓调整，与加密市场无关。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1449,9 +1482,9 @@
     "published_at": "2026-05-23 22:12:00",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "监管与法律风险",
+    "evidence": "新闻仅提及STBL高管对法案限制收益型加密产品的评论，并预测行业可能转向AI驱动收益模式，未报道任何已发生的风险事件、攻击或市场异常。",
+    "summary": "仅有行业趋势观点，无实际风险事件",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1463,11 +1496,11 @@
     "content": "英格兰银行计划延长结算时间 英格兰银行于5月18日启动正式咨询，计划将RTGS和CHAPS结算时间延长至接近24/7，包括可能的周日结算日和部分英国银行假日。据NS3报道，该计划在2029年前不会有变化，延长时间不早于2031年。英格兰银行与金融行为监管局（FCA）还设定了联合代币化愿景，审慎监管局（PRA）发布了关于代币化资产敞口、存款、电子货币和稳定币的更新指导。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 22:05:01",
-    "risk_score": 0,
+    "risk_score": 15,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "英格兰银行启动咨询，计划将RTGS和CHAPS结算时间延长至接近24/7，并发布代币化资产及稳定币的监管指导，但实际变更不早于2031年，短期无直接市场冲击。",
+    "summary": "英国央行延长结算时间并更新加密资产监管指导，长期利好但短期风险极低。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1479,11 +1512,11 @@
     "content": "美伊谈判取得进展，或将宣布 Marco Rubio表示，与伊朗的谈判取得了一些进展，可能在未来几天内会有公告。据NS3报道，Esmaeil Baghaei称伊朗和美国的立场更为接近，但尚未达成协议。一位伊朗官员表示，伊朗已与巴基斯坦调解人达成谅解备忘录，正在等待美国的回应。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 21:59:13",
-    "risk_score": 0,
+    "risk_score": 10,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅涉及美伊核谈判取得进展的初步表态，尚未达成协议，对加密货币市场无直接冲击，但可能通过原油价格和地缘情绪间接影响风险资产。",
+    "summary": "美伊谈判进展消息对加密市场直接影响极小，维持低风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1495,11 +1528,11 @@
     "content": "SharpLink将纳入罗素指数成分股 据Odaily星球日报报道，纳斯达克上市以太坊财库公司SharpLink在X平台发文宣布，该公司将被纳入罗素2000和罗素3000指数成分股，并将于2026年6月29日美股开盘时正式生效。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 21:53:45",
-    "risk_score": 0,
+    "risk_score": 5,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "SharpLink纳入罗素2000和罗素3000指数成分股，为被动基金配置事件，可能引起其股价短期波动，但对加密市场无直接冲击。",
+    "summary": "以太坊财库公司被纳入美股指数，影响有限，属常规行情波动事件。",
     "coins": [
       "ETH"
     ],
@@ -1508,7 +1541,7 @@
         "symbol": "ETH",
         "name": "Ethereum",
         "matched_terms": [
-          "以太坊"
+          "LLM"
         ]
       }
     ],
@@ -1587,9 +1620,9 @@
     "published_at": "2026-05-23 21:10:02",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅提及特朗普愿为美伊外交争取更多时间，未涉及任何加密货币市场直接风险；军事打击暂未决定，局势缓和信号可能降低地缘风险，对加密市场影响极小",
+    "summary": "美伊外交缓和信号，对加密货币市场无明显风险冲击",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1603,9 +1636,9 @@
     "published_at": "2026-05-23 21:03:21",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "新闻仅介绍 Hermes 推出三项非工作技能（Zoltar、Antiscammer、Book-Mirror），未提及任何安全事件、资金风险或异常行为。",
+    "summary": "Hermes 推出新功能，无直接风险迹象。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1649,11 +1682,11 @@
     "content": "预测市场占据97.5%交易量 据 NS3 报道，Polymarket和Kalshi在预测市场中占据了97.5%的交易量。本周的新闻综述还提到，美国证券交易委员会（SEC）可能会为股票代币交易提供创新豁免。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 20:16:05",
-    "risk_score": 0,
+    "risk_score": 5,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻提及预测市场Polymarket和Kalshi占据97.5%交易量，以及SEC可能为股票代币交易提供创新豁免，未出现直接的负面风险事件。",
+    "summary": "预测市场集中度高，SEC考虑豁免股票代币交易，无显著风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1681,11 +1714,11 @@
     "content": "美国国债收益率上升影响比特币 美国国债收益率上升削弱了投资者对高风险资产如比特币的信心。据 NS3 报道，美国现货比特币ETF本周净流出约12.6亿美元。过去两周的累计净流出超过22.6亿美元。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 20:09:57",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 50,
+    "risk_level": "中风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "美国国债收益率上升削弱了投资者对高风险资产如比特币的信心，美国现货比特币ETF本周净流出约12.6亿美元，过去两周累计净流出超过22.6亿美元。",
+    "summary": "美国国债收益率上升导致比特币ETF大规模资金流出，可能对币价产生压力。",
     "coins": [
       "BTC"
     ],
@@ -1694,7 +1727,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -1726,8 +1759,8 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "新闻内容仅为分析师根据历史数据预测BTC可能跌至6万美元，未描述已发生的实际行情波动或风险事件。",
+    "summary": "分析师基于历史熊市底部数据预测BTC可能跌至6万美元，无实际风险发生。",
     "coins": [
       "BTC"
     ],
@@ -1736,7 +1769,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "BTC"
+          "LLM"
         ]
       }
     ],
@@ -1765,11 +1798,11 @@
     "content": "地缘政治 | 伊朗外长与巴基斯坦陆军参谋长会晤 据伊朗国家电视台报道，伊朗外长与巴基斯坦陆军参谋长举行第二次会晤，此前已就伊朗提案进行讨论。伊朗外交部发言人表示，美伊双方分歧仍然很大。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 19:13:33",
-    "risk_score": 0,
+    "risk_score": 35,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "伊朗外长与巴基斯坦陆军参谋长举行第二次会晤，伊朗外交部发言人表示美伊双方分歧仍然很大，地缘政治局势紧张可能影响市场情绪。",
+    "summary": "地缘政治消息显示美伊分歧大，可能带来宏观不确定性，但短期对加密市场直接冲击有限。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1781,11 +1814,11 @@
     "content": "以太坊OG地址增持3942枚ETH 一个早期的以太坊OG地址在市场下跌期间增持了3942枚ETH，价值约808万美元。据NS3报道，该地址的平均买入价格约为2049美元，预计将继续增加持仓。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 18:58:10",
-    "risk_score": 0,
+    "risk_score": 20,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "一个早期以太坊OG地址在市场下跌期间增持3942枚ETH，价值约808万美元，平均买入价约2049美元，并预计继续增持。",
+    "summary": "早期以太坊巨鲸地址逆市增持，可能影响短期市场情绪，但本身不构成直接风险。",
     "coins": [
       "ETH"
     ],
@@ -1794,8 +1827,7 @@
         "symbol": "ETH",
         "name": "Ethereum",
         "matched_terms": [
-          "ETH",
-          "以太坊"
+          "LLM"
         ]
       }
     ],
@@ -1810,9 +1842,9 @@
     "published_at": "2026-05-23 18:43:49",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅报道美国整体ETF资金流入创年度新高，未指明面向加密货币的ETF，内容属宏观资金流动，未显现任何对加密市场的直接负面风险。",
+    "summary": "美国ETF资金流入创新高，为市场积极信号，无直接风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1826,9 +1858,9 @@
     "published_at": "2026-05-23 18:41:41",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "该新闻仅涉及GameStop与eBay之间的商业争端，包括收购要约被拒以及账户暂停，内容与加密货币市场无直接关联，不存在可识别的加密风险。",
+    "summary": "传统公司间的商业纠纷，对加密市场无实质影响。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1843,8 +1875,8 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "该新闻仅涉及强生（Johnson & Johnson）股票评级上调，属传统金融市场信息，与加密货币市场无关，无任何链上或行情异常波动证据。",
+    "summary": "传统股票评级新闻，与加密货币无关，无风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1858,9 +1890,9 @@
     "published_at": "2026-05-23 18:01:59",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "交易所与系统运维风险",
+    "evidence": "Binance Wallet 宣布优化 Meme 币排名算法，更注重持有者数量和真实交易活动，属于正常的钱包功能迭代，未发现任何直接风险。",
+    "summary": "Binance Wallet 优化 Meme 币排名机制，无直接市场或安全风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1925,11 +1957,11 @@
     "content": "欧洲央行管委：或6月加息维持可信度 据金十数据报道，欧洲央行管委斯图纳拉斯表示，维持欧洲央行的可信度是支持下月加息的有力论据。在美国与伊朗之间未达成和平协议的情况下，通胀前景正在恶化，欧元区消费者迟早会开始怀疑，政策制定者所说的“准备采取行动”是否只是空话。斯图纳拉斯指出，加息对人们和就业有代价，但如果情况持续而不采取行动，问题将出现。为了欧洲央行的可信度和反应机制，可能不得不在6月份加息。如果美伊达成协议，能源价格可能迅速下降，利率或许可以保持当前水平。但若无协议，利率可能进入另一个水平，通胀问题将更加严重。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 17:35:04",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 75,
+    "risk_level": "高风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "欧洲央行管委斯图纳拉斯表示，为了维持可信度可能不得不在6月加息，并指出若美伊未达成和平协议，通胀前景恶化，利率可能进入更高水平。",
+    "summary": "欧洲央行官员暗示6月加息，通胀前景恶化或引发货币政策收紧预期，可能对风险资产市场造成冲击。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1941,11 +1973,11 @@
     "content": "Polymarket 子市场胜率剧烈波动 据 ChainCatcher 报道，预测市场 Polymarket 上“Knicks vs. Cavaliers”事件中，子市场 “Odd/Even Score” 的 “Odd” 选项胜率在一小时内从 68.5% 暴跌至 49.5%，波动幅度达 19%。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 17:13:42",
-    "risk_score": 0,
+    "risk_score": 10,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "预测市场 Polymarket 上一个体育赛事子市场的胜率在一小时内波动 19%，属于单一事件市场的正常预测波动，未直接涉及加密资产或链上风险。",
+    "summary": "Polymarket 子市场胜率短期剧烈波动，但仅限体育博彩类预测市场，无直接加密市场风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -1959,35 +1991,18 @@
     "published_at": "2026-05-23 17:07:30",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "新闻提到 XRP 面临中心化批评，属于项目治理相关争议，但未描述实际风险事件或威胁。",
+    "summary": "XRP 因中心化批评存在轻微治理争议，整体风险较低。",
     "coins": [
-      "ETH",
-      "SOL",
       "XRP"
     ],
     "coin_details": [
       {
-        "symbol": "ETH",
-        "name": "Ethereum",
-        "matched_terms": [
-          "Ethereum"
-        ]
-      },
-      {
-        "symbol": "SOL",
-        "name": "Solana",
-        "matched_terms": [
-          "Solana"
-        ]
-      },
-      {
         "symbol": "XRP",
         "name": "XRP",
         "matched_terms": [
-          "XRP",
-          "Ripple"
+          "LLM"
         ]
       }
     ],
@@ -2042,11 +2057,11 @@
     "content": "链上巨鲸 loracle.hl 比特币空单扭亏为盈 链上巨鲸 loracle.hl 的比特币 20 倍空单扭亏为盈，仓位价值高达 2000 万美元，开仓价 75,029.5 美元，浮盈约 17 万美元。据 BlockBeats 链上侦探报道，loracle.hl 的 1 亿美元 HYPE 空单仍为亏损状态，开仓价 45.2562 美元，浮亏 1860 万美元。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 16:23:36",
-    "risk_score": 0,
+    "risk_score": 10,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "链上巨鲸 loracle.hl 的比特币 20 倍空单仓位价值 2000 万美元，目前浮盈约 17 万美元；其 1 亿美元 HYPE 空单仍浮亏 1860 万美元，新闻仅陈述仓位盈亏状态，未出现爆仓或市场冲击。",
+    "summary": "巨鲸高杠杆仓位盈亏更新，暂未引发显著市场风险。",
     "coins": [
       "BTC"
     ],
@@ -2055,7 +2070,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -2068,11 +2083,11 @@
     "content": "全网爆仓 3.78 亿美元，BTC 和 ETH 损失惨重 据 ChainCatcher 报道，Coinglass 数据显示，过去 1 小时全网爆仓 3.78 亿美元，其中多单爆仓 3.49 亿美元，空单爆仓 2912 万美元。此外，BTC 爆仓金额达 1.64 亿美元，ETH 爆仓金额达 1.14 亿美元。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 16:14:05",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "爆仓 / 清算风险",
+    "evidence": "全网1小时爆仓3.78亿美元，其中BTC爆仓1.64亿美元，ETH爆仓1.14亿美元，多单爆仓占主导（3.49亿美元）。",
+    "summary": "全网1小时内出现大规模爆仓，涉及BTC和ETH巨额清算，市场波动剧烈。",
     "coins": [
       "BTC",
       "ETH"
@@ -2082,14 +2097,14 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "BTC"
+          "LLM"
         ]
       },
       {
         "symbol": "ETH",
         "name": "Ethereum",
         "matched_terms": [
-          "ETH"
+          "LLM"
         ]
       }
     ],
@@ -2145,11 +2160,11 @@
     "content": "今日恐慌与贪婪指数为34，等级为恐慌 据币安数据显示，今日恐慌与贪婪指数为34（昨日为35），等级为恐慌。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 16:00:15",
-    "risk_score": 0,
-    "risk_level": "低风险",
+    "risk_score": 30,
+    "risk_level": "中风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "今日恐慌与贪婪指数为34，处于恐慌等级，较昨日的35略有下降，反映市场情绪偏向悲观，可能增加短期行情波动的风险。",
+    "summary": "恐慌指数34表明市场情绪恐慌，可能加剧行情异常波动。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -2161,28 +2176,20 @@
     "content": "BTC 跌破 75,000 USDT，24 小时跌幅3.94% 据币安行情数据显示，BTC 跌破 75,000 USDT，现报价 74,403.382813 USDT，24 小时跌幅3.94%。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 15:51:07",
-    "risk_score": 0,
+    "risk_score": 30,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "BTC 价格跌破 75,000 USDT，24 小时跌幅达 3.94%，属于短期明显波动。",
+    "summary": "BTC 短线快速下跌，24 小时跌近 4%，存在短期行情波动风险。",
     "coins": [
-      "BTC",
-      "USDT"
+      "BTC"
     ],
     "coin_details": [
       {
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "BTC"
-        ]
-      },
-      {
-        "symbol": "USDT",
-        "name": "Tether",
-        "matched_terms": [
-          "USDT"
+          "LLM"
         ]
       }
     ],
@@ -2229,11 +2236,11 @@
     "content": "Hyperliquid 平台鲸鱼持仓数据曝光 据 ChainCatcher 报道，Coinglass 数据显示，Hyperliquid 平台鲸鱼当前持仓总额为 44.2 亿美元，其中多单持仓 21.71 亿美元，占比 49.13%，空单持仓 22.48 亿美元，占比 50.87%。多单盈亏为 -3,914.07 万美元，空单盈亏为 -1,822.95 万美元。巨鲸地址 0x8def..ae 在 45.2562 美元价格 5 倍全仓做空 HYPE，目前未实现盈亏为 -1,781.51 万美元。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 15:43:43",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 70,
+    "risk_level": "中风险",
+    "risk_type": "爆仓 / 清算风险",
+    "evidence": "Hyperliquid 平台巨鲸地址以5倍杠杆做空HYPE，未实现亏损达1,781.51万美元，同时平台多单整体亏损3,914.07万美元，空单亏损1,822.95万美元，高杠杆持仓在不利行情下面临清算风险。",
+    "summary": "Hyperliquid 平台巨鲸高杠杆仓位大幅浮亏，存在潜在清算风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -2248,8 +2255,8 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "新闻内容为电子竞技比赛预测市场 Polymarket 上 Team Falcons 胜率上升，与加密货币市场及资产价格无关，不构成实质性金融风险。",
+    "summary": "电子竞技预测胜率变化，无加密货币风险",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -2263,9 +2270,9 @@
     "published_at": "2026-05-23 15:23:43",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "偿付能力 / 储备 / 流动性风险",
+    "evidence": "Circle 7天内发行约81亿USDC，赎回约77亿USDC，流通量净增4亿枚，总储备771亿美元完全覆盖流通量，其中绝大部分为国债和逆回购等高流动性资产，属于正常的稳定币增发和储备披露，未发现异常。",
+    "summary": "USDC正常增发，储备充足且高流动性，无风险。",
     "coins": [
       "USDC"
     ],
@@ -2274,7 +2281,7 @@
         "symbol": "USDC",
         "name": "Circle USD",
         "matched_terms": [
-          "USDC"
+          "LLM"
         ]
       }
     ],
@@ -2303,11 +2310,11 @@
     "content": "美国比特币ETF净流出超10亿美元 美国现货比特币ETF近期净流出超过10亿美元。据NS3报道，Santiment分析指出，ETF流动可能作为反向指标，因为它们可能更多地反映了散户情绪而非机构情绪。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 14:24:59",
-    "risk_score": 0,
-    "risk_level": "低风险",
+    "risk_score": 65,
+    "risk_level": "中风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "美国现货比特币ETF近期净流出超10亿美元，历史经验显示大额资金外流可能伴随市场抛压或情绪恶化，Santiment分析指出ETF流动可能作为反向指标。",
+    "summary": "美国比特币ETF出现超10亿美元净流出，可能引发市场波动与散户恐慌。",
     "coins": [
       "BTC"
     ],
@@ -2316,7 +2323,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -2332,8 +2339,8 @@
     "risk_score": 0,
     "risk_level": "低风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "新闻内容为康斯特公司回应与SpaceX的合作计划，完全是传统仪器仪表行业的商业对话，未涉及任何加密货币、区块链、交易所或数字资产相关内容，无任何风险事件。",
+    "summary": "传统企业新闻，与加密货币无关，无风险。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -2345,11 +2352,11 @@
     "content": "巴西查获1400台违规比特币矿机 巴西圣保罗警察在容迪亚伊和卢韦拉查获约1400台违规运行的比特币挖矿设备。据Odaily星球日报报道，这些设备由9台总计8470千伏安的变压器供电，涉嫌窃取电力。初步估计，相关行为盗用约2吉瓦时的电能，足以维持2000户家庭一个月的用电。目前尚无人员被捕落网的报告。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 14:03:41",
-    "risk_score": 0,
+    "risk_score": 25,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "监管与法律风险",
+    "evidence": "巴西警方查获1400台违规比特币矿机，涉嫌窃取电力，目前无人员被捕。事件表明挖矿活动面临执法与窃电法律风险，但对比特币网络及市场无直接冲击。",
+    "summary": "巴西查获违规比特币矿机，反映挖矿监管与窃电法律风险，整体市场影响有限。",
     "coins": [
       "BTC"
     ],
@@ -2358,7 +2365,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -2416,9 +2423,9 @@
     "published_at": "2026-05-23 13:53:34",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻提及JPMorgan旗下区块链平台Kinexys累计交易额超1.5万亿美元、计划推出代币化国债基金，并增持iShares Bitcoin Trust份额，内容均为积极业务拓展，未发现风险事件。",
+    "summary": "JPMorgan区块链平台业务增长与机构布局，无显著风险。",
     "coins": [
       "BTC"
     ],
@@ -2427,7 +2434,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "Bitcoin"
+          "LLM"
         ]
       }
     ],
@@ -2440,11 +2447,11 @@
     "content": "Strategy可能出售部分BTC Strategy创始人Michael Saylor表示，不排除今年出售部分BTC的可能性。据NS3AI报道，Saylor称公司可能持有美元和现金，同时出售股票和信贷产品。他表示目标是在七年内最大化每股持有的BTC数量。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 13:41:27",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 65,
+    "risk_level": "中风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "Strategy创始人Michael Saylor表示不排除今年出售部分BTC的可能性，并提及公司可能持有美元和现金，出售股票和信贷产品。作为主要的BTC持仓方，潜在的出售行为可能构成巨鲸动态，影响市场预期。",
+    "summary": "Strategy创始人暗示可能出售部分BTC，构成大额持仓动向风险。",
     "coins": [
       "BTC"
     ],
@@ -2453,7 +2460,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "BTC"
+          "LLM"
         ]
       }
     ],
@@ -2492,11 +2499,11 @@
     "content": "欧洲央行反对放宽欧元稳定币规则 欧洲央行反对放宽欧元稳定币规则，因担心银行风险。包括欧洲央行行长Christine Lagarde在内的央行官员反对该提议，认为稳定币可能导致银行存款流失。据NS3报道，Bruegel警告称，更严格的欧盟规则可能将相关活动推向海外。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 13:37:35",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 35,
+    "risk_level": "中风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "欧洲央行官员反对放宽欧元稳定币规则，认为稳定币可能导致银行存款流失；Bruegel警告更严格的欧盟规则可能将相关活动推向海外。",
+    "summary": "欧洲央行反对放宽欧元稳定币规则，强化监管的可能性加大，可能对稳定币市场带来政策不确定性。",
     "coins": [],
     "coin_details": [],
     "llm_source": "scored_dataset"
@@ -2524,11 +2531,11 @@
     "content": "美国比特币ETF连续六天净流出 美国现货比特币ETF在5月22日录得1.052亿美元的净流出。据NS3报道，Farside Investors数据显示，这标志着连续第六天出现净流出。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 13:15:41",
-    "risk_score": 0,
-    "risk_level": "低风险",
+    "risk_score": 35,
+    "risk_level": "中风险",
     "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "evidence": "美国现货比特币ETF在5月22日录得1.052亿美元净流出，且已连续第六天出现净流出，可能预示着市场情绪转向和潜在的价格波动。",
+    "summary": "美国比特币ETF连续六天净流出，累计流出规模明显，可能引发短期行情波动。",
     "coins": [
       "BTC"
     ],
@@ -2537,7 +2544,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -2578,9 +2585,9 @@
     "published_at": "2026-05-23 13:13:38",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "摩根士丹利旗下现货比特币ETF MSBT增持14.333枚BTC，总持仓达3486枚，价值2.63亿美元，为常规机构增持披露，无直接负面风险。",
+    "summary": "机构小幅增持比特币ETF，无明显风险信号。",
     "coins": [
       "BTC"
     ],
@@ -2589,8 +2596,7 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "BTC",
-          "比特币"
+          "LLM"
         ]
       }
     ],
@@ -2605,12 +2611,12 @@
     "published_at": "2026-05-23 13:01:18",
     "risk_score": 0,
     "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "新闻内容为正面公告：Tempo计划两年内去中心化，专注合规支付与跨境稳定币场景，未提及任何安全事件、漏洞、监管负面或市场异动。现有评分同样为低风险。",
+    "summary": "项目公布去中心化路线图，无风险信号。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "scored_dataset"
+    "llm_source": "llm"
   },
   {
     "news_id": "f69bcfde11f276db",
@@ -2728,11 +2734,11 @@
     "content": "Michael Saylor：不排除年底前出售比特币 Strategy 董事长 Michael Saylor 在接受采访时表示，不排除公司在今年年底前出售部分比特币的可能性。据Odaily星球日报报道，这改变了他此前长期坚持的绝不换手立场。Saylor 指出，公司也可能通过出售股票和信贷产品来管理美元及现金头寸。公司目前持有价值约 650 亿美元的比特币，目标是在 2033 年实现每股比特币持有量的最大化。根据 Strategy 官方网站及 CoinMarketCap 数据显示，目前 Strategy 共持有 843,768 枚比特币，平均购买价格约为每枚 75,700 美元。",
     "date": "2026-05-23",
     "published_at": "2026-05-23 11:33:34",
-    "risk_score": 0,
-    "risk_level": "低风险",
-    "risk_type": "异常行情波动风险",
-    "evidence": "",
-    "summary": "",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "Strategy 董事长 Michael Saylor 表示不排除在年底前出售部分比特币，改变了此前绝不换手的立场，公司当前持有 843,768 枚 BTC，总价值约 650 亿美元，一旦抛售可能对市场造成巨大冲击。",
+    "summary": "MicroStrategy 掌舵人暗示可能出售巨额比特币持仓，打破长期持有承诺，构成重大潜在抛压风险。",
     "coins": [
       "BTC"
     ],
@@ -2741,11 +2747,11 @@
         "symbol": "BTC",
         "name": "Bitcoin",
         "matched_terms": [
-          "比特币"
+          "LLM"
         ]
       }
     ],
-    "llm_source": "scored_dataset"
+    "llm_source": "llm"
   },
   {
     "news_id": "0a52b41d077cd426",
