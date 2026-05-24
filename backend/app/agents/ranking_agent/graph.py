@@ -30,11 +30,17 @@ def run_ranking_agent(
     output_type: RankingOutputType = "all",
     date_filter: str | None = None,
     limit: int = 10,
+    progress_callback=None,
+    score_missing: bool = True,
 ) -> dict:
+    normalized_limit = 0 if limit <= 0 else min(limit, 5000)
     initial_state: RankingAgentState = {
         "date_filter": date_filter,
-        "limit": max(1, min(limit, 50)),
+        "limit": normalized_limit,
         "output_type": output_type,
+        "score_missing": score_missing,
     }
+    if progress_callback:
+        initial_state["progress_callback"] = progress_callback
     result = ranking_workflow.invoke(initial_state)
     return result.get("response", {})

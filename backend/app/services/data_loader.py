@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 import math
 import re
+import uuid
 from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
 
 
-DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "raw_300_news.csv"
+MASTERED_NEWS_PATH = Path(__file__).resolve().parents[1] / "data" / "mastered_news.csv"
+DATA_PATH = MASTERED_NEWS_PATH
 RAW_NEWS_QUEUE_PATH = Path(__file__).resolve().parents[1] / "data" / "raw_news.csv"
+LEGACY_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "raw_300_news.csv"
 SCORED_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "scored_news.json"
 
 TITLE_FIELDS = ["title", "headline", "标题", "新闻标题"]
@@ -62,8 +65,14 @@ def _read_csv(path: Path) -> list[dict[str, object]]:
 
 
 def _read_json(path: Path) -> list[dict[str, object]]:
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+
     with path.open("r", encoding="utf-8") as file:
-        data = json.load(file)
+        try:
+            data = json.load(file)
+        except json.JSONDecodeError:
+            return []
 
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
@@ -116,11 +125,14 @@ def load_normalized_news(path_value: str | None = None) -> list[dict[str, object
 
 def load_scored_news(path_value: str | None = None) -> list[dict[str, object]]:
     path = Path(path_value) if path_value else SCORED_DATA_PATH
-    if not path.exists():
+    if not path.exists() or path.stat().st_size == 0:
         return []
 
     with path.open("r", encoding="utf-8") as file:
-        data = json.load(file)
+        try:
+            data = json.load(file)
+        except json.JSONDecodeError:
+            return []
 
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
@@ -130,7 +142,7 @@ def load_scored_news(path_value: str | None = None) -> list[dict[str, object]]:
 
 
 def _write_text_with_replace_fallback(path: Path, content: str) -> None:
-    temp_path = path.with_suffix(f"{path.suffix}.tmp")
+    temp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     with temp_path.open("w", encoding="utf-8") as file:
         file.write(content)
     try:

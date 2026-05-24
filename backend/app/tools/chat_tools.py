@@ -5,6 +5,36 @@ from app.state import CryptoRiskState
 
 EXCHANGES = ["Binance", "OKX", "Coinbase", "Bybit", "Kraken", "Huobi", "Gate", "Bitget"]
 CHAINS = ["Ethereum", "BSC", "BNB Chain", "Solana", "Bitcoin", "Tron", "Polygon", "Arbitrum", "Optimism"]
+KEYWORD_REFERENCE_MAP = {
+    "hack": "security_event",
+    "exploit": "security_event",
+    "attack": "security_event",
+    "rug": "fraud_or_exit_risk",
+    "depeg": "stablecoin_risk",
+    "liquidation": "market_liquidation",
+    "whale": "large_transfer_reference",
+    "stolen": "asset_loss_reference",
+    "drain": "asset_outflow_reference",
+    "freeze": "operational_or_legal_reference",
+    "insolvency": "solvency_reference",
+    "漏洞": "security_event",
+    "攻击": "security_event",
+    "被盗": "asset_loss_reference",
+    "跑路": "fraud_or_exit_risk",
+    "诈骗": "fraud_reference",
+    "脱锚": "stablecoin_risk",
+    "爆仓": "market_liquidation",
+    "清算": "market_liquidation",
+    "巨鲸": "large_transfer_reference",
+    "大额转账": "large_transfer_reference",
+    "暂停提现": "exchange_operation_reference",
+    "无法提现": "exchange_operation_reference",
+    "宕机": "exchange_operation_reference",
+    "监管调查": "regulatory_reference",
+    "储备不足": "solvency_reference",
+    "暴跌": "market_volatility_reference",
+    "量子计算": "potential_infrastructure_security_risk",
+}
 
 CATEGORY_IMPACT_MAP = {
     "链上漏洞 / 攻击风险": ["协议资金池、用户钱包或跨链桥资产可能受损", "相关代币信任度和流动性可能下降"],
@@ -52,6 +82,42 @@ def _detect_input_type(text: str) -> str:
     return "加密货币风险文本"
 
 
+def _context_window(text: str, term: str, window: int = 42) -> str:
+    lowered = text.lower()
+    index = lowered.find(term.lower())
+    if index < 0:
+        return ""
+    start = max(0, index - window)
+    end = min(len(text), index + len(term) + window)
+    return text[start:end]
+
+
+def _extract_keyword_refs(text: str) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    lowered = text.lower()
+    for term, ref_type in KEYWORD_REFERENCE_MAP.items():
+        if term.lower() in lowered:
+            refs.append(
+                {
+                    "term": term,
+                    "type": ref_type,
+                    "context": _context_window(text, term),
+                }
+            )
+    return refs[:12]
+
+
+def _detect_source_hint(text: str) -> str:
+    match = re.search(r"据\s*([^，。,.]{2,32})\s*(?:报道|消息|披露|称)", text)
+    if match:
+        return match.group(1).strip()
+    if "官方公告" in text or "公告称" in text:
+        return "官方公告"
+    if any(word in text.lower() for word in ["twitter", "x ", "telegram", "社群"]):
+        return "社交媒体或社群消息"
+    return ""
+
+
 def prepare_chat_input(state: CryptoRiskState) -> CryptoRiskState:
     original_text = state.get("original_text", "")
     cleaned_text = " ".join(original_text.split())
@@ -71,13 +137,32 @@ def prepare_chat_input(state: CryptoRiskState) -> CryptoRiskState:
     }
 
     raw_outputs = state.get("raw_agent_outputs", {})
-    raw_outputs["input_tool"] = {"input_type": input_type, "entities": entities}
-
-    return {
-        **state,
+    keyword_refs = _extract_keyword_refs(cleaned_text)
+    source_hint = _detect_source_hint(cleaned_text)
+    raw_outputs["input_tool"] = {
+        "input_type": input_type,
+        "entities": entities,
+        "keyword_refs": keyword_refs,
+        "source_hint": source_hint,
+    }
+    parsed_input = {
+        "raw_text": original_text,
         "cleaned_text": cleaned_text,
         "input_type": input_type,
         "entities": entities,
+        "keyword_refs": keyword_refs,
+        "source_hint": source_hint,
+    }
+
+    return {
+        **state,
+        "raw_text": original_text,
+        "cleaned_text": cleaned_text,
+        "input_type": input_type,
+        "entities": entities,
+        "keyword_refs": keyword_refs,
+        "source_hint": source_hint,
+        "parsed_input": parsed_input,
         "raw_agent_outputs": raw_outputs,
     }
 

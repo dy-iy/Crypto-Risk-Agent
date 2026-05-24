@@ -1,3 +1,6 @@
+from app.prompts.common import COMMON_AGENT_RULES
+
+
 RISK_CATEGORIES = [
     "链上漏洞 / 攻击风险",
     "诈骗 / 跑路 / Rug Pull 风险",
@@ -32,5 +35,55 @@ def build_classify_prompt(cleaned_text: str, risk_signals: list[str]) -> str:
 {{
   "risk_categories": ["固定风险类别"],
   "reason": "分类理由"
+}}
+""".strip()
+
+
+def build_contextual_classify_prompt(
+    raw_text: str,
+    cleaned_text: str,
+    entities: dict[str, list[str]],
+    keyword_refs: list[dict[str, str]],
+    triage_result: dict[str, object],
+    evidence_result: dict[str, object],
+) -> str:
+    categories = "\n".join(f"- {category}" for category in RISK_CATEGORIES)
+    return f"""
+你是加密货币金融风控分类 Agent。
+
+{COMMON_AGENT_RULES}
+
+只能从以下固定风险类别中选择，不允许创造新类别：
+{categories}
+
+分类要求：
+1. 必须基于 raw_text 和 evidence_result 分类，而不是只看 keyword_refs。
+2. 如果不足以归类，primary_category 可以为 null，或使用“综合风险”。
+3. 不允许默认塞“异常行情波动风险”。
+
+raw_text：
+{raw_text}
+
+cleaned_text：
+{cleaned_text}
+
+entities：
+{entities}
+
+keyword_refs：
+{keyword_refs}
+
+risk_triage_result：
+{triage_result}
+
+evidence_result：
+{evidence_result}
+
+请返回 JSON：
+{{
+  "primary_category": "固定风险类别 或 综合风险 或 null",
+  "secondary_categories": ["固定风险类别"],
+  "classification_reason": "分类理由",
+  "classification_confidence": "high|medium|low"
 }}
 """.strip()

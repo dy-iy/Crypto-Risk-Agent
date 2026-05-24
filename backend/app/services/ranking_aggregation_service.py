@@ -1,40 +1,106 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from app.services.data_loader import shorten
 from app.services.rule_risk_scorer import risk_level_from_score
 
 
+SOURCE_URL_FIELDS = [
+    "source_url",
+    "url",
+    "link",
+    "original_url",
+    "news_url",
+    "网页",
+    "链接",
+    "原文链接",
+]
+
+
 def response_date(date_filter: str | None) -> str:
+    if date_filter in {"24h", "7d"}:
+        return date_filter
     return date_filter or date.today().isoformat()
 
 
+def _parse_item_time(item: dict[str, object]) -> datetime | None:
+    value = item.get("published_at") or item.get("date")
+    if not value:
+        return None
+
+    text = str(value).strip()
+    for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d"]:
+        try:
+            return datetime.strptime(text[:19] if fmt.endswith("%S") else text[:10], fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _filter_news_by_recent_delta(items: list[dict[str, object]], delta: timedelta) -> list[dict[str, object]]:
+    cutoff = datetime.now() - delta
+    return [
+        item
+        for item in items
+        if (published_at := _parse_item_time(item)) is not None and published_at >= cutoff
+    ]
+
+
 def filter_news_by_date(items: list[dict[str, object]], date_filter: str | None) -> list[dict[str, object]]:
+    if date_filter == "24h":
+        filtered = _filter_news_by_recent_delta(items, timedelta(hours=24))
+        return filtered or items
+    if date_filter == "7d":
+        filtered = _filter_news_by_recent_delta(items, timedelta(days=7))
+        return filtered or items
     if not date_filter:
-        return items
+        filtered = _filter_news_by_recent_delta(items, timedelta(hours=24))
+        return filtered or items
     filtered = [item for item in items if item.get("date") == date_filter]
     return filtered or items
 
 
+def first_text_value(item: dict[str, object], fields: list[str]) -> str:
+    for field in fields:
+        value = item.get(field)
+        if value:
+            return str(value)
+    raw = item.get("raw")
+    if isinstance(raw, dict):
+        for field in fields:
+            value = raw.get(field)
+            if value:
+                return str(value)
+    return ""
+
+
 def build_news_ranking(items: list[dict[str, object]], limit: int) -> list[dict[str, object]]:
     ranked = sorted(items, key=lambda item: int(item.get("risk_score", 0)), reverse=True)
+    selected = ranked if limit <= 0 else ranked[:limit]
     output: list[dict[str, object]] = []
-    for rank, item in enumerate(ranked[:limit], start=1):
+    for rank, item in enumerate(selected, start=1):
         output.append(
             {
                 "rank": rank,
                 "news_id": item.get("news_id", ""),
+                "csv_order": item.get("csv_order", ""),
                 "title": item.get("title", ""),
                 "content": item.get("content", ""),
+                "date": item.get("date", ""),
                 "risk_score": item.get("risk_score", 0),
                 "risk_level": item.get("risk_level", ""),
                 "risk_type": item.get("risk_type", ""),
                 "published_at": item.get("published_at", ""),
                 "coins": item.get("coins", []),
+                "coin_details": item.get("coin_details", []),
                 "summary": item.get("summary", ""),
                 "evidence": item.get("evidence", ""),
+                "source_url": first_text_value(item, SOURCE_URL_FIELDS),
             }
         )
     return output
@@ -83,15 +149,16 @@ def build_coin_ranking(items: list[dict[str, object]], limit: int) -> list[dict[
                         related_news,
                         key=lambda news: int(news.get("risk_score", 0)),
                         reverse=True,
-                    )[:5]
+                    )
                 ],
             }
         )
 
     ranked = sorted(coin_items, key=lambda item: item["final_score"], reverse=True)
-    for rank, item in enumerate(ranked[:limit], start=1):
+    selected = ranked if limit <= 0 else ranked[:limit]
+    for rank, item in enumerate(selected, start=1):
         item["rank"] = rank
-    return ranked[:limit]
+    return selected
 
 
 def build_overview(

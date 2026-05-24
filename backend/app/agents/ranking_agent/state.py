@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Literal, TypedDict
 
 
@@ -8,6 +9,7 @@ class RankingAgentState(TypedDict, total=False):
     date_filter: str | None
     limit: int
     output_type: RankingOutputType
+    score_missing: bool
     raw_news: list[dict[str, object]]
     ranking_source: list[dict[str, object]]
     raw_dataset_empty: bool
@@ -20,3 +22,4 @@ class RankingAgentState(TypedDict, total=False):
     overview: dict[str, object]
     response: dict[str, object]
     review_notes: list[str]
+    progress_callback: Callable[[int, int, dict[str, object]], None]

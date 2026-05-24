@@ -3,6 +3,8 @@ from app.services.llm_news_risk_service import analyze_news_with_llm
 
 
 def _is_complete_scored_item(item: dict[str, object]) -> bool:
+    if item.get("llm_source") == "rule_fallback":
+        return False
     return bool(
         item.get("risk_score") is not None
         and item.get("risk_level")
@@ -23,12 +25,20 @@ def news_risk_agent(state: RankingAgentState) -> RankingAgentState:
         for item in state.get("scored_dataset", [])
         if _is_complete_scored_item(item)
     }
-    missing_news = [
-        item
-        for item in state.get("filtered_news", [])
-        if str(item.get("news_id") or item.get("id")) not in scored_by_id
-    ]
-    llm_analysis = analyze_news_with_llm(missing_news) if missing_news else {}
+    missing_news = (
+        [
+            item
+            for item in state.get("filtered_news", [])
+            if str(item.get("news_id") or item.get("id")) not in scored_by_id
+        ]
+        if state.get("score_missing", True)
+        else []
+    )
+    llm_analysis = (
+        analyze_news_with_llm(missing_news, state.get("progress_callback"))
+        if missing_news
+        else {}
+    )
     scored_news: list[dict[str, object]] = []
 
     for item in state.get("filtered_news", []):

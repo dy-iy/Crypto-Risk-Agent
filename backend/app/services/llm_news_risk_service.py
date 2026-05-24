@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
+from threading import Lock
+
 from app.llm import call_llm_json, call_llm_json_async
 from app.prompts.classify_prompt import RISK_CATEGORIES
 from app.services.coin_extraction_service import COIN_DICTIONARY
@@ -8,9 +13,7 @@ from app.services.rule_risk_scorer import risk_level_from_score, rule_risk_score
 
 
 _ANALYSIS_CACHE: dict[str, dict[str, object]] = {}
-_LLM_DISABLED = False
-
-
+_ANALYSIS_CACHE_LOCK = Lock()
 def _normalize_score(value: object, fallback: int) -> int:
     try:
         score = int(float(value))
@@ -144,13 +147,8 @@ def _single_item_from_result(raw_result: dict[str, object]) -> dict[str, object]
 
 
 def analyze_news_item_with_llm(item: dict[str, object]) -> dict[str, object]:
-    global _LLM_DISABLED
-    if _LLM_DISABLED:
-        return _fallback_analysis(item)
-
     llm_result = call_llm_json(_build_prompt(item), temperature=0.1)
     if llm_result.get("_llm_error"):
-        _LLM_DISABLED = True
         return _fallback_analysis(item)
 
     return _merge_analysis(item, _single_item_from_result(llm_result))
@@ -172,20 +170,56 @@ async def analyze_news_item_with_llm_strict_async(item: dict[str, object]) -> di
     return _merge_analysis(item, _single_item_from_result(llm_result))
 
 
-def analyze_news_with_llm(items: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+ProgressCallback = Callable[[int, int, dict[str, object]], None]
+
+
+def analyze_news_with_llm(
+    items: list[dict[str, object]],
+    progress_callback: ProgressCallback | None = None,
+) -> dict[str, dict[str, object]]:
+    with _ANALYSIS_CACHE_LOCK:
+        cached_results = dict(_ANALYSIS_CACHE)
+
     missing = [
         item
         for item in items
-        if str(item.get("news_id") or item.get("id")) not in _ANALYSIS_CACHE
+        if str(item.get("news_id") or item.get("id")) not in cached_results
     ]
+    total = len(missing)
+    fresh_results: dict[str, dict[str, object]] = {}
 
-    for item in missing:
-        news_id = str(item.get("news_id") or item.get("id"))
-        _ANALYSIS_CACHE[news_id] = analyze_news_item_with_llm(item)
+    if total:
+        try:
+            configured_workers = int(os.getenv("RANKING_AGENT_CONCURRENCY", "6"))
+        except ValueError:
+            configured_workers = 6
+        max_workers = max(1, configured_workers)
+        max_workers = min(max_workers, total)
+        completed = 0
 
-    return {
-        str(item.get("news_id") or item.get("id")): _ANALYSIS_CACHE[
-            str(item.get("news_id") or item.get("id"))
-        ]
-        for item in items
-    }
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_item = {
+                executor.submit(analyze_news_item_with_llm, item): item
+                for item in missing
+            }
+            for future in as_completed(future_to_item):
+                item = future_to_item[future]
+                news_id = str(item.get("news_id") or item.get("id"))
+                analysis = future.result()
+                fresh_results[news_id] = analysis
+                if analysis.get("source") == "llm":
+                    with _ANALYSIS_CACHE_LOCK:
+                        _ANALYSIS_CACHE[news_id] = analysis
+                completed += 1
+                if progress_callback:
+                    progress_callback(completed, total, {**item, "_analysis": analysis})
+
+    with _ANALYSIS_CACHE_LOCK:
+        cached_results = dict(_ANALYSIS_CACHE)
+        return {
+            str(item.get("news_id") or item.get("id")): fresh_results.get(
+                str(item.get("news_id") or item.get("id"))
+            )
+            or cached_results[str(item.get("news_id") or item.get("id"))]
+            for item in items
+        }

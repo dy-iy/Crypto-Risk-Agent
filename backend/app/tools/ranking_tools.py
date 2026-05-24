@@ -242,7 +242,7 @@ def build_ranking_response(state: RankingAgentState) -> RankingAgentState:
     if state.get("raw_dataset_empty"):
         response = {
             **response,
-            "warning": "未评分数据集 raw_300_news.csv 为空，无法生成新的排行榜。",
+            "warning": "主新闻集 mastered_news.csv 为空，无法生成新的排行榜。",
         }
 
     return {
