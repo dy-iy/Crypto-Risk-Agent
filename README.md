@@ -92,6 +92,41 @@ npm install
 
 前端通过相对路径请求后端接口，例如 `/api/chat`、`/api/rankings/news`。部署时由网关或反向代理负责把 `/api/` 请求转发到后端服务。
 
+### 4. 安装 OpenClaw Skill（可选）
+
+本仓库已内置 OpenClaw Skill：
+
+```text
+skills/crypto-risk-agent/
+```
+
+如果在当前项目目录中使用 OpenClaw，通常可以直接让 OpenClaw 读取项目下的 `skills/` 目录。
+
+如果希望在任意工作区都能使用该能力，可以安装到 OpenClaw 全局 skills 目录：
+
+```bash
+mkdir -p ~/.openclaw/skills
+cp -R skills/crypto-risk-agent ~/.openclaw/skills/
+```
+
+安装后重启 OpenClaw，或重新加载 skills。可以通过下面的命令检查是否可用：
+
+```bash
+openclaw skills list
+```
+
+也可以直接运行 Skill 内置脚本验证接口连通性：
+
+```bash
+python3 ~/.openclaw/skills/crypto-risk-agent/scripts/crypto_risk_api.py overview --date 24h
+```
+
+OpenClaw 中可以这样使用：
+
+```text
+使用 crypto-risk-agent 分析这条加密货币新闻的风险：某项目疑似发生异常转账，官方尚未回应。
+```
+
 ## 使用
 
 ### 启动后端服务
