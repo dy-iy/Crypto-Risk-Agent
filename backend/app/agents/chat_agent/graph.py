@@ -1,160 +1,114 @@
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-import os
+from __future__ import annotations
 
-from app.agents.chat_agent.advice_agent import advice_agent
-from app.agents.chat_agent.classify_agent import classify_agent
-from app.agents.chat_agent.consistency_review_agent import consistency_review_agent
-from app.agents.chat_agent.evidence_agent import evidence_agent
-from app.agents.chat_agent.impact_agent import impact_agent
-from app.agents.chat_agent.merge_agent import merge_results
-from app.agents.chat_agent.report_agent import report_agent
-from app.agents.chat_agent.risk_calibration_agent import risk_calibration_agent
-from app.agents.chat_agent.risk_explanation_agent import risk_explanation_agent
-from app.agents.chat_agent.risk_triage_agent import risk_triage_agent
-from app.agents.chat_agent.score_agent import score_agent
-from app.agents.chat_agent.uncertainty_agent import uncertainty_agent
-from app.risk_engine import run_v6_risk_engine
+from functools import lru_cache
+from typing import Literal
+
+from langgraph.graph import END, START, StateGraph
+
+from app.agents.chat_agent.nodes import (
+    RiskCaseState,
+    adaptive_router_node,
+    apply_validation_decision_node,
+    build_scenario_contracts_node,
+    conflict_validator_node,
+    deterministic_decision_engine_node,
+    fast_exit_report_node,
+    fast_signal_scan_node,
+    merge_evaluation_results_node,
+    normalize_input_node,
+    parallel_scenario_evaluators_node,
+    report_generator_node,
+    targeted_evidence_extractor_node,
+    validation_gate_node,
+)
 from app.state import CryptoRiskState
-from app.tools.chat_tools import prepare_chat_input
 
 
-AgentNode = Callable[[CryptoRiskState], CryptoRiskState]
-
-ANALYSIS_BRANCH_FIELDS = {
-    "score_agent": [
-        "risk_score",
-        "final_risk_score",
-        "severity_score",
-        "confidence_score",
-        "urgency_score",
-        "contagion_score",
-        "risk_level",
-        "score_reason",
-        "score_factors",
-        "score_confidence",
-        "score_breakdown",
-    ],
-    "classify_agent": [
-        "primary_category",
-        "secondary_categories",
-        "classification_reason",
-        "classification_confidence",
-        "risk_categories",
-    ],
-    "impact_agent": [
-        "impact",
-        "impact_scope",
-        "impact_severity",
-        "affected_entities",
-        "affected_assets",
-        "loss_estimate",
-        "systemic_risk",
-        "user_asset_risk",
-    ],
-    "uncertainty_agent": [
-        "verified_claims",
-        "unverified_claims",
-        "official_explanation",
-        "missing_information",
-        "overclaiming_risks",
-    ],
-}
-
-GENERATION_BRANCH_FIELDS = {
-    "risk_explanation_agent": ["risk_explanation"],
-    "advice_agent": ["advice", "priority", "action_type"],
-}
+def _route_after_adaptive_router(state: RiskCaseState) -> Literal["fast_exit", "deep_analysis"]:
+    return "fast_exit" if state.get("orchestration_path") == "fast_exit" else "deep_analysis"
 
 
-def _copy_for_branch(state: CryptoRiskState) -> CryptoRiskState:
-    return {
-        **state,
-        "raw_agent_outputs": dict(state.get("raw_agent_outputs", {})),
-    }
+def _route_after_validation_gate(state: RiskCaseState) -> Literal["need_validation", "no_validation"]:
+    return "need_validation" if state.get("needs_validation") else "no_validation"
 
 
-def _run_parallel(
-    state: CryptoRiskState,
-    branches: dict[str, AgentNode],
-    field_map: dict[str, list[str]],
-) -> CryptoRiskState:
-    next_state: CryptoRiskState = {**state, "raw_agent_outputs": dict(state.get("raw_agent_outputs", {}))}
-    with ThreadPoolExecutor(max_workers=len(branches)) as executor:
-        futures = {
-            name: executor.submit(node, _copy_for_branch(state))
-            for name, node in branches.items()
-        }
-        for name, future in futures.items():
-            branch_state = future.result()
-            for field in field_map.get(name, []):
-                if field in branch_state:
-                    next_state[field] = branch_state[field]  # type: ignore[literal-required]
-            next_outputs = dict(next_state.get("raw_agent_outputs", {}))
-            next_outputs.update(branch_state.get("raw_agent_outputs", {}))
-            next_state["raw_agent_outputs"] = next_outputs
-    return next_state
+@lru_cache(maxsize=1)
+def get_compiled_chat_graph():
+    graph = StateGraph(RiskCaseState)
+    graph.add_node("normalize_input", normalize_input_node)
+    graph.add_node("fast_signal_scan", fast_signal_scan_node)
+    graph.add_node("adaptive_router", adaptive_router_node)
+    graph.add_node("fast_exit_report", fast_exit_report_node)
+    graph.add_node("build_scenario_contracts", build_scenario_contracts_node)
+    graph.add_node("targeted_evidence_extractor", targeted_evidence_extractor_node)
+    graph.add_node("parallel_scenario_evaluators", parallel_scenario_evaluators_node)
+    graph.add_node("merge_evaluation_results", merge_evaluation_results_node)
+    graph.add_node("deterministic_decision_engine", deterministic_decision_engine_node)
+    graph.add_node("validation_gate", validation_gate_node)
+    graph.add_node("conflict_validator", conflict_validator_node)
+    graph.add_node("apply_validation_decision", apply_validation_decision_node)
+    graph.add_node("report_generator", report_generator_node)
+
+    graph.add_edge(START, "normalize_input")
+    graph.add_edge("normalize_input", "fast_signal_scan")
+    graph.add_edge("fast_signal_scan", "adaptive_router")
+    graph.add_conditional_edges(
+        "adaptive_router",
+        _route_after_adaptive_router,
+        {
+            "fast_exit": "fast_exit_report",
+            "deep_analysis": "build_scenario_contracts",
+        },
+    )
+    graph.add_edge("fast_exit_report", END)
+    graph.add_edge("build_scenario_contracts", "targeted_evidence_extractor")
+    graph.add_edge("targeted_evidence_extractor", "parallel_scenario_evaluators")
+    graph.add_edge("parallel_scenario_evaluators", "merge_evaluation_results")
+    graph.add_edge("merge_evaluation_results", "deterministic_decision_engine")
+    graph.add_edge("deterministic_decision_engine", "validation_gate")
+    graph.add_conditional_edges(
+        "validation_gate",
+        _route_after_validation_gate,
+        {
+            "need_validation": "conflict_validator",
+            "no_validation": "report_generator",
+        },
+    )
+    graph.add_edge("conflict_validator", "apply_validation_decision")
+    graph.add_edge("apply_validation_decision", "report_generator")
+    graph.add_edge("report_generator", END)
+    return graph.compile()
 
 
-class EvidenceGroundedChatWorkflow:
+def run_chat_agent(user_message: str) -> dict[str, object]:
+    state = get_compiled_chat_graph().invoke({"message": user_message, "errors": []})
+    report = state.get("report")
+    if not isinstance(report, dict):
+        raise RuntimeError("chat graph finished without report")
+    return report
+
+
+class ChatWorkflow:
     def invoke(self, initial_state: CryptoRiskState) -> CryptoRiskState:
-        state = prepare_chat_input(initial_state)
-        state = risk_triage_agent(state)
-        state = evidence_agent(state)
-
-        state = _run_parallel(
-            state,
-            {
-                "score_agent": score_agent,
-                "classify_agent": classify_agent,
-                "impact_agent": impact_agent,
-                "uncertainty_agent": uncertainty_agent,
-            },
-            ANALYSIS_BRANCH_FIELDS,
-        )
-
-        state = merge_results(state)
-        state = consistency_review_agent(state)
-        state = risk_calibration_agent(state)
-
-        state = _run_parallel(
-            state,
-            {
-                "risk_explanation_agent": risk_explanation_agent,
-                "advice_agent": advice_agent,
-            },
-            GENERATION_BRANCH_FIELDS,
-        )
-        return report_agent(state)
+        message = str(initial_state.get("original_text") or initial_state.get("message") or "")
+        report = run_chat_agent(message)
+        raw_outputs = dict(initial_state.get("raw_agent_outputs", {}))
+        raw_outputs["chat_agent_adapter"] = {
+            "engine": "chat_agent",
+            "workflow": "evidence_contracted_case_graph",
+        }
+        return {
+            **initial_state,
+            "final_report": report,
+            "raw_agent_outputs": raw_outputs,
+        }
 
     async def ainvoke(self, initial_state: CryptoRiskState) -> CryptoRiskState:
         return self.invoke(initial_state)
 
 
-def build_chat_workflow() -> EvidenceGroundedChatWorkflow:
-    return EvidenceGroundedChatWorkflow()
+def build_chat_workflow() -> ChatWorkflow:
+    return ChatWorkflow()
 
 
 chat_workflow = build_chat_workflow()
-
-
-def run_chat_agent(user_message: str) -> dict:
-    use_v6 = os.getenv("USE_V6_RISK_ENGINE", "true").strip().lower() in {"1", "true", "yes", "on"}
-    if use_v6:
-        try:
-            return run_v6_risk_engine(user_message)
-        except Exception as exc:
-            if os.getenv("V6_RISK_ENGINE_STRICT", "false").strip().lower() in {"1", "true", "yes", "on"}:
-                raise
-            fallback_note = str(exc)
-        else:
-            fallback_note = ""
-    else:
-        fallback_note = ""
-
-    initial_state: CryptoRiskState = {
-        "original_text": user_message,
-        "raw_agent_outputs": {"v6_fallback_error": fallback_note} if fallback_note else {},
-    }
-    result = chat_workflow.invoke(initial_state)
-    return result.get("final_report", {})

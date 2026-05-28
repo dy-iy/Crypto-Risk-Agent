@@ -11,7 +11,7 @@ BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from app.risk_engine import run_v6_risk_engine  # noqa: E402
+from app.agents.chat_agent import run_chat_agent  # noqa: E402
 
 
 DATASET = Path(__file__).with_name("risk_cases_smoke.jsonl")
@@ -39,27 +39,27 @@ def main() -> int:
     for case in cases:
         start = time.perf_counter()
         try:
-            report = run_v6_risk_engine(str(case["text"]))
+            report = run_chat_agent(str(case["text"]))
         except Exception as exc:
             errors += 1
             rows.append({"id": case["id"], "error": str(exc)})
             continue
         latency_ms = (time.perf_counter() - start) * 1000
         latencies.append(latency_ms)
-        v6_result = report.get("v6_result", {}) if isinstance(report, dict) else {}
+        chat_agent_result = report.get("chat_agent_result") or report.get("v6_result", {}) if isinstance(report, dict) else {}
         debug = report.get("debug", {}) if isinstance(report, dict) else {}
         evidence_debug = debug.get("evidence_extraction", {}) if isinstance(debug, dict) else {}
         score = int(report.get("risk_score", 0))
-        primary = str(v6_result.get("primary_scenario") or "")
+        primary = str(chat_agent_result.get("primary_scenario") or "")
         expected_min = int(case["expected_min_score"])
         expected_max = int(case["expected_max_score"])
         expected_mid = (expected_min + expected_max) / 2
         expected_high = bool(case["expected_high_risk"])
-        extraction_mode = str(v6_result.get("extraction_mode") or evidence_debug.get("mode") or "unknown")
-        case_fallback_count = int(v6_result.get("fallback_count") or evidence_debug.get("fallback_count") or 0)
-        case_llm_call_count = int(v6_result.get("llm_call_count") or evidence_debug.get("llm_call_count") or 0)
+        extraction_mode = str(chat_agent_result.get("extraction_mode") or evidence_debug.get("mode") or "unknown")
+        case_fallback_count = int(chat_agent_result.get("fallback_count") or evidence_debug.get("fallback_count") or 0)
+        case_llm_call_count = int(chat_agent_result.get("llm_call_count") or evidence_debug.get("llm_call_count") or 0)
         case_json_parse_errors = int(
-            v6_result.get("json_parse_error_count") or evidence_debug.get("json_parse_error_count") or 0
+            chat_agent_result.get("json_parse_error_count") or evidence_debug.get("json_parse_error_count") or 0
         )
         fallback_count += case_fallback_count
         llm_call_count += case_llm_call_count

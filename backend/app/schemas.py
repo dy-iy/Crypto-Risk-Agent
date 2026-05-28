@@ -115,6 +115,7 @@ class RiskReport(BaseModel):
     merged_result: dict[str, object] = Field(default_factory=dict)
     calibrated_result: dict[str, object] = Field(default_factory=dict)
     raw_agent_outputs: dict[str, object] = Field(default_factory=dict)
+    chat_agent_result: dict[str, object] = Field(default_factory=dict)
     v6_result: dict[str, object] = Field(default_factory=dict)
     debug: dict[str, object] = Field(default_factory=dict)
 

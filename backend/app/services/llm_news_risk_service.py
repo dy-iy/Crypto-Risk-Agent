@@ -6,7 +6,7 @@ import os
 from threading import Lock
 
 from app.llm import call_llm_json, call_llm_json_async
-from app.prompts.classify_prompt import RISK_CATEGORIES
+from app.risk_categories import RISK_CATEGORIES
 from app.services.coin_extraction_service import COIN_DICTIONARY
 from app.services.data_loader import shorten
 from app.services.rule_risk_scorer import risk_level_from_score, rule_risk_scorer

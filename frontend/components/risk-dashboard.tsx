@@ -19,6 +19,7 @@ import {
   readCachedNewsRanking,
   readCachedRiskOverview,
   RiskOverview,
+  ChatAgentResult,
   RiskReport,
   ScoreBreakdown,
   sendChatMessage,
@@ -1085,8 +1086,8 @@ function ChatView({
                 <div className="w-full max-w-[640px]">
                   <AgentProgress
                     icon={<ShieldIcon />}
-                    title="多 Agent 正在分析"
-                    steps={["证据抽取", "风险分类", "评分拆解", "报告生成"]}
+                    title="Chat Agent 正在研判"
+                    steps={["输入标准化", "快速信号扫描", "证据合约", "LLM 抽证据", "场景评分器并行", "决策校准"]}
                   />
                 </div>
               </div>
@@ -1660,11 +1661,12 @@ function SettingsView({
       : "border-emerald-200 bg-emerald-50 text-emerald-700";
   const agentCards = [
     { name: "新闻采集 Agent", detail: "监听新闻更新", status: fallbackJob.crawler.status },
-    { name: "风险识别 Agent", detail: "识别攻击与异常", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
-    { name: "证据抽取 Agent", detail: "提取关键证据", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
-    { name: "评分校准 Agent", detail: "校准风险等级", status: fallbackJob.agent.status === "running" ? "running" : hasWarning ? "warning" : "success" },
+    { name: "信号扫描 Agent", detail: "规则粗筛风险方向", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
+    { name: "证据抽取 Agent", detail: "单次 LLM 字段抽取", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
+    { name: "场景评分 Agent", detail: "多场景并行规则评分", status: fallbackJob.agent.status === "running" ? "running" : hasWarning ? "warning" : "success" },
+    { name: "决策校准 Agent", detail: "应用 cap / floor 校验", status: fallbackJob.agent.status === "running" ? "running" : hasWarning ? "warning" : "success" },
     { name: "排行榜 Agent", detail: "刷新风险榜单", status: fallbackJob.ranking.status },
-    { name: "报告生成 Agent", detail: "生成风控报告", status: hasError ? "error" : "success" },
+    { name: "报告生成 Agent", detail: "生成证据链报告", status: hasError ? "error" : "success" },
   ] satisfies Array<{ name: string; detail: string; status: NewsUpdateProgress["status"] }>;
 
   return (
@@ -2329,6 +2331,12 @@ function ReportDocument({
     urgency: "处置紧迫性",
     reversibility: "可逆性",
   };
+  const chatAgentResult = report.chat_agent_result || report.v6_result || {};
+  const validation = chatAgentResult.validation || null;
+  const calibrationRules = (report.calibration_rules || []).filter(Boolean);
+  const nonRiskFactors = (report.non_risk_factors || []).filter(Boolean);
+  const missingInfo = (report.missing_info || []).filter(Boolean);
+  const uncertaintyPoints = (report.uncertainty_points || []).filter(Boolean);
 
   return (
     <article className="risk-scroll min-w-0 overflow-y-auto bg-white">
@@ -2370,13 +2378,20 @@ function ReportDocument({
           <div className="grid gap-3 md:grid-cols-3">
             <MetaTile label="风险等级" value={report.risk_level || "待确认"} />
             <MetaTile label="信息置信度" value={`${clampScore(report.confidence_score ?? 0)}/100 · ${report.confidence_level || "待确认"}`} />
-            <MetaTile label="风险类别" value={categories.join(" / ")} />
+            <MetaTile label="主风险类别" value={report.primary_category || categories[0]} />
+            <MetaTile label="风险状态" value={formatRiskStatus(report.risk_status)} />
             <MetaTile label="输入类型" value={report.input_type || "事件文本"} />
-            <MetaTile label="是否存在风险" value={report.has_risk ? "存在风险" : "暂未确认"} />
+            <MetaTile label="Agent 路径" value={formatEnginePath(chatAgentResult.orchestration_path)} />
+            <MetaTile label="证据抽取" value={formatExtractionMode(chatAgentResult.extraction_mode)} />
+            <MetaTile label="报告模式" value={formatReportMode(report.report_mode || chatAgentResult.report_mode)} />
           </div>
         </section>
         <ReportSection title="事件结论" icon={<ShieldIcon />}>
           <EventConclusion report={report} categories={categories} />
+        </ReportSection>
+
+        <ReportSection title="分析链路" icon={<GearIcon />}>
+          <EngineTrace report={report} result={chatAgentResult} validation={validation} />
         </ReportSection>
 
         <ReportSection title="证据摘要" icon={<FileIcon />}>
@@ -2409,6 +2424,28 @@ function ReportDocument({
 
           <ReportSection title="处置建议" icon={<BulbIcon />}>
             <BulletList items={sanitizeAdvice(report.advice?.length ? report.advice : ["继续核验公告、链上资金流向和用户反馈。"])} />
+          </ReportSection>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-2">
+          <ReportSection title="校准与缓和因素" icon={<CheckIcon />}>
+            <EvidenceSignalList
+              empty="未触发额外校准规则。"
+              items={[
+                ...calibrationRules.map((item) => ({ label: "校准", value: formatCalibrationRule(item), tone: "blue" as const })),
+                ...nonRiskFactors.map((item) => ({ label: "缓和", value: item, tone: "green" as const })),
+              ]}
+            />
+          </ReportSection>
+
+          <ReportSection title="缺失与不确定信息" icon={<AlertIcon />}>
+            <EvidenceSignalList
+              empty="当前报告未记录明显缺失或不确定项。"
+              items={[
+                ...missingInfo.map((item) => ({ label: "缺失", value: formatEvidenceSignal(item), tone: "amber" as const })),
+                ...uncertaintyPoints.map((item) => ({ label: "不确定", value: item, tone: "slate" as const })),
+              ]}
+            />
           </ReportSection>
         </div>
 
@@ -2445,6 +2482,119 @@ function MetaTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function EngineTrace({
+  report,
+  result,
+  validation,
+}: {
+  report: RiskReport;
+  result: ChatAgentResult;
+  validation: ChatAgentResult["validation"];
+}) {
+  const primaryScenario = formatScenario(String(result.primary_scenario || ""));
+  const extractionMode = formatExtractionMode(result.extraction_mode);
+  const llmCalls = result.llm_call_count ?? 0;
+  const fallbackCount = result.fallback_count ?? 0;
+  const validationAnswers = Object.entries(validation?.answered_questions || {}).slice(0, 6);
+  const traceItems = [
+    {
+      title: "快速规则扫描",
+      value: `${report.risk_signals?.length || 0} 个信号`,
+      detail: "完成风险方向粗筛与缓和语义识别",
+    },
+    {
+      title: "场景证据合约",
+      value: primaryScenario || "综合风险",
+      detail: "按主场景生成字段级证据清单",
+    },
+    {
+      title: "LLM 证据抽取",
+      value: `${extractionMode} · ${llmCalls} 次调用`,
+      detail: fallbackCount ? `已启用规则兜底 ${fallbackCount} 次` : "单次集中抽取 active scenarios 字段",
+    },
+    {
+      title: "场景评分器",
+      value: "Python 规则评分",
+      detail: "多场景评分器并行执行，LLM 不直接给最终分",
+    },
+    {
+      title: "决策校准",
+      value: `${clampScore(result.pre_cap_score ?? report.risk_score)} → ${clampScore(report.final_risk_score ?? report.risk_score)}`,
+      detail: validation ? formatValidationAction(validation.action) : "未触发二次校验调整",
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {traceItems.map((item, index) => (
+          <div key={item.title} className="rounded-lg border border-blue-100 bg-slate-50 p-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-600 text-xs font-bold text-white">
+                {index + 1}
+              </span>
+              <p className="min-w-0 truncate text-xs font-bold text-slate-600">{item.title}</p>
+            </div>
+            <p className="mt-3 text-sm font-bold leading-6 text-slate-950">{item.value}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      {validation && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-bold text-white">Validation</span>
+            <span className="rounded-md border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-800">
+              {formatValidationAction(validation.action)}
+            </span>
+          </div>
+          {validation.reason && <p className="mt-3 text-sm font-semibold leading-6 text-amber-950">{validation.reason}</p>}
+          {validationAnswers.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {validationAnswers.map(([key, value]) => (
+                <span key={key} className="rounded-md border border-amber-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
+                  {formatEvidenceSignal(key)}：{formatUnknownValue(value)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EvidenceSignalList({
+  empty,
+  items,
+}: {
+  empty: string;
+  items: Array<{ label: string; value: string; tone: "blue" | "green" | "amber" | "slate" }>;
+}) {
+  if (!items.length) {
+    return <p className="rounded-lg border border-dashed border-blue-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">{empty}</p>;
+  }
+
+  const toneStyle = {
+    blue: "border-blue-100 bg-blue-50 text-blue-800",
+    green: "border-emerald-100 bg-emerald-50 text-emerald-800",
+    amber: "border-amber-100 bg-amber-50 text-amber-800",
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+  };
+
+  return (
+    <div className="space-y-2">
+      {items.map((item, index) => (
+        <div key={`${item.label}-${item.value}-${index}`} className={`rounded-lg border px-3 py-2 ${toneStyle[item.tone]}`}>
+          <span className="text-xs font-bold">{item.label}</span>
+          <p className="mt-1 text-sm font-semibold leading-6">{item.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function formatEvidenceCategory(value: string) {
   const normalized = value.trim();
   const labels: Record<string, string> = {
@@ -2473,8 +2623,91 @@ function formatEvidenceSignal(value: string) {
     regulatory_signal: "监管信号",
     discussion: "讨论信息",
     other: "其他证据",
+    withdrawal_suspended: "提现暂停",
+    planned_maintenance: "计划维护",
+    recovery_time_confirmed: "恢复时间明确",
+    fund_safety_statement: "资金安全声明",
+    secondary_risk_bonus: "次要风险加权",
+    validator_cap_score: "校验压分",
+    validator_raise_floor: "校验抬分",
+    insufficient_evidence: "关键证据不足",
   };
   return labels[normalized] || normalized || "证据类型";
+}
+
+function formatRiskStatus(value?: string) {
+  const labels: Record<string, string> = {
+    low_risk: "低风险",
+    potential_risk: "潜在风险",
+    confirmed_risk: "已确认风险",
+    insufficient_evidence: "证据不足",
+    resolved_or_mitigated: "已缓解或受限",
+    false_positive_suppressed: "误报已抑制",
+  };
+  return labels[String(value || "")] || value || "待确认";
+}
+
+function formatEnginePath(value?: string) {
+  const labels: Record<string, string> = {
+    fast_exit: "快速低风险路径",
+    deep_analysis: "完整案件分析",
+  };
+  return labels[String(value || "")] || value || "待确认";
+}
+
+function formatExtractionMode(value?: string) {
+  const labels: Record<string, string> = {
+    llm: "LLM 证据抽取",
+    heuristic_fallback: "规则兜底抽取",
+    fast_exit: "快速退出",
+  };
+  return labels[String(value || "")] || value || "待确认";
+}
+
+function formatReportMode(value?: string) {
+  const labels: Record<string, string> = {
+    full_case: "完整报告",
+    fast_exit: "快速低风险报告",
+  };
+  return labels[String(value || "")] || value || "待确认";
+}
+
+function formatScenario(value: string) {
+  const labels: Record<string, string> = {
+    S0_GENERAL_UNKNOWN: "综合风险",
+    S1_ATTACK_EXPLOIT: "链上漏洞 / 攻击风险",
+    S2_EXCHANGE_ABNORMALITY: "交易所与系统运维风险",
+    S3_STABLECOIN_RESERVE: "稳定币异常风险",
+    S4_INFRASTRUCTURE_FAILURE: "基础设施 / 协议层异常风险",
+    S5_REGULATORY_ENFORCEMENT: "监管与法律风险",
+    S6_MARKET_LIQUIDATION: "爆仓 / 清算风险",
+    S7_FRAUD_GOVERNANCE: "诈骗 / 跑路 / Rug Pull 风险",
+    S8_WHALE_ONCHAIN_FLOW: "大额转账 / 巨鲸行为风险",
+  };
+  return labels[value] || value;
+}
+
+function formatCalibrationRule(value: string) {
+  const [scope, score] = value.split(":");
+  const scopeLabel = formatScenario(scope) || formatEvidenceSignal(scope);
+  return score ? `${scopeLabel} 校准阈值 ${score}` : formatEvidenceSignal(value);
+}
+
+function formatValidationAction(value?: string) {
+  const labels: Record<string, string> = {
+    cap_score: "二次校验：压低最高分",
+    raise_floor: "二次校验：抬高最低分",
+    no_change: "二次校验：无需调整",
+  };
+  return labels[String(value || "")] || value || "未触发校验";
+}
+
+function formatUnknownValue(value: unknown) {
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  if (value === null || value === undefined || value === "") return "无";
+  if (Array.isArray(value)) return value.join("、");
+  return String(value);
 }
 
 function EventConclusion({ categories, report }: { categories: string[]; report: RiskReport }) {

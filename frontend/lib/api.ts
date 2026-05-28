@@ -12,22 +12,56 @@ export type ScoreBreakdown = {
   reversibility: number;
 };
 
+export type RiskValidation = {
+  action?: string;
+  score_cap?: number | null;
+  score_floor?: number | null;
+  reason?: string;
+  answered_questions?: Record<string, unknown>;
+};
+
+export type ChatAgentResult = {
+  engine?: string;
+  primary_scenario?: string;
+  secondary_scenarios?: string[];
+  confidence?: number;
+  orchestration_path?: string;
+  pre_cap_score?: number;
+  extraction_mode?: string;
+  llm_call_count?: number;
+  fallback_count?: number;
+  json_parse_error_count?: number;
+  validation?: RiskValidation | null;
+  report_mode?: string;
+};
+
 export type RiskReport = {
   summary: string;
   input_type: string;
   has_risk: boolean;
+  risk_status?: string;
   risk_score: number;
+  final_risk_score?: number;
   risk_level: string;
   confidence_score?: number;
   confidence_level?: string;
   score_dimension_note?: string;
   risk_categories: string[];
+  primary_category?: string;
+  secondary_categories?: string[];
   risk_signals: string[];
+  non_risk_factors?: string[];
   evidence: EvidenceItem[];
   score_breakdown: ScoreBreakdown;
   impact: string[];
   advice: string[];
-  v6_result?: Record<string, unknown>;
+  missing_info?: string[];
+  uncertainty_points?: string[];
+  score_reason?: string;
+  calibration_rules?: string[];
+  report_mode?: string;
+  chat_agent_result?: ChatAgentResult;
+  v6_result?: ChatAgentResult;
   debug?: Record<string, unknown>;
 };
 

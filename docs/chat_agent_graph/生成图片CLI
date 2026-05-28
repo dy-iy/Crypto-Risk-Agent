@@ -1,0 +1,7 @@
+cd /root/projects/Hackathon
+./frontend/node_modules/.bin/mmdc \
+  -i docs/chat_agent_stategraph.mmd \
+  -o docs/chat_agent_graph/chat_agent_stategraph.png \
+  -b transparent \
+  -s 2 \
+  -p docs/chat_agent_graph/puppeteer-config.json
