@@ -14,6 +14,8 @@ from app.agents.chat_agent.nodes import (
     deterministic_decision_engine_node,
     fast_exit_report_node,
     fast_signal_scan_node,
+    final_context_agents_node,
+    low_risk_gate_node,
     merge_evaluation_results_node,
     normalize_input_node,
     parallel_scenario_evaluators_node,
@@ -28,6 +30,10 @@ def _route_after_adaptive_router(state: RiskCaseState) -> Literal["fast_exit", "
     return "fast_exit" if state.get("orchestration_path") == "fast_exit" else "deep_analysis"
 
 
+def _route_after_low_risk_gate(state: RiskCaseState) -> Literal["fast_exit", "deep_analysis"]:
+    return "fast_exit" if state.get("orchestration_path") == "fast_exit" else "deep_analysis"
+
+
 def _route_after_validation_gate(state: RiskCaseState) -> Literal["need_validation", "no_validation"]:
     return "need_validation" if state.get("needs_validation") else "no_validation"
 
@@ -38,6 +44,7 @@ def get_compiled_chat_graph():
     graph.add_node("normalize_input", normalize_input_node)
     graph.add_node("fast_signal_scan", fast_signal_scan_node)
     graph.add_node("adaptive_router", adaptive_router_node)
+    graph.add_node("low_risk_gate", low_risk_gate_node)
     graph.add_node("fast_exit_report", fast_exit_report_node)
     graph.add_node("build_scenario_contracts", build_scenario_contracts_node)
     graph.add_node("targeted_evidence_extractor", targeted_evidence_extractor_node)
@@ -47,6 +54,7 @@ def get_compiled_chat_graph():
     graph.add_node("validation_gate", validation_gate_node)
     graph.add_node("conflict_validator", conflict_validator_node)
     graph.add_node("apply_validation_decision", apply_validation_decision_node)
+    graph.add_node("final_context_agents", final_context_agents_node)
     graph.add_node("report_generator", report_generator_node)
 
     graph.add_edge(START, "normalize_input")
@@ -55,6 +63,14 @@ def get_compiled_chat_graph():
     graph.add_conditional_edges(
         "adaptive_router",
         _route_after_adaptive_router,
+        {
+            "fast_exit": "low_risk_gate",
+            "deep_analysis": "build_scenario_contracts",
+        },
+    )
+    graph.add_conditional_edges(
+        "low_risk_gate",
+        _route_after_low_risk_gate,
         {
             "fast_exit": "fast_exit_report",
             "deep_analysis": "build_scenario_contracts",
@@ -71,11 +87,12 @@ def get_compiled_chat_graph():
         _route_after_validation_gate,
         {
             "need_validation": "conflict_validator",
-            "no_validation": "report_generator",
+            "no_validation": "final_context_agents",
         },
     )
     graph.add_edge("conflict_validator", "apply_validation_decision")
-    graph.add_edge("apply_validation_decision", "report_generator")
+    graph.add_edge("apply_validation_decision", "final_context_agents")
+    graph.add_edge("final_context_agents", "report_generator")
     graph.add_edge("report_generator", END)
     return graph.compile()
 

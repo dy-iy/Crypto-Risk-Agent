@@ -216,12 +216,8 @@ button:disabled {
 }
 
 .agent-loader::after {
-  animation: agent-scan 1.4s ease-in-out infinite;
-  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.2), transparent);
   content: "";
-  inset: 0;
-  position: absolute;
-  transform: translateX(-100%);
+  display: none;
 }
 
 .dot-pulse {

@@ -12,6 +12,51 @@ export type ScoreBreakdown = {
   reversibility: number;
 };
 
+export type RiskTypeStat = {
+  risk_type: string;
+  risk_name: string;
+  score: number;
+  score_100: number;
+  hit: boolean;
+  route: "high" | "low";
+  reason?: string;
+};
+
+export type RiskTypeBranch = {
+  risk_type: string;
+  risk_name: string;
+  scenario?: string;
+  rule_score?: number;
+  established?: boolean;
+  severity_score?: number;
+  evidence_strength?: number;
+  confidence?: number;
+  branch_score?: number;
+  evidence_summary?: string[];
+  missing_evidence?: string[];
+  reasoning?: string;
+  source?: string;
+};
+
+export type ImpactAnalysis = {
+  affected_assets?: string[];
+  affected_platforms?: string[];
+  affected_users?: string[];
+  impact_channels?: string[];
+  impact_summary?: string;
+  uncertainty?: string[];
+  source?: string;
+};
+
+export type AdviceGeneration = {
+  priority?: "low" | "medium" | "high" | "urgent" | string;
+  recommended_actions?: string[];
+  monitoring_items?: string[];
+  verification_needed?: string[];
+  do_not_do?: string[];
+  source?: string;
+};
+
 export type RiskValidation = {
   action?: string;
   score_cap?: number | null;
@@ -32,6 +77,13 @@ export type ChatAgentResult = {
   fallback_count?: number;
   json_parse_error_count?: number;
   validation?: RiskValidation | null;
+  risk_type_stats?: RiskTypeStat[];
+  high_risk_route?: Record<string, unknown>;
+  low_risk_gate?: Record<string, unknown>;
+  risk_type_branches?: RiskTypeBranch[];
+  branch_score_merge?: Record<string, unknown>;
+  impact_analysis?: ImpactAnalysis;
+  advice_generation?: AdviceGeneration;
   report_mode?: string;
 };
 
@@ -46,6 +98,11 @@ export type RiskReport = {
   confidence_score?: number;
   confidence_level?: string;
   score_dimension_note?: string;
+  raw_rule_scores?: Record<string, number>;
+  risk_type_stats?: RiskTypeStat[];
+  low_risk_gate?: Record<string, unknown>;
+  risk_type_branches?: RiskTypeBranch[];
+  branch_score_merge?: Record<string, unknown>;
   risk_categories: string[];
   primary_category?: string;
   secondary_categories?: string[];
@@ -55,6 +112,8 @@ export type RiskReport = {
   score_breakdown: ScoreBreakdown;
   impact: string[];
   advice: string[];
+  impact_analysis?: ImpactAnalysis;
+  advice_generation?: AdviceGeneration;
   missing_info?: string[];
   uncertainty_points?: string[];
   score_reason?: string;
@@ -481,4 +540,143 @@ export function readCachedCoinDetail(symbol: string, date?: string) {
     `/api/rankings/coins?${rankingParams.toString()}`
   );
   return ranking?.items.find((item) => item.symbol.toUpperCase() === normalizedSymbol) || null;
+}
+
+export type SimSymbol = {
+  symbol: string;
+  base_symbol: string;
+  name: string;
+};
+
+export type SimPosition = {
+  symbol: string;
+  quantity: number;
+  avg_cost: number;
+  current_price: number;
+  market_value: number;
+  pnl: number;
+  pnl_rate: number;
+};
+
+export type SimTrade = {
+  time: string;
+  symbol: string;
+  side: "BUY" | "SELL";
+  price: number;
+  quantity: number;
+  amount_usdt: number;
+  fee: number;
+};
+
+export type SimRiskEvent = {
+  id: string;
+  time: string;
+  title: string;
+  summary: string;
+  risk_score: number;
+  risk_level: string;
+  risk_type: string;
+  affected_symbols: string[];
+  affected_assets: string[];
+  related_symbols?: string[];
+  related_symbol_details?: Array<{
+    symbol: string;
+    asset: string;
+    name: string;
+    matched_keywords: string;
+  }>;
+  evidence: string;
+  source_url?: string;
+  analysis?: Record<string, unknown>;
+  candle_index?: number;
+};
+
+export type SimState = {
+  current_index: number;
+  max_index: number;
+  start_time: string;
+  end_time: string;
+  sim_time: string;
+  cash: number;
+  positions: SimPosition[];
+  prices: Record<string, number>;
+  total_asset: number;
+  return_rate: number;
+  trade_history: SimTrade[];
+  risk_events: SimRiskEvent[];
+};
+
+export type SimCandle = {
+  openTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  closeTime: number;
+  time: string;
+};
+
+type SimEnvelope<T> = {
+  status: string;
+  data: T;
+};
+
+export function fetchSimSymbols() {
+  return requestJson<{ status: string; items: SimSymbol[] }>("/api/sim/symbols");
+}
+
+export async function fetchSimState() {
+  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/state");
+  return response.data;
+}
+
+export async function resetSim() {
+  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/reset", {
+    method: "POST",
+  });
+  return response.data;
+}
+
+export async function nextSimStep() {
+  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/next", {
+    method: "POST",
+  });
+  return response.data;
+}
+
+export async function jumpSim(target: { index?: number; target_time?: string }) {
+  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/jump", {
+    method: "POST",
+    body: JSON.stringify(target),
+  });
+  return response.data;
+}
+
+export async function buySim(symbol: string, amountUsdt: number) {
+  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/buy", {
+    method: "POST",
+    body: JSON.stringify({ symbol, amount_usdt: amountUsdt }),
+  });
+  return response.data;
+}
+
+export async function sellSim(symbol: string, quantity: number | "ALL") {
+  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/sell", {
+    method: "POST",
+    body: JSON.stringify({ symbol, quantity }),
+  });
+  return response.data;
+}
+
+export function fetchSimCandles(symbol: string) {
+  return requestJson<{ status: string; symbol: string; items: SimCandle[] }>(
+    `/api/sim/candles?symbol=${encodeURIComponent(symbol)}`
+  );
+}
+
+export function fetchSimEvents(symbol: string) {
+  return requestJson<{ status: string; symbol: string; items: SimRiskEvent[] }>(
+    `/api/sim/events?symbol=${encodeURIComponent(symbol)}`
+  );
 }

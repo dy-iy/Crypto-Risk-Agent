@@ -2,6 +2,7 @@
 
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import SimTradingPanel from "@/components/sim-trading-panel";
 import { AgentProgress, LoadingDots } from "@/components/ui/loading-states";
 import {
   clearApiCache,
@@ -20,14 +21,16 @@ import {
   readCachedRiskOverview,
   RiskOverview,
   ChatAgentResult,
+  AdviceGeneration,
+  ImpactAnalysis,
   RiskReport,
-  ScoreBreakdown,
+  RiskTypeBranch,
   sendChatMessage,
   startNewsUpdateJob,
   streamRiskAssistant,
 } from "@/lib/api";
 
-type ActiveView = "home" | "chat" | "news" | "coin" | "reports" | "settings";
+type ActiveView = "home" | "chat" | "news" | "coin" | "sim" | "reports" | "settings";
 type ChatRole = "user" | "assistant";
 
 type ChatMessage = {
@@ -178,6 +181,7 @@ const viewRoutes: Record<ActiveView, string> = {
   chat: "/analysize",
   news: "/news",
   coin: "/coins",
+  sim: "/sim",
   reports: "/reports",
   settings: "/settings",
 };
@@ -573,7 +577,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
             <div className="min-w-0 space-y-5">
               {rankingError && <Notice tone="amber" text={rankingError} />}
 
-              {activeView !== "chat" && activeView !== "reports" && activeView !== "settings" && (
+              {activeView !== "chat" && activeView !== "sim" && activeView !== "reports" && activeView !== "settings" && (
                 <MetricGrid
                   activeView={activeView}
                   coinItems={displayCoins}
@@ -621,6 +625,9 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   range={rankingRange}
                   onChangeRange={handleChangeRankingRange}
                 />
+              )}
+              {activeView === "sim" && (
+                <SimTradingPanel embedded />
               )}
               {activeView === "reports" && (
                 <ReportsView
@@ -678,6 +685,7 @@ function Sidebar({
   const navItems: NavItem[] = [
     { key: "home", label: "首页总览", icon: <HomeIcon /> },
     { key: "chat", label: "事件风险分析", icon: <ChatIcon /> },
+    { key: "sim", label: "模拟交易盘", icon: <TradeIcon /> },
     { key: "reports", label: "分析报告", icon: <FileIcon /> },
     { key: "settings", label: "系统设置", icon: <GearIcon /> },
   ];
@@ -695,7 +703,7 @@ function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-2 px-4 py-6">
-        {navItems.slice(0, 2).map((item) => (
+        {navItems.slice(0, 3).map((item) => (
           <SidebarButton
             key={item.key}
             active={activeView === item.key}
@@ -735,7 +743,7 @@ function Sidebar({
           )}
         </div>
 
-        {navItems.slice(2).map((item) => (
+        {navItems.slice(3).map((item) => (
           <SidebarButton
             key={item.key}
             active={activeView === item.key}
@@ -840,6 +848,7 @@ function MobileNav({
     ["chat", "对话"],
     ["news", "新闻榜"],
     ["coin", "币种榜"],
+    ["sim", "模拟盘"],
     ["reports", "报告"],
     ["settings", "设置"],
   ];
@@ -1087,7 +1096,7 @@ function ChatView({
                   <AgentProgress
                     icon={<ShieldIcon />}
                     title="Chat Agent 正在研判"
-                    steps={["输入标准化", "快速信号扫描", "证据合约", "LLM 抽证据", "场景评分器并行", "决策校准"]}
+                    steps={["输入标准化", "快速信号扫描", "风险分支并行", "证据审核", "影响对象", "处置建议"]}
                   />
                 </div>
               </div>
@@ -2313,30 +2322,22 @@ function ReportDocument({
 }) {
   const report = record.report;
   const score = clampScore(report.risk_score);
+  const chatAgentResult = report.chat_agent_result || report.v6_result || {};
+  const branchScoreMerge = (report.branch_score_merge || chatAgentResult.branch_score_merge || {}) as Record<string, unknown>;
+  const mergedPrimaryCategory =
+    typeof branchScoreMerge.primary_risk_name === "string" && branchScoreMerge.primary_risk_name.trim()
+      ? branchScoreMerge.primary_risk_name
+      : report.primary_category;
   const categories = report.risk_categories?.length ? report.risk_categories : ["综合风险"];
+  const primaryCategory = mergedPrimaryCategory || categories[0];
+  const secondaryCategories = (report.secondary_categories?.length ? report.secondary_categories : categories.filter((item) => item !== primaryCategory)).slice(0, 6);
   const evidenceItems = report.evidence?.length
     ? report.evidence
     : [{ risk_category: categories[0], evidence_text: "当前报告尚未抽取到结构化证据。", explanation: "建议补充官方公告、链上交易哈希、社群反馈截图或交易所通知。" }];
-  const scoreBreakdown = report.score_breakdown || {
-    severity: 0,
-    evidence_strength: 0,
-    impact_scope: 0,
-    urgency: 0,
-    reversibility: 0,
-  };
-  const breakdownLabels: Record<keyof ScoreBreakdown, string> = {
-    severity: "严重程度",
-    evidence_strength: "证据强度",
-    impact_scope: "影响范围",
-    urgency: "处置紧迫性",
-    reversibility: "可逆性",
-  };
-  const chatAgentResult = report.chat_agent_result || report.v6_result || {};
-  const validation = chatAgentResult.validation || null;
-  const calibrationRules = (report.calibration_rules || []).filter(Boolean);
-  const nonRiskFactors = (report.non_risk_factors || []).filter(Boolean);
-  const missingInfo = (report.missing_info || []).filter(Boolean);
-  const uncertaintyPoints = (report.uncertainty_points || []).filter(Boolean);
+  const riskBranches = report.risk_type_branches || chatAgentResult.risk_type_branches || [];
+  const impactAnalysis = report.impact_analysis || chatAgentResult.impact_analysis || {};
+  const adviceGeneration = report.advice_generation || chatAgentResult.advice_generation || {};
+  const summary = compactReportSummary(report.summary) || "事件已完成结构化风险研判。";
 
   return (
     <article className="risk-scroll min-w-0 overflow-y-auto bg-white">
@@ -2345,7 +2346,7 @@ function ReportDocument({
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">CryptoRisk Report</p>
             <h2 className="mt-2 text-2xl font-bold text-slate-950">{record.title}</h2>
-            <p className="mt-2 text-sm text-slate-500">生成时间：{record.createdAt}</p>
+            <p className="mt-2 text-sm text-slate-500">{record.createdAt}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -2369,101 +2370,58 @@ function ReportDocument({
       </div>
 
       <div className="space-y-5 p-5 sm:p-8">
-        <section className="grid gap-5 rounded-lg border border-blue-100 bg-slate-50 p-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <section className="grid gap-5 rounded-lg border border-blue-100 bg-slate-50 p-5 lg:grid-cols-[180px_minmax(0,1fr)_220px]">
           <div className="rounded-lg bg-white p-5 text-center shadow-sm">
             <p className="text-sm font-semibold text-slate-500">风险评分</p>
-            <p className="mt-3 text-5xl font-bold text-red-500">{score}<span className="text-xl text-slate-400">/100</span></p>
+            <p className={`mt-3 text-5xl font-bold ${riskScoreTextStyle(score, report.risk_level || "")}`}>
+              {score}<span className="text-xl text-slate-400">/100</span>
+            </p>
             <div className="mt-4 flex justify-center"><RiskBadge level={report.risk_level} /></div>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <MetaTile label="风险等级" value={report.risk_level || "待确认"} />
-            <MetaTile label="信息置信度" value={`${clampScore(report.confidence_score ?? 0)}/100 · ${report.confidence_level || "待确认"}`} />
-            <MetaTile label="主风险类别" value={report.primary_category || categories[0]} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white">主风险</span>
+              <span className="rounded-md border border-blue-200 bg-white px-2.5 py-1 text-xs font-bold text-blue-700">{primaryCategory}</span>
+              {secondaryCategories.map((item) => (
+                <span key={item} className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
+                  {item}
+                </span>
+              ))}
+            </div>
+            <p className="mt-4 text-base font-bold leading-8 text-slate-950">{summary}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {(report.risk_signals || []).map(compactReportSummary).filter(Boolean).slice(0, 4).map((item, index) => (
+                <span key={`${item}-${index}`} className="rounded-md border border-blue-100 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                  {formatEvidenceSignal(item)}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="grid content-start gap-3">
+            <MetaTile label="置信度" value={`${clampScore(report.confidence_score ?? 0)}/100 · ${report.confidence_level || "待确认"}`} />
             <MetaTile label="风险状态" value={formatRiskStatus(report.risk_status)} />
-            <MetaTile label="输入类型" value={report.input_type || "事件文本"} />
-            <MetaTile label="Agent 路径" value={formatEnginePath(chatAgentResult.orchestration_path)} />
-            <MetaTile label="证据抽取" value={formatExtractionMode(chatAgentResult.extraction_mode)} />
-            <MetaTile label="报告模式" value={formatReportMode(report.report_mode || chatAgentResult.report_mode)} />
+            <MetaTile label="分析路径" value={formatEnginePath(chatAgentResult.orchestration_path)} />
           </div>
         </section>
-        <ReportSection title="事件结论" icon={<ShieldIcon />}>
-          <EventConclusion report={report} categories={categories} />
-        </ReportSection>
 
-        <ReportSection title="分析链路" icon={<GearIcon />}>
-          <EngineTrace report={report} result={chatAgentResult} validation={validation} />
-        </ReportSection>
-
-        <ReportSection title="证据摘要" icon={<FileIcon />}>
-          <div className="grid gap-3">
-            {evidenceItems.map((item, index) => (
-              <div key={`${item.evidence_text}-${index}`} className="rounded-lg border border-blue-100 bg-blue-50/60 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-blue-700 shadow-sm">
-                    证据 {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span className="rounded-md border border-blue-200 bg-white/70 px-2.5 py-1 text-xs font-bold text-slate-600">
-                    {formatEvidenceCategory(item.risk_category || categories[0])}
-                  </span>
-                  {item.explanation && (
-                    <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                      {formatEvidenceSignal(item.explanation)}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-3 text-sm leading-7 text-slate-800">{item.evidence_text}</p>
-              </div>
-            ))}
-          </div>
+        <ReportSection title="风险类别与证据" icon={<FileIcon />}>
+          <RiskCategoryEvidence
+            branches={riskBranches}
+            categories={categories}
+            evidenceItems={evidenceItems}
+            stats={report.risk_type_stats || chatAgentResult.risk_type_stats || []}
+          />
         </ReportSection>
 
         <div className="grid gap-5 xl:grid-cols-2">
-          <ReportSection title="影响分析" icon={<UsersIcon />}>
-            <BulletList items={report.impact?.length ? report.impact : ["影响对象尚不明确，需要补充更多上下文。"]} />
+          <ReportSection title="影响对象" icon={<UsersIcon />}>
+            <ImpactObjectsPanel analysis={impactAnalysis} fallback={report.impact || []} />
           </ReportSection>
 
           <ReportSection title="处置建议" icon={<BulbIcon />}>
-            <BulletList items={sanitizeAdvice(report.advice?.length ? report.advice : ["继续核验公告、链上资金流向和用户反馈。"])} />
+            <AdvicePanel advice={adviceGeneration} fallback={report.advice || []} />
           </ReportSection>
         </div>
-
-        <div className="grid gap-5 xl:grid-cols-2">
-          <ReportSection title="校准与缓和因素" icon={<CheckIcon />}>
-            <EvidenceSignalList
-              empty="未触发额外校准规则。"
-              items={[
-                ...calibrationRules.map((item) => ({ label: "校准", value: formatCalibrationRule(item), tone: "blue" as const })),
-                ...nonRiskFactors.map((item) => ({ label: "缓和", value: item, tone: "green" as const })),
-              ]}
-            />
-          </ReportSection>
-
-          <ReportSection title="缺失与不确定信息" icon={<AlertIcon />}>
-            <EvidenceSignalList
-              empty="当前报告未记录明显缺失或不确定项。"
-              items={[
-                ...missingInfo.map((item) => ({ label: "缺失", value: formatEvidenceSignal(item), tone: "amber" as const })),
-                ...uncertaintyPoints.map((item) => ({ label: "不确定", value: item, tone: "slate" as const })),
-              ]}
-            />
-          </ReportSection>
-        </div>
-
-        <ReportSection title="评分拆解" icon={<ChartIcon />}>
-          <div className="grid gap-4 md:grid-cols-2">
-            {(Object.entries(scoreBreakdown) as Array<[keyof ScoreBreakdown, number]>).map(([key, value]) => (
-              <div key={key} className="rounded-lg bg-slate-50 p-4">
-                <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-700">
-                  <span>{breakdownLabels[key]}</span>
-                  <span>{clampScore(value)} / 100</span>
-                </div>
-                <div className="h-2 rounded-full bg-white">
-                  <div className="h-2 rounded-full bg-blue-600" style={{ width: `${clampScore(value)}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </ReportSection>
 
         <ReportSection title="原始输入" icon={<ChatIcon />}>
           <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{record.input}</p>
@@ -2471,6 +2429,181 @@ function ReportDocument({
       </div>
     </article>
   );
+}
+
+type ReportEvidenceItem = RiskReport["evidence"][number];
+
+function RiskCategoryEvidence({
+  branches,
+  categories,
+  evidenceItems,
+  stats,
+}: {
+  branches: RiskTypeBranch[];
+  categories: string[];
+  evidenceItems: ReportEvidenceItem[];
+  stats: NonNullable<RiskReport["risk_type_stats"]>;
+}) {
+  const groups = buildEvidenceGroups(categories, evidenceItems);
+
+  return (
+    <div className="space-y-4">
+      {groups.map((group) => {
+        const branch = branches.find((item) => item.risk_name === group.category);
+        const stat = stats.find((item) => item.risk_name === group.category);
+        const score = branch?.branch_score ?? stat?.score_100;
+        const strength = branch?.evidence_strength;
+        const missingEvidence = asStringList(branch?.missing_evidence).slice(0, 2);
+
+        return (
+          <div key={group.category} className="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-blue-700 shadow-sm">
+                {formatEvidenceCategory(group.category)}
+              </span>
+              <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${branch?.established === false ? "border border-amber-200 bg-amber-50 text-amber-700" : "border border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                {branch?.established === false ? "证据不足" : "风险成立"}
+              </span>
+              {typeof score === "number" && (
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
+                  分支 {clampScore(score)}/100
+                </span>
+              )}
+              {typeof strength === "number" && (
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
+                  证据 {clampScore(strength)}/100
+                </span>
+              )}
+            </div>
+
+            {branch?.reasoning && <p className="mt-3 text-sm font-semibold leading-6 text-slate-700">{branch.reasoning}</p>}
+
+            <div className="mt-3 grid gap-2">
+              {group.items.map((item, index) => (
+                <div key={`${group.category}-${item.evidence_text}-${index}`} className="rounded-lg border border-white bg-white/80 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+                      证据 {String(index + 1).padStart(2, "0")}
+                    </span>
+                    {item.explanation && (
+                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                        {formatEvidenceSignal(item.explanation)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-slate-800">{item.evidence_text}</p>
+                </div>
+              ))}
+            </div>
+
+            {missingEvidence.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {missingEvidence.map((item) => (
+                  <span key={item} className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                    待核验：{item}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ImpactObjectsPanel({ analysis, fallback }: { analysis: ImpactAnalysis; fallback: string[] }) {
+  const summary = compactReportSummary(analysis.impact_summary || fallback[0] || "影响对象尚不明确，需要补充更多上下文。");
+
+  return (
+    <div className="space-y-4">
+      <p className="rounded-lg border border-blue-100 bg-slate-50 p-4 text-sm font-semibold leading-7 text-slate-700">{summary}</p>
+      <InfoPillGroup title="资产 / 交易对" items={asStringList(analysis.affected_assets)} empty="未明确" />
+      <InfoPillGroup title="平台 / 协议" items={asStringList(analysis.affected_platforms)} empty="未明确" />
+      <InfoPillGroup title="用户群体" items={asStringList(analysis.affected_users)} empty="未明确" />
+      <InfoPillGroup title="传导路径" items={asStringList(analysis.impact_channels)} empty="持续监测" />
+      {asStringList(analysis.uncertainty).length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-bold text-amber-800">不确定性</p>
+          <BulletList items={asStringList(analysis.uncertainty)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdvicePanel({ advice, fallback }: { advice: AdviceGeneration; fallback: string[] }) {
+  const actions = sanitizeAdvice(asStringList(advice.recommended_actions).length ? asStringList(advice.recommended_actions) : fallback);
+  const monitoringItems = asStringList(advice.monitoring_items);
+  const verificationNeeded = asStringList(advice.verification_needed);
+  const doNotDo = sanitizeAdvice(asStringList(advice.do_not_do));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white">优先级</span>
+        <span className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+          {formatAdvicePriority(advice.priority)}
+        </span>
+      </div>
+      <BulletList items={actions.length ? actions : ["继续核验公告、链上资金流向和用户反馈。"]} />
+      <InfoPillGroup title="监控项" items={monitoringItems} empty="官方公告、链上资金流向" />
+      <InfoPillGroup title="补充核验" items={verificationNeeded} empty="事件时间线、影响范围" />
+      {doNotDo.length > 0 && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 p-3">
+          <p className="text-xs font-bold text-rose-700">避免动作</p>
+          <BulletList items={doNotDo} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoPillGroup({ empty, items, title }: { empty: string; items: string[]; title: string }) {
+  const values = items.filter(Boolean).slice(0, 8);
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-bold text-slate-500">{title}</p>
+      <div className="flex flex-wrap gap-2">
+        {(values.length ? values : [empty]).map((item) => (
+          <span key={item} className="rounded-md border border-blue-100 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function buildEvidenceGroups(categories: string[], evidenceItems: ReportEvidenceItem[]) {
+  const orderedCategories = [...categories];
+  for (const item of evidenceItems) {
+    const category = item.risk_category || "综合风险";
+    if (!orderedCategories.includes(category)) orderedCategories.push(category);
+  }
+
+  return orderedCategories
+    .map((category) => ({
+      category,
+      items: evidenceItems.filter((item) => (item.risk_category || "综合风险") === category),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+function asStringList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function formatAdvicePriority(value?: string) {
+  const labels: Record<string, string> = {
+    low: "低",
+    medium: "中",
+    high: "高",
+    urgent: "紧急",
+  };
+  return labels[String(value || "")] || value || "中";
 }
 
 function MetaTile({ label, value }: { label: string; value: string }) {
@@ -2952,6 +3085,7 @@ function getPageMeta(view: ActiveView) {
     chat: ["事件风险分析", "面向新闻 / 公告 / 链上事件的多智能体风险研判"],
     news: ["新闻风险榜", "基于新闻文本与风险规则的实时风险排行"],
     coin: ["币种风险榜", "基于新闻、公告与链上事件聚合的币种风险排行"],
+    sim: ["模拟交易盘", "基于最近 7 天 15 分钟 K 线的现货模拟回放"],
     reports: ["分析报告", "查看、管理与导出风险分析结果报告"],
     settings: ["系统设置", "Agent 运行状态与新闻更新"],
   } satisfies Record<ActiveView, [string, string]>;
@@ -3406,6 +3540,7 @@ function IconSvg({ children }: { children: ReactNode }) {
 function HomeIcon() { return <IconSvg><path d="M3 10.5 12 3l9 7.5" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></IconSvg>; }
 function ChatIcon() { return <IconSvg><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-6a8 8 0 1 1 18-5Z" /></IconSvg>; }
 function ChartIcon() { return <IconSvg><path d="M4 19V5" /><path d="M4 19h16" /><path d="m7 15 4-4 3 3 5-7" /></IconSvg>; }
+function TradeIcon() { return <IconSvg><path d="M4 17h16" /><path d="M7 14l3-4 3 2 4-6" /><path d="M7 7h10" /><path d="M8 21l-2-4 2-4" /><path d="M16 21l2-4-2-4" /></IconSvg>; }
 function CoinIcon() { return <IconSvg><circle cx="12" cy="12" r="8" /><path d="M9 10h6" /><path d="M9 14h6" /></IconSvg>; }
 function FileIcon() { return <IconSvg><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M9 13h6" /><path d="M9 17h6" /></IconSvg>; }
 function GearIcon() { return <IconSvg><circle cx="12" cy="12" r="3" /><path d="M19.4 15a8 8 0 0 0 .1-2l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L15 5.5h-4l-.4 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a8 8 0 0 0 .1 2l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.4 2.6h4l.4-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.4z" /></IconSvg>; }

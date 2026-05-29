@@ -3,7 +3,181 @@ import re
 from app.state import CryptoRiskState
 
 
-EXCHANGES = ["Binance", "OKX", "Coinbase", "Bybit", "Kraken", "Huobi", "Gate", "Bitget"]
+COINS = [
+    {"symbol": "BTC", "terms": ["BTC", "$BTC", "Bitcoin", "比特币", "大饼"]},
+    {"symbol": "ETH", "terms": ["ETH", "$ETH", "Ethereum", "Ether", "以太坊"]},
+    {"symbol": "USDT", "terms": ["USDT", "$USDT", "Tether", "泰达币"]},
+    {"symbol": "BNB", "terms": ["BNB", "$BNB", "Binance Coin", "币安币"]},
+    {"symbol": "SOL", "terms": ["SOL", "$SOL", "Solana", "索拉纳"]},
+    {"symbol": "USDC", "terms": ["USDC", "$USDC", "USD Coin", "Circle USD"]},
+    {"symbol": "XRP", "terms": ["XRP", "$XRP", "Ripple", "瑞波币", "瑞波"]},
+    {"symbol": "DOGE", "terms": ["DOGE", "$DOGE", "Dogecoin", "狗狗币"]},
+    {"symbol": "TON", "terms": ["TON", "$TON", "Toncoin", "The Open Network", "吨币"]},
+    {"symbol": "ADA", "terms": ["ADA", "$ADA", "Cardano", "艾达币", "卡尔达诺"]},
+    {"symbol": "TRX", "terms": ["TRX", "$TRX", "TRON", "波场"]},
+    {"symbol": "AVAX", "terms": ["AVAX", "$AVAX", "Avalanche", "雪崩"]},
+    {"symbol": "SHIB", "terms": ["SHIB", "$SHIB", "Shiba Inu", "柴犬币"]},
+    {"symbol": "LINK", "terms": ["LINK", "$LINK", "Chainlink", "链环"]},
+    {"symbol": "DOT", "terms": ["DOT", "$DOT", "Polkadot", "波卡"]},
+    {"symbol": "BCH", "terms": ["BCH", "$BCH", "Bitcoin Cash", "比特币现金"]},
+    {"symbol": "LTC", "terms": ["LTC", "$LTC", "Litecoin", "莱特币"]},
+    {"symbol": "NEAR", "terms": ["NEAR", "$NEAR", "Near Protocol"]},
+    {"symbol": "UNI", "terms": ["UNI", "$UNI", "Uniswap"]},
+    {"symbol": "APT", "terms": ["APT", "$APT", "Aptos"]},
+    {"symbol": "ICP", "terms": ["ICP", "$ICP", "Internet Computer"]},
+    {"symbol": "ETC", "terms": ["ETC", "$ETC", "Ethereum Classic", "以太经典"]},
+    {"symbol": "XLM", "terms": ["XLM", "$XLM", "Stellar", "恒星币"]},
+    {"symbol": "HBAR", "terms": ["HBAR", "$HBAR", "Hedera"]},
+    {"symbol": "FIL", "terms": ["FIL", "$FIL", "Filecoin", "文件币"]},
+    {"symbol": "ATOM", "terms": ["ATOM", "$ATOM", "Cosmos", "阿童木"]},
+    {"symbol": "ARB", "terms": ["ARB", "$ARB", "Arbitrum"]},
+    {"symbol": "OP", "terms": ["OP", "$OP", "Optimism"]},
+    {"symbol": "VET", "terms": ["VET", "$VET", "VeChain", "唯链"]},
+    {"symbol": "INJ", "terms": ["INJ", "$INJ", "Injective"]},
+    {"symbol": "RENDER", "terms": ["RENDER", "$RENDER", "Render"]},
+    {"symbol": "RNDR", "terms": ["RNDR", "$RNDR"]},
+    {"symbol": "MNT", "terms": ["MNT", "$MNT", "Mantle"]},
+    {"symbol": "IMX", "terms": ["IMX", "$IMX", "Immutable"]},
+    {"symbol": "SUI", "terms": ["SUI", "$SUI", "Sui"]},
+    {"symbol": "TAO", "terms": ["TAO", "$TAO", "Bittensor"]},
+    {"symbol": "GRT", "terms": ["GRT", "$GRT", "The Graph"]},
+    {"symbol": "AAVE", "terms": ["AAVE", "$AAVE", "Aave"]},
+    {"symbol": "MKR", "terms": ["MKR", "$MKR", "Maker"]},
+    {"symbol": "ALGO", "terms": ["ALGO", "$ALGO", "Algorand"]},
+    {"symbol": "QNT", "terms": ["QNT", "$QNT", "Quant"]},
+    {"symbol": "STX", "terms": ["STX", "$STX", "Stacks"]},
+    {"symbol": "LDO", "terms": ["LDO", "$LDO", "Lido DAO", "Lido"]},
+    {"symbol": "SEI", "terms": ["SEI", "$SEI", "Sei"]},
+    {"symbol": "EGLD", "terms": ["EGLD", "$EGLD", "MultiversX", "Elrond"]},
+    {"symbol": "FLOW", "terms": ["FLOW", "$FLOW", "Flow"]},
+    {"symbol": "SAND", "terms": ["SAND", "$SAND", "The Sandbox", "Sandbox"]},
+    {"symbol": "AXS", "terms": ["AXS", "$AXS", "Axie Infinity"]},
+    {"symbol": "MANA", "terms": ["MANA", "$MANA", "Decentraland"]},
+    {"symbol": "CHZ", "terms": ["CHZ", "$CHZ", "Chiliz"]},
+    {"symbol": "APE", "terms": ["APE", "$APE", "ApeCoin"]},
+    {"symbol": "FTM", "terms": ["FTM", "$FTM", "Fantom"]},
+    {"symbol": "RUNE", "terms": ["RUNE", "$RUNE", "THORChain"]},
+    {"symbol": "KAS", "terms": ["KAS", "$KAS", "Kaspa"]},
+    {"symbol": "TIA", "terms": ["TIA", "$TIA", "Celestia"]},
+    {"symbol": "PYTH", "terms": ["PYTH", "$PYTH", "Pyth Network"]},
+    {"symbol": "JUP", "terms": ["JUP", "$JUP", "Jupiter"]},
+    {"symbol": "JTO", "terms": ["JTO", "$JTO", "Jito"]},
+    {"symbol": "WIF", "terms": ["WIF", "$WIF", "dogwifhat"]},
+    {"symbol": "BONK", "terms": ["BONK", "$BONK", "Bonk"]},
+    {"symbol": "PEPE", "terms": ["PEPE", "$PEPE", "Pepe"]},
+    {"symbol": "FLOKI", "terms": ["FLOKI", "$FLOKI", "Floki"]},
+    {"symbol": "WLD", "terms": ["WLD", "$WLD", "Worldcoin"]},
+    {"symbol": "STRK", "terms": ["STRK", "$STRK", "Starknet"]},
+    {"symbol": "ZK", "terms": ["ZK", "$ZK", "ZKsync"]},
+    {"symbol": "ENA", "terms": ["ENA", "$ENA", "Ethena"]},
+    {"symbol": "ETHFI", "terms": ["ETHFI", "$ETHFI", "Ether.fi", "EtherFi"]},
+    {"symbol": "PENDLE", "terms": ["PENDLE", "$PENDLE", "Pendle"]},
+    {"symbol": "ONDO", "terms": ["ONDO", "$ONDO", "Ondo"]},
+    {"symbol": "JASMY", "terms": ["JASMY", "$JASMY", "JasmyCoin"]},
+    {"symbol": "AR", "terms": ["AR", "$AR", "Arweave"]},
+    {"symbol": "ENS", "terms": ["ENS", "$ENS", "Ethereum Name Service"]},
+    {"symbol": "CRV", "terms": ["CRV", "$CRV", "Curve", "Curve DAO"]},
+    {"symbol": "SNX", "terms": ["SNX", "$SNX", "Synthetix"]},
+    {"symbol": "COMP", "terms": ["COMP", "$COMP", "Compound"]},
+    {"symbol": "YFI", "terms": ["YFI", "$YFI", "yearn.finance", "Yearn"]},
+    {"symbol": "SUSHI", "terms": ["SUSHI", "$SUSHI", "SushiSwap"]},
+    {"symbol": "CAKE", "terms": ["CAKE", "$CAKE", "PancakeSwap"]},
+    {"symbol": "1INCH", "terms": ["1INCH", "$1INCH", "1inch"]},
+    {"symbol": "LRC", "terms": ["LRC", "$LRC", "Loopring"]},
+    {"symbol": "ZRX", "terms": ["ZRX", "$ZRX", "0x"]},
+    {"symbol": "DYDX", "terms": ["DYDX", "$DYDX", "dYdX"]},
+    {"symbol": "GMX", "terms": ["GMX", "$GMX"]},
+    {"symbol": "CVX", "terms": ["CVX", "$CVX", "Convex"]},
+    {"symbol": "BAL", "terms": ["BAL", "$BAL", "Balancer"]},
+    {"symbol": "FXS", "terms": ["FXS", "$FXS", "Frax Share"]},
+    {"symbol": "FRAX", "terms": ["FRAX", "$FRAX", "Frax"]},
+    {"symbol": "DAI", "terms": ["DAI", "$DAI", "Dai"]},
+    {"symbol": "TUSD", "terms": ["TUSD", "$TUSD", "TrueUSD"]},
+    {"symbol": "USDD", "terms": ["USDD", "$USDD"]},
+    {"symbol": "FDUSD", "terms": ["FDUSD", "$FDUSD", "First Digital USD"]},
+    {"symbol": "BUSD", "terms": ["BUSD", "$BUSD", "Binance USD"]},
+    {"symbol": "USTC", "terms": ["USTC", "$USTC", "TerraClassicUSD"]},
+    {"symbol": "LUNC", "terms": ["LUNC", "$LUNC", "Terra Classic"]},
+    {"symbol": "LUNA", "terms": ["LUNA", "$LUNA", "Terra"]},
+    {"symbol": "XMR", "terms": ["XMR", "$XMR", "Monero", "门罗币"]},
+    {"symbol": "ZEC", "terms": ["ZEC", "$ZEC", "Zcash", "大零币"]},
+    {"symbol": "DASH", "terms": ["DASH", "$DASH", "Dash", "达世币"]},
+    {"symbol": "EOS", "terms": ["EOS", "$EOS", "柚子币"]},
+    {"symbol": "IOTA", "terms": ["IOTA", "$IOTA"]},
+    {"symbol": "XTZ", "terms": ["XTZ", "$XTZ", "Tezos"]},
+    {"symbol": "KAVA", "terms": ["KAVA", "$KAVA"]},
+    {"symbol": "MINA", "terms": ["MINA", "$MINA", "Mina"]},
+    {"symbol": "ROSE", "terms": ["ROSE", "$ROSE", "Oasis"]},
+    {"symbol": "CELO", "terms": ["CELO", "$CELO", "Celo"]},
+    {"symbol": "KSM", "terms": ["KSM", "$KSM", "Kusama"]},
+    {"symbol": "WAVES", "terms": ["WAVES", "$WAVES", "Waves"]},
+    {"symbol": "ZIL", "terms": ["ZIL", "$ZIL", "Zilliqa"]},
+    {"symbol": "ONE", "terms": ["ONE", "$ONE", "Harmony"]},
+    {"symbol": "IOTX", "terms": ["IOTX", "$IOTX", "IoTeX"]},
+    {"symbol": "HNT", "terms": ["HNT", "$HNT", "Helium"]},
+    {"symbol": "GALA", "terms": ["GALA", "$GALA", "Gala"]},
+    {"symbol": "ENJ", "terms": ["ENJ", "$ENJ", "Enjin"]},
+    {"symbol": "GMT", "terms": ["GMT", "$GMT", "STEPN"]},
+    {"symbol": "MASK", "terms": ["MASK", "$MASK", "Mask Network"]},
+    {"symbol": "BLUR", "terms": ["BLUR", "$BLUR", "Blur"]},
+    {"symbol": "MAGIC", "terms": ["MAGIC", "$MAGIC", "Treasure"]},
+    {"symbol": "ILV", "terms": ["ILV", "$ILV", "Illuvium"]},
+    {"symbol": "ORDI", "terms": ["ORDI", "$ORDI"]},
+    {"symbol": "SATS", "terms": ["SATS", "$SATS", "1000SATS"]},
+    {"symbol": "RATS", "terms": ["RATS", "$RATS"]},
+    {"symbol": "BRC20", "terms": ["BRC20", "BRC-20"]},
+    {"symbol": "MATIC", "terms": ["MATIC", "$MATIC", "马蹄"]},
+    {"symbol": "POL", "terms": ["POL", "$POL", "Polygon", "Polygon Ecosystem Token"]},
+    {"symbol": "HYPE", "terms": ["HYPE", "$HYPE", "Hyperliquid"]},
+    {"symbol": "FET", "terms": ["FET", "$FET", "Fetch.ai", "Artificial Superintelligence Alliance"]},
+    {"symbol": "AGIX", "terms": ["AGIX", "$AGIX", "SingularityNET"]},
+    {"symbol": "OCEAN", "terms": ["OCEAN", "$OCEAN", "Ocean Protocol"]},
+    {"symbol": "ARKM", "terms": ["ARKM", "$ARKM", "Arkham"]},
+    {"symbol": "GNO", "terms": ["GNO", "$GNO", "Gnosis"]},
+    {"symbol": "W", "terms": ["W", "$W", "Wormhole"]},
+    {"symbol": "WOO", "terms": ["WOO", "$WOO", "WOO Network"]},
+    {"symbol": "BAT", "terms": ["BAT", "$BAT", "Basic Attention Token"]},
+    {"symbol": "NEXO", "terms": ["NEXO", "$NEXO", "Nexo"]},
+    {"symbol": "OKB", "terms": ["OKB", "$OKB", "OKB"]},
+    {"symbol": "CRO", "terms": ["CRO", "$CRO", "Cronos"]},
+    {"symbol": "GT", "terms": ["GT", "$GT", "GateToken"]},
+    {"symbol": "BGB", "terms": ["BGB", "$BGB", "Bitget Token"]},
+    {"symbol": "KCS", "terms": ["KCS", "$KCS", "KuCoin Token"]},
+    {"symbol": "HT", "terms": ["HT", "$HT", "Huobi Token"]},
+    {"symbol": "LEO", "terms": ["LEO", "$LEO", "UNUS SED LEO"]},
+    {"symbol": "FTT", "terms": ["FTT", "$FTT", "FTX Token"]},
+]
+
+EXCHANGES = [
+    {"name": "Binance", "terms": ["Binance", "币安"]},
+    {"name": "OKX", "terms": ["OKX", "OKEx", "欧易"]},
+    {"name": "Coinbase", "terms": ["Coinbase"]},
+    {"name": "Bybit", "terms": ["Bybit"]},
+    {"name": "Kraken", "terms": ["Kraken"]},
+    {"name": "Huobi", "terms": ["Huobi", "HTX", "火币"]},
+    {"name": "Gate", "terms": ["Gate", "Gate.io", "芝麻开门"]},
+    {"name": "Bitget", "terms": ["Bitget"]},
+    {"name": "KuCoin", "terms": ["KuCoin", "库币"]},
+    {"name": "MEXC", "terms": ["MEXC", "抹茶"]},
+    {"name": "Crypto.com", "terms": ["Crypto.com"]},
+    {"name": "Bitfinex", "terms": ["Bitfinex"]},
+    {"name": "Bitstamp", "terms": ["Bitstamp"]},
+    {"name": "Gemini", "terms": ["Gemini"]},
+    {"name": "Bithumb", "terms": ["Bithumb"]},
+    {"name": "Upbit", "terms": ["Upbit"]},
+    {"name": "Deribit", "terms": ["Deribit"]},
+    {"name": "BitMEX", "terms": ["BitMEX"]},
+    {"name": "CoinEx", "terms": ["CoinEx"]},
+    {"name": "Poloniex", "terms": ["Poloniex"]},
+    {"name": "Bittrex", "terms": ["Bittrex"]},
+    {"name": "Binance.US", "terms": ["Binance.US", "币安美国"]},
+    {"name": "Hyperliquid", "terms": ["Hyperliquid"]},
+    {"name": "dYdX", "terms": ["dYdX"]},
+    {"name": "Uniswap", "terms": ["Uniswap"]},
+    {"name": "PancakeSwap", "terms": ["PancakeSwap"]},
+    {"name": "Curve", "terms": ["Curve"]},
+    {"name": "SushiSwap", "terms": ["SushiSwap"]},
+]
 CHAINS = ["Ethereum", "BSC", "BNB Chain", "Solana", "Bitcoin", "Tron", "Polygon", "Arbitrum", "Optimism"]
 KEYWORD_REFERENCE_MAP = {
     "hack": "security_event",
@@ -65,6 +239,57 @@ def _dedupe(values: list[str]) -> list[str]:
     return result
 
 
+def _has_cjk(value: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in value)
+
+
+def _is_ascii_token_char(char: str) -> bool:
+    return char.isascii() and (char.isalnum() or char == "_")
+
+
+def _term_in_text(text: str, lowered_text: str, term: str) -> bool:
+    if not term:
+        return False
+    if _has_cjk(term):
+        return term in text
+
+    lowered_term = term.lower()
+    start = 0
+    while True:
+        index = lowered_text.find(lowered_term, start)
+        if index < 0:
+            return False
+
+        before = lowered_text[index - 1] if index > 0 else ""
+        after_index = index + len(lowered_term)
+        after = lowered_text[after_index] if after_index < len(lowered_text) else ""
+        if not _is_ascii_token_char(before) and not _is_ascii_token_char(after):
+            return True
+        start = index + 1
+
+
+def _extract_coin_symbols(text: str) -> list[str]:
+    lowered = text.lower()
+    matches: list[str] = []
+    for coin in COINS:
+        symbol = str(coin["symbol"])
+        terms = [str(term) for term in coin["terms"]]
+        if any(_term_in_text(text, lowered, term) for term in terms):
+            matches.append(symbol)
+    return _dedupe(matches)
+
+
+def _extract_exchanges(text: str) -> list[str]:
+    lowered = text.lower()
+    matches: list[str] = []
+    for exchange in EXCHANGES:
+        name = str(exchange["name"])
+        terms = [str(term) for term in exchange["terms"]]
+        if any(_term_in_text(text, lowered, term) for term in terms):
+            matches.append(name)
+    return _dedupe(matches)
+
+
 def _detect_input_type(text: str) -> str:
     lowered = text.lower()
     if any(word in lowered for word in ["hack", "exploit", "漏洞", "攻击", "被盗"]):
@@ -123,14 +348,15 @@ def prepare_chat_input(state: CryptoRiskState) -> CryptoRiskState:
     cleaned_text = " ".join(original_text.split())
 
     wallet_addresses = re.findall(r"0x[a-fA-F0-9]{40}|T[A-Za-z0-9]{33}|bc1[a-zA-Z0-9]{25,62}", cleaned_text)
-    tickers = re.findall(r"(?<![A-Za-z0-9])\$?[A-Z]{2,10}(?![A-Za-z0-9])", cleaned_text)
-    exchanges = [name for name in EXCHANGES if name.lower() in cleaned_text.lower()]
+    coins = _extract_coin_symbols(cleaned_text)
+    exchanges = _extract_exchanges(cleaned_text)
     chains = [name for name in CHAINS if name.lower() in cleaned_text.lower()]
     input_type = _detect_input_type(cleaned_text)
 
     entities = {
         "projects": [],
-        "tokens": _dedupe([ticker.lstrip("$") for ticker in tickers]),
+        "tokens": coins,
+        "coins": coins,
         "exchanges": _dedupe(exchanges),
         "wallet_addresses": _dedupe(wallet_addresses),
         "chains": _dedupe(chains),

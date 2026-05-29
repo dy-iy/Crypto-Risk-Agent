@@ -7,27 +7,38 @@ graph TD;
 	__start__([<p>__start__</p>]):::first
 	normalize_input(normalize_input)
 	fast_signal_scan(fast_signal_scan)
-	adaptive_orchestrator(adaptive_orchestrator)
-	scenario_router_and_contracts(scenario_router_and_contracts)
+	adaptive_router(adaptive_router)
+	low_risk_gate(low_risk_gate)
+	fast_exit_report(fast_exit_report)
+	build_scenario_contracts(build_scenario_contracts)
 	targeted_evidence_extractor(targeted_evidence_extractor)
 	parallel_scenario_evaluators(parallel_scenario_evaluators)
-	decision_engine(decision_engine)
+	merge_evaluation_results(merge_evaluation_results)
+	deterministic_decision_engine(deterministic_decision_engine)
+	validation_gate(validation_gate)
 	conflict_validator(conflict_validator)
 	apply_validation_decision(apply_validation_decision)
+	final_context_agents(final_context_agents)
 	report_generator(report_generator)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> normalize_input;
-	adaptive_orchestrator -. &nbsp;fast_exit&nbsp; .-> report_generator;
-	adaptive_orchestrator -. &nbsp;analysis&nbsp; .-> scenario_router_and_contracts;
-	apply_validation_decision --> report_generator;
-	conflict_validator --> apply_validation_decision;
-	decision_engine -. &nbsp;need_validation&nbsp; .-> conflict_validator;
-	decision_engine -. &nbsp;no_validation&nbsp; .-> report_generator;
-	fast_signal_scan --> adaptive_orchestrator;
 	normalize_input --> fast_signal_scan;
-	parallel_scenario_evaluators --> decision_engine;
-	scenario_router_and_contracts --> targeted_evidence_extractor;
+	fast_signal_scan --> adaptive_router;
+	adaptive_router -. &nbsp;fast_exit&nbsp; .-> low_risk_gate;
+	adaptive_router -. &nbsp;deep_analysis&nbsp; .-> build_scenario_contracts;
+	low_risk_gate -. &nbsp;fast_exit confirmed&nbsp; .-> fast_exit_report;
+	low_risk_gate -. &nbsp;escalate high risk&nbsp; .-> build_scenario_contracts;
+	fast_exit_report --> __end__;
+	build_scenario_contracts --> targeted_evidence_extractor;
 	targeted_evidence_extractor --> parallel_scenario_evaluators;
+	parallel_scenario_evaluators --> merge_evaluation_results;
+	merge_evaluation_results --> deterministic_decision_engine;
+	deterministic_decision_engine --> validation_gate;
+	validation_gate -. &nbsp;need_validation&nbsp; .-> conflict_validator;
+	validation_gate -. &nbsp;no_validation&nbsp; .-> final_context_agents;
+	conflict_validator --> apply_validation_decision;
+	apply_validation_decision --> final_context_agents;
+	final_context_agents --> report_generator;
 	report_generator --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0

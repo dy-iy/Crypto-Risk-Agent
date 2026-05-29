@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from app.agents.chat_agent import run_chat_agent
 from app.api.risk_ranking import router as risk_ranking_router
+from app.api.sim import router as sim_router
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -36,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(risk_ranking_router)
+app.include_router(sim_router)
 
 
 @app.get("/")

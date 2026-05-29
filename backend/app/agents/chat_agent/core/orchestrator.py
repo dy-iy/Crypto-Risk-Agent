@@ -4,14 +4,6 @@ from app.agents.chat_agent.core.scenario_router import select_active_scenarios
 from app.agents.chat_agent.schemas import OrchestrationDecision, SignalScanResult
 
 
-HIGH_RISK_SCENARIOS = {
-    "S1_ATTACK_EXPLOIT",
-    "S2_EXCHANGE_ABNORMALITY",
-    "S3_STABLECOIN_RESERVE",
-    "S5_REGULATORY_ENFORCEMENT",
-}
-
-
 def choose_route(signal_scan: SignalScanResult) -> OrchestrationDecision:
     if signal_scan.fast_exit_allowed:
         return OrchestrationDecision(
@@ -23,14 +15,15 @@ def choose_route(signal_scan: SignalScanResult) -> OrchestrationDecision:
 
     active_scenarios = select_active_scenarios(signal_scan)
     max_score = max(signal_scan.scenario_scores.values(), default=0.0)
-    has_high_risk_hint = any(
-        scenario in HIGH_RISK_SCENARIOS and score >= 0.5
-        for scenario, score in signal_scan.scenario_scores.items()
-    )
+    high_risk_route = signal_scan.debug.get("high_risk_route", {})
+    has_high_risk_hint = bool(high_risk_route.get("triggered")) if isinstance(high_risk_route, dict) else False
     has_cap_conflict = bool(signal_scan.cap_signals and max_score >= 0.5)
     reason_codes = ["candidate_scenarios_detected"]
     if has_high_risk_hint:
         reason_codes.append("initial_high_risk_signal")
+        if isinstance(high_risk_route, dict):
+            for risk_type in high_risk_route.get("triggered_types", []):
+                reason_codes.append(f"high_risk_route:{risk_type}")
     if has_cap_conflict:
         reason_codes.append("initial_rule_evidence_conflict")
 

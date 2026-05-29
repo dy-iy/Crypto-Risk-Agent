@@ -23,19 +23,19 @@ export function AgentProgress({
   steps: string[];
 }) {
   return (
-    <div className="agent-loader rounded-2xl border border-blue-100 bg-white px-5 py-4 shadow-sm">
-      <div className="relative z-10 flex items-start gap-3">
+    <div className="agent-loader rounded-2xl border border-blue-100 bg-white px-7 py-6 shadow-sm shadow-blue-100/70">
+      <div className="relative z-10 flex items-start gap-5">
         {icon && (
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white">
             {icon}
           </span>
         )}
         <div className="min-w-0 flex-1">
           <LoadingDots label={title} />
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
             {steps.map((step) => (
-              <div key={step} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+              <div key={step} className="flex min-h-12 items-center gap-3 rounded-lg bg-blue-50/70 px-4 text-sm font-bold text-slate-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-600" />
                 {step}
               </div>
             ))}

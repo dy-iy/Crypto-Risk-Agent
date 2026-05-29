@@ -31,7 +31,10 @@ from app.agents.chat_agent.schemas import (
     SignalScanResult,
     ValidationSuggestion,
 )
-from app.agents.chat_agent.tools import extract_evidence, normalize_input, scan_fast_signals
+from app.agents.chat_agent.tools import normalize_input, scan_fast_signals
+from app.agents.chat_agent.tools.final_context_agents import run_final_context_agents
+from app.agents.chat_agent.tools.low_risk_gate import review_low_risk_route
+from app.agents.chat_agent.tools.risk_type_branch_analyzer import analyze_risk_type_branches
 
 
 class RiskCaseState(TypedDict):
@@ -45,13 +48,16 @@ class RiskCaseState(TypedDict):
     hypotheses: NotRequired[list[ScenarioHypothesis]]
     contracts: NotRequired[list[EvidenceContract]]
     evidence: NotRequired[EvidenceExtractionResult]
+    risk_type_branches: NotRequired[list[dict[str, object]]]
     evaluations: NotRequired[list[ScenarioEvaluation]]
     merged_evaluations: NotRequired[list[ScenarioEvaluation]]
     evaluation_summary: NotRequired[EvaluationSummary]
     decision: NotRequired[DecisionResult]
     validation: NotRequired[ValidationSuggestion | None]
+    final_context_agents: NotRequired[dict[str, object]]
     report: NotRequired[dict[str, object]]
     report_mode: NotRequired[str]
+    low_risk_gate: NotRequired[dict[str, object]]
     errors: NotRequired[list[str]]
     needs_validation: NotRequired[bool]
 
@@ -133,9 +139,16 @@ def build_scenario_contracts_node(state: RiskCaseState) -> RiskCaseState:
 
 
 def targeted_evidence_extractor_node(state: RiskCaseState) -> RiskCaseState:
+    signal_scan, evidence, branches = analyze_risk_type_branches(
+        state["case_input"],
+        state["signal_scan"],
+        state.get("contracts", []),
+    )
     return {
         **state,
-        "evidence": extract_evidence(state["case_input"], state.get("contracts", [])),
+        "signal_scan": signal_scan,
+        "evidence": evidence,
+        "risk_type_branches": branches,
     }
 
 
@@ -192,6 +205,27 @@ def apply_validation_decision_node(state: RiskCaseState) -> RiskCaseState:
     }
 
 
+def final_context_agents_node(state: RiskCaseState) -> RiskCaseState:
+    final_outputs = run_final_context_agents(
+        state["case_input"],
+        state["signal_scan"],
+        state["decision"],
+    )
+    signal_scan = state["signal_scan"].model_copy(
+        update={
+            "debug": {
+                **state["signal_scan"].debug,
+                "final_context_agents": final_outputs,
+            }
+        }
+    )
+    return {
+        **state,
+        "signal_scan": signal_scan,
+        "final_context_agents": final_outputs,
+    }
+
+
 def report_generator_node(state: RiskCaseState) -> RiskCaseState:
     result = RiskCaseResult(
         case_input=state["case_input"],
@@ -215,3 +249,38 @@ def report_generator_node(state: RiskCaseState) -> RiskCaseState:
 adaptive_orchestrator_node = adaptive_router_node
 scenario_router_and_contracts_node = build_scenario_contracts_node
 decision_engine_node = deterministic_decision_engine_node
+
+
+def low_risk_gate_node(state: RiskCaseState) -> RiskCaseState:
+    signal_scan, gate, active_scenarios = review_low_risk_route(state["case_input"], state["signal_scan"])
+    if gate.get("escalate_to_high_risk"):
+        orchestration = state["orchestration"].model_copy(
+            update={
+                "path": "deep_analysis",
+                "needs_llm": True,
+                "initial_validation_hint": True,
+                "active_scenarios": active_scenarios,
+                "reason_codes": list(
+                    dict.fromkeys(
+                        state["orchestration"].reason_codes
+                        + ["low_risk_gate_escalated"]
+                        + [f"low_risk_gate_added:{risk_type}" for risk_type in gate.get("added_risk_types", [])]
+                    )
+                ),
+            }
+        )
+        return {
+            **state,
+            "signal_scan": signal_scan,
+            "low_risk_gate": gate,
+            "orchestration": orchestration,
+            "orchestration_path": "deep_analysis",
+            "active_scenarios": active_scenarios,
+            "initial_validation_hint": True,
+        }
+    return {
+        **state,
+        "signal_scan": signal_scan,
+        "low_risk_gate": gate,
+        "orchestration_path": "fast_exit",
+    }
