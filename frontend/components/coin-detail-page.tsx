@@ -65,7 +65,7 @@ export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: s
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <Link
             href={backHref}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition-colors duration-200 hover:bg-blue-50"
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
           >
             <ChevronLeftIcon />
             返回币种榜
@@ -85,21 +85,32 @@ export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: s
         )}
 
         {item && !loading && (
-          <article className="space-y-5">
+          <article
+            className="space-y-5"
+            data-ai-context={JSON.stringify({
+              type: "coin_detail",
+              coin: item.symbol,
+              name: item.name,
+              riskLevel: item.risk_level,
+              riskScore: item.final_score,
+              riskType: item.main_risk_type,
+              newsCount: item.news_count,
+            })}
+          >
             <section className="risk-card rounded-lg p-5 sm:p-7">
               <div className="flex flex-wrap items-start justify-between gap-5">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">CryptoRisk Coin Detail</p>
-                  <div className="mt-4 flex items-center gap-4">
+                  <div className="mt-4 flex min-w-0 items-center gap-4">
                     <CoinMark symbol={item.symbol} />
-                    <div>
-                      <h1 className="text-3xl font-bold leading-tight text-slate-950">{item.symbol}</h1>
-                      <p className="mt-1 text-sm font-semibold text-slate-500">{item.name || item.symbol}</p>
+                    <div className="min-w-0">
+                      <h1 className="break-words text-3xl font-bold leading-tight text-slate-950">{item.symbol}</h1>
+                      <p className="mt-1 break-words text-sm font-semibold text-slate-500">{item.name || item.symbol}</p>
                     </div>
                   </div>
                   <p className="mt-5 max-w-4xl text-sm leading-7 text-slate-700">{description}</p>
                 </div>
-                <div className="rounded-lg border border-rose-100 bg-rose-50 px-5 py-4 text-center">
+                <div className="w-full rounded-lg border border-rose-100 bg-rose-50 px-5 py-4 text-center sm:w-auto">
                   <p className="text-xs font-bold text-rose-700">综合风险分</p>
                   <p className="mt-1 text-4xl font-bold text-rose-600">{clampScore(item.final_score)}</p>
                 </div>
@@ -123,6 +134,15 @@ export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: s
                   {item.related_news.map((news) => (
                     <Link
                       key={news.news_id}
+                      data-ai-context={JSON.stringify({
+                        type: "related_news",
+                        coin: item.symbol,
+                        title: news.title,
+                        riskLevel: news.risk_level,
+                        riskScore: news.risk_score,
+                        riskType: news.risk_type,
+                        time: news.published_at,
+                      })}
                       href={`/news/${encodeURIComponent(news.news_id)}?fromCoin=${encodeURIComponent(item.symbol)}&returnTo=${encodeURIComponent(`/coins/${encodeURIComponent(item.symbol)}?returnTo=${encodeURIComponent(backHref)}`)}`}
                       className="min-w-[280px] max-w-[340px] rounded-lg border border-blue-100 bg-white p-4 shadow-sm transition-colors duration-200 hover:border-blue-300 hover:bg-blue-50"
                     >

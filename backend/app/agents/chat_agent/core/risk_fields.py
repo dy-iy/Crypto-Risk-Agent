@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agents.chat_agent.schemas import EvidenceContract, ScenarioId, ScenarioHypothesis
+from app.agents.chat_agent.schemas import ScenarioId
 
 
 SCENARIO_FIELDS: dict[ScenarioId, list[str]] = {
@@ -101,13 +101,3 @@ SCENARIO_FIELDS: dict[ScenarioId, list[str]] = {
         "sell_pressure_indicated",
     ],
 }
-
-
-def build_contracts(hypotheses: list[ScenarioHypothesis]) -> list[EvidenceContract]:
-    return [
-        EvidenceContract(
-            scenario=hypothesis.scenario,
-            fields=SCENARIO_FIELDS[hypothesis.scenario],
-        )
-        for hypothesis in hypotheses
-    ]

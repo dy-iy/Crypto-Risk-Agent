@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from app.agents.chat_agent.schemas import DecisionResult, EvidenceExtractionResult, ScenarioEvaluation, ValidationSuggestion
-from app.agents.chat_agent.scenario_evaluators.utils import is_confirmed, numeric_value
+from app.agents.chat_agent.core.evidence_utils import is_confirmed, numeric_value
+from app.agents.chat_agent.schemas import DecisionResult, EvidenceExtractionResult, ValidationSuggestion
 
 
-def need_validation(decision: DecisionResult, evaluations: list[ScenarioEvaluation]) -> bool:
-    del evaluations
+def need_validation(decision: DecisionResult) -> bool:
     cap_high_risk_conflict = bool(decision.cap_conflicts) and decision.pre_cap_score >= 60
     return (
         decision.risk_score >= 75

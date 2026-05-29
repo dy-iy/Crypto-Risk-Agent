@@ -4,37 +4,27 @@ from typing import TypedDict
 
 from typing_extensions import NotRequired
 
-from app.agents.chat_agent.contracts import build_contracts
-from app.agents.chat_agent.core.decision import decide_from_summary
+from app.agents.chat_agent.core.decision import build_fast_exit_decision, decide_from_branches
 from app.agents.chat_agent.core.orchestrator import choose_route
 from app.agents.chat_agent.core.report import build_report
-from app.agents.chat_agent.core.scenario_router import build_hypotheses
-from app.agents.chat_agent.core.summary import (
-    build_evaluation_summary,
-    build_fast_exit_decision,
-    build_fast_exit_evaluation,
-)
 from app.agents.chat_agent.core.validator import need_validation, validate_conflicts
-from app.agents.chat_agent.scenario_evaluators import evaluate_scenarios
+from app.agents.chat_agent.llm_agents import (
+    analyze_risk_type_branches,
+    review_low_risk_route,
+    run_final_context_agents,
+)
 from app.agents.chat_agent.schemas import (
     AnalysisPath,
     DecisionResult,
-    EvidenceContract,
     EvidenceExtractionResult,
-    EvaluationSummary,
     OrchestrationDecision,
     RiskCaseInput,
     RiskCaseResult,
-    ScenarioEvaluation,
-    ScenarioHypothesis,
     ScenarioId,
     SignalScanResult,
     ValidationSuggestion,
 )
 from app.agents.chat_agent.tools import normalize_input, scan_fast_signals
-from app.agents.chat_agent.tools.final_context_agents import run_final_context_agents
-from app.agents.chat_agent.tools.low_risk_gate import review_low_risk_route
-from app.agents.chat_agent.tools.risk_type_branch_analyzer import analyze_risk_type_branches
 
 
 class RiskCaseState(TypedDict):
@@ -45,13 +35,8 @@ class RiskCaseState(TypedDict):
     orchestration_path: NotRequired[AnalysisPath]
     active_scenarios: NotRequired[list[ScenarioId]]
     initial_validation_hint: NotRequired[bool]
-    hypotheses: NotRequired[list[ScenarioHypothesis]]
-    contracts: NotRequired[list[EvidenceContract]]
     evidence: NotRequired[EvidenceExtractionResult]
     risk_type_branches: NotRequired[list[dict[str, object]]]
-    evaluations: NotRequired[list[ScenarioEvaluation]]
-    merged_evaluations: NotRequired[list[ScenarioEvaluation]]
-    evaluation_summary: NotRequired[EvaluationSummary]
     decision: NotRequired[DecisionResult]
     validation: NotRequired[ValidationSuggestion | None]
     final_context_agents: NotRequired[dict[str, object]]
@@ -94,55 +79,22 @@ def adaptive_router_node(state: RiskCaseState) -> RiskCaseState:
     }
 
 
-def fast_exit_report_node(state: RiskCaseState) -> RiskCaseState:
-    evaluations = [build_fast_exit_evaluation()]
+def fast_exit_decision_node(state: RiskCaseState) -> RiskCaseState:
     evidence = EvidenceExtractionResult(extraction_mode="fast_exit")
     decision = build_fast_exit_decision()
-    result = RiskCaseResult(
-        case_input=state["case_input"],
-        signal_scan=state["signal_scan"],
-        orchestration=state["orchestration"],
-        hypotheses=[],
-        contracts=[],
-        evidence=evidence,
-        evaluations=evaluations,
-        decision=decision,
-        validation=None,
-    )
-    report = build_report(result)
-    report["report_mode"] = "fast_exit"
-    chat_agent_result = report.get("chat_agent_result")
-    if isinstance(chat_agent_result, dict):
-        chat_agent_result["report_mode"] = "fast_exit"
     return {
         **state,
-        "evaluations": evaluations,
-        "merged_evaluations": evaluations,
-        "evaluation_summary": build_evaluation_summary(evaluations),
         "evidence": evidence,
         "decision": decision,
         "validation": None,
-        "report": report,
         "report_mode": "fast_exit",
     }
 
 
-def build_scenario_contracts_node(state: RiskCaseState) -> RiskCaseState:
-    active_scenarios = state.get("active_scenarios") or state["orchestration"].active_scenarios
-    hypotheses = build_hypotheses(active_scenarios)
-    return {
-        **state,
-        "active_scenarios": active_scenarios,
-        "hypotheses": hypotheses,
-        "contracts": build_contracts(hypotheses),
-    }
-
-
-def targeted_evidence_extractor_node(state: RiskCaseState) -> RiskCaseState:
+def risk_type_branch_analysis_node(state: RiskCaseState) -> RiskCaseState:
     signal_scan, evidence, branches = analyze_risk_type_branches(
         state["case_input"],
         state["signal_scan"],
-        state.get("contracts", []),
     )
     return {
         **state,
@@ -152,41 +104,18 @@ def targeted_evidence_extractor_node(state: RiskCaseState) -> RiskCaseState:
     }
 
 
-def parallel_scenario_evaluators_node(state: RiskCaseState) -> RiskCaseState:
-    return {
-        **state,
-        "evaluations": evaluate_scenarios(
-            state["case_input"],
-            state["signal_scan"],
-            state["evidence"],
-            state.get("hypotheses", []),
-        ),
-    }
-
-
-def merge_evaluation_results_node(state: RiskCaseState) -> RiskCaseState:
-    evaluation_summary = build_evaluation_summary(state.get("evaluations", []))
-    return {
-        **state,
-        "merged_evaluations": evaluation_summary.merged_evaluations,
-        "evaluation_summary": evaluation_summary,
-    }
-
-
 def deterministic_decision_engine_node(state: RiskCaseState) -> RiskCaseState:
     return {
         **state,
-        "decision": decide_from_summary(state["signal_scan"], state["evaluation_summary"]),
+        "decision": decide_from_branches(state["signal_scan"]),
     }
 
 
 def validation_gate_node(state: RiskCaseState) -> RiskCaseState:
     decision = state["decision"]
-    evaluation_summary = state["evaluation_summary"]
     return {
         **state,
-        "needs_validation": bool(state.get("initial_validation_hint"))
-        or need_validation(decision, evaluation_summary.merged_evaluations),
+        "needs_validation": bool(state.get("initial_validation_hint")) or need_validation(decision),
     }
 
 
@@ -200,7 +129,7 @@ def conflict_validator_node(state: RiskCaseState) -> RiskCaseState:
 def apply_validation_decision_node(state: RiskCaseState) -> RiskCaseState:
     return {
         **state,
-        "decision": decide_from_summary(state["signal_scan"], state["evaluation_summary"], state.get("validation")),
+        "decision": decide_from_branches(state["signal_scan"], state.get("validation")),
         "needs_validation": False,
     }
 
@@ -227,27 +156,24 @@ def final_context_agents_node(state: RiskCaseState) -> RiskCaseState:
 
 
 def report_generator_node(state: RiskCaseState) -> RiskCaseState:
+    report_mode = str(state.get("report_mode") or "full_case")
     result = RiskCaseResult(
         case_input=state["case_input"],
         signal_scan=state["signal_scan"],
         orchestration=state["orchestration"],
-        hypotheses=state.get("hypotheses", []),
-        contracts=state.get("contracts", []),
         evidence=state.get("evidence", EvidenceExtractionResult()),
-        evaluations=state.get("merged_evaluations", state.get("evaluations", [])),
         decision=state["decision"],
         validation=state.get("validation"),
     )
     report = build_report(result)
-    report["report_mode"] = "full_case"
+    report["report_mode"] = report_mode
     chat_agent_result = report.get("chat_agent_result")
     if isinstance(chat_agent_result, dict):
-        chat_agent_result["report_mode"] = "full_case"
-    return {**state, "report": report, "report_mode": "full_case"}
+        chat_agent_result["report_mode"] = report_mode
+    return {**state, "report": report, "report_mode": report_mode}
 
 
 adaptive_orchestrator_node = adaptive_router_node
-scenario_router_and_contracts_node = build_scenario_contracts_node
 decision_engine_node = deterministic_decision_engine_node
 
 

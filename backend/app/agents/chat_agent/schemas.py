@@ -77,18 +77,6 @@ class OrchestrationDecision(BaseModel):
     active_scenarios: list[ScenarioId] = Field(default_factory=list)
 
 
-class ScenarioHypothesis(BaseModel):
-    scenario: ScenarioId
-    hypothesis: str
-    priority: int = 1
-    required_fields: list[str] = Field(default_factory=list)
-
-
-class EvidenceContract(BaseModel):
-    scenario: ScenarioId
-    fields: list[str]
-
-
 class EvidenceFieldResult(BaseModel):
     scenario: ScenarioId
     field: str
@@ -124,30 +112,6 @@ class EvidenceExtractionResult(BaseModel):
         }
 
 
-class ScenarioEvaluation(BaseModel):
-    scenario: ScenarioId
-    is_applicable: bool = False
-    scenario_score: int = Field(0, ge=0, le=100)
-    confidence: float = Field(0.0, ge=0.0, le=1.0)
-    severity: str = "none"
-    score_cap: int | None = None
-    score_floor: int | None = None
-    reason_codes: list[str] = Field(default_factory=list)
-    missing_evidence: list[str] = Field(default_factory=list)
-    evidence_summary: list[str] = Field(default_factory=list)
-
-
-class EvaluationSummary(BaseModel):
-    merged_evaluations: list[ScenarioEvaluation] = Field(default_factory=list)
-    applicable_count: int = 0
-    primary_candidate: ScenarioId | None = None
-    secondary_candidates: list[ScenarioId] = Field(default_factory=list)
-    max_score: int = 0
-    max_confidence: float = 0.0
-    reason_codes: list[str] = Field(default_factory=list)
-    missing_evidence: list[str] = Field(default_factory=list)
-
-
 class ValidationSuggestion(BaseModel):
     action: ValidationAction = "no_change"
     score_cap: int | None = None
@@ -176,10 +140,7 @@ class RiskCaseResult(BaseModel):
     case_input: RiskCaseInput
     signal_scan: SignalScanResult
     orchestration: OrchestrationDecision
-    hypotheses: list[ScenarioHypothesis] = Field(default_factory=list)
-    contracts: list[EvidenceContract] = Field(default_factory=list)
     evidence: EvidenceExtractionResult = Field(default_factory=EvidenceExtractionResult)
-    evaluations: list[ScenarioEvaluation] = Field(default_factory=list)
     decision: DecisionResult
     validation: ValidationSuggestion | None = None
     report: dict[str, Any] = Field(default_factory=dict)

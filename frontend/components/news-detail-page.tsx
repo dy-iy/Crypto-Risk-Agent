@@ -59,10 +59,10 @@ export default function NewsDetailPage({
     <main className="risk-shell min-h-screen bg-[#f4f7fb] text-slate-900">
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <Link
               href={newsBackHref}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition-colors duration-200 hover:bg-blue-50"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
             >
               <ChevronLeftIcon />
               返回新闻榜
@@ -70,7 +70,7 @@ export default function NewsDetailPage({
             {coinReturnHref && (
               <Link
                 href={coinReturnHref}
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-blue-700 shadow-sm transition-colors duration-200 hover:bg-blue-50"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-blue-700 shadow-sm transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
               >
                 <CoinIcon />
                 返回当前币种
@@ -82,7 +82,7 @@ export default function NewsDetailPage({
               href={sourceHref}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm shadow-blue-200 transition-colors duration-200 hover:bg-blue-700"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm shadow-blue-200 transition-colors duration-200 hover:bg-blue-700 sm:w-auto"
             >
               <ExternalLinkIcon />
               {item.source_url ? "打开原文网页" : "检索原文网页"}
@@ -103,17 +103,29 @@ export default function NewsDetailPage({
         )}
 
         {item && !loading && (
-          <article className="space-y-5">
+          <article
+            className="space-y-5"
+            data-ai-context={JSON.stringify({
+              type: "news_detail",
+              coin: item.coins,
+              title: item.title,
+              riskLevel: item.risk_level,
+              riskScore: item.risk_score,
+              riskType: item.risk_type,
+              newsId: item.news_id,
+              time: item.published_at || item.date,
+            })}
+          >
             <section className="risk-card rounded-lg p-5 sm:p-7">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">CryptoRisk News Detail</p>
-                  <h1 className="mt-3 text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">{item.title}</h1>
+                  <h1 className="mt-3 break-words text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">{item.title}</h1>
                   <p className="mt-3 text-sm text-slate-500">
                     发布时间：{item.published_at || item.date || "--"} · 新闻 ID：{item.news_id}
                   </p>
                 </div>
-                <div className="rounded-lg border border-rose-100 bg-rose-50 px-5 py-4 text-center">
+                <div className="w-full rounded-lg border border-rose-100 bg-rose-50 px-5 py-4 text-center sm:w-auto">
                   <p className="text-xs font-bold text-rose-700">风险分</p>
                   <p className="mt-1 text-4xl font-bold text-rose-600">{clampScore(item.risk_score)}</p>
                 </div>

@@ -963,6 +963,142 @@ THRESHOLD_HIGH_RISK_TYPES = {
     "score_regulatory",
 }
 
+HIGH_RISK_FLOOR_RULES = {
+    "score_hack": {
+        "floor": 65,
+        "trigger_score": 0.0,
+        "groups": {
+            "exploit": ["漏洞利用", "利用漏洞", "被利用", "exploit", "exploited"],
+            "security_event": ["安全事件", "攻击事件", "被黑", "黑客攻击", "遭受攻击", "合约异常"],
+            "abnormal_mint": ["无限铸币", "无限铸造", "异常铸造", "未授权铸造", "非法铸造", "被铸造"],
+            "pause_interaction": ["暂勿交互", "暂停交互", "暂勿与", "不要交互", "避免交互", "合约暂停"],
+            "official_warning": ["官方提醒", "官方建议", "建议用户", "安全团队", "项目方回应", "在 X 平台回应"],
+        },
+        "reason": "链上漏洞/攻击强信号组合",
+    },
+    "score_fraud": {
+        "floor": 65,
+        "trigger_score": 0.0,
+        "groups": {
+            "rug": ["Rug Pull", "rug pull", "跑路", "撤池", "抽走流动性"],
+            "team": ["团队失联", "团队控制", "项目方失联", "社媒停更", "官网关闭"],
+            "funds": ["资金转移", "资金外流", "卷走", "被转出", "提款异常"],
+            "warning": ["官方提醒", "用户预警", "社区预警", "安全团队"],
+        },
+        "reason": "诈骗/跑路强信号组合",
+    },
+    "score_outage": {
+        "floor": 65,
+        "trigger_score": 0.0,
+        "groups": {
+            "withdrawal": ["暂停提现", "停止提现", "无法提现", "提现关闭", "提款冻结"],
+            "platform": ["交易所", "平台", "钱包系统", "账户冻结"],
+            "users": ["大量用户", "多个用户", "用户反馈", "社群反馈", "投诉"],
+            "uncertain": ["恢复时间不明", "未说明恢复时间", "异常", "故障", "宕机"],
+        },
+        "reason": "交易所/系统运维强信号组合",
+    },
+    "score_stablecoin": {
+        "floor": 65,
+        "trigger_score": 0.0,
+        "groups": {
+            "depeg": ["脱锚", "失去锚定", "跌破 1 美元", "低于1美元", "偏离锚定"],
+            "redemption": ["赎回压力", "挤兑", "无法赎回", "暂停赎回"],
+            "liquidity": ["流动性枯竭", "流动性不足", "兑换量异常", "价差扩大"],
+            "reserve": ["储备不足", "储备透明度", "审计缺失", "抵押不足"],
+        },
+        "reason": "稳定币/储备强信号组合",
+    },
+    "score_solvency": {
+        "floor": 65,
+        "trigger_score": 0.0,
+        "groups": {
+            "solvency": ["资不抵债", "偿付能力", "破产", "流动性危机", "坏账"],
+            "reserve": ["储备不足", "准备金不足", "资产缺口", "负债缺口"],
+            "withdrawal": ["暂停提现", "无法兑付", "挤兑", "赎回延迟"],
+            "official": ["官方承认", "审计显示", "披露", "监管调查"],
+        },
+        "reason": "偿付/储备强信号组合",
+    },
+    "score_team": {
+        "floor": 65,
+        "trigger_score": 0.0,
+        "groups": {
+            "team": ["团队失联", "创始人失联", "高管离职", "核心团队离职"],
+            "governance": ["治理异常", "权限变更", "多签变更", "控制权转移"],
+            "funds": ["资金转移", "代币转出", "项目资金外流", "财库转移"],
+            "warning": ["官方提醒", "社区预警", "安全团队", "用户预警"],
+        },
+        "reason": "项目治理/团队异常强信号组合",
+    },
+    "score_infra": {
+        "floor": 65,
+        "trigger_score": 0.0,
+        "groups": {
+            "halt": ["网络暂停", "出块停止", "链停止", "停止出块", "宕机"],
+            "protocol": ["协议异常", "共识异常", "预言机异常", "跨链桥异常", "RPC 故障"],
+            "impact": ["交易失败", "无法转账", "大面积影响", "用户受影响"],
+            "official": ["官方确认", "官方提醒", "安全团队", "紧急修复"],
+        },
+        "reason": "基础设施/协议层强信号组合",
+    },
+    "score_liquidation": {
+        "floor": 61,
+        "trigger_score": 0.40,
+        "groups": {
+            "liquidation": ["爆仓", "清算", "连环清算", "强平"],
+            "scale": ["大规模", "巨额", "大量", "全市场", "连锁"],
+            "liquidity": ["流动性枯竭", "滑点扩大", "穿仓", "保险基金"],
+            "market": ["市场冲击", "价格暴跌", "瀑布", "闪崩"],
+        },
+        "reason": "爆仓/清算强信号组合",
+    },
+    "score_whale": {
+        "floor": 61,
+        "trigger_score": 0.40,
+        "groups": {
+            "whale": ["巨鲸", "大户", "鲸鱼地址", "大额转账"],
+            "exchange": ["转入交易所", "流入交易所", "交易所充值", "向交易所转入"],
+            "scale": ["大额", "巨额", "多笔", "连续", "集中"],
+            "market": ["抛售压力", "出货", "价格承压", "流动性冲击"],
+        },
+        "reason": "巨鲸/链上流向强信号组合",
+    },
+    "score_volatility": {
+        "floor": 61,
+        "trigger_score": 0.40,
+        "groups": {
+            "move": ["闪崩", "插针", "瀑布", "暴跌", "崩盘", "瞬间暴跌"],
+            "scale": ["大幅", "剧烈", "异常", "短时", "日内"],
+            "liquidity": ["流动性枯竭", "滑点", "买盘消失", "恐慌抛售"],
+            "market": ["全市场", "主流币", "加密市场", "连锁反应"],
+        },
+        "reason": "异常行情波动强信号组合",
+    },
+    "score_macro": {
+        "floor": 61,
+        "trigger_score": 0.40,
+        "groups": {
+            "shock": ["战争", "军事行动", "制裁", "危机", "金融风暴", "地缘冲突"],
+            "market": ["加密市场", "比特币", "以太坊", "币市", "数字资产市场"],
+            "impact": ["暴跌", "流动性冲击", "避险情绪", "风险偏好下降", "市场冲击"],
+            "policy": ["资本管制", "禁令", "封锁", "加息", "监管冲击"],
+        },
+        "reason": "宏观/政策冲击强信号组合",
+    },
+    "score_regulatory": {
+        "floor": 61,
+        "trigger_score": 0.40,
+        "groups": {
+            "enforcement": ["起诉", "指控", "罚款", "制裁", "查封", "逮捕"],
+            "authority": ["SEC", "CFTC", "司法部", "监管机构", "法院", "检方"],
+            "crypto": ["交易所", "稳定币", "代币", "加密", "DeFi"],
+            "impact": ["禁止", "冻结", "停止服务", "下架", "业务暂停"],
+        },
+        "reason": "监管执法强信号组合",
+    },
+}
+
 RISK_TYPE_ORDER = [
     "score_hack",
     "score_fraud",
@@ -1157,6 +1293,38 @@ def _high_risk_route(raw_scores: dict[str, float]) -> dict[str, object]:
     }
 
 
+def _high_risk_floor_signals(text: str, raw_scores: dict[str, float]) -> list[dict[str, object]]:
+    signals: list[dict[str, object]] = []
+    for risk_type, rule in HIGH_RISK_FLOOR_RULES.items():
+        score = float(raw_scores.get(risk_type, 0.0))
+        trigger_score = float(rule["trigger_score"])
+        if score <= trigger_score:
+            continue
+        groups = rule["groups"]
+        matched_groups: list[str] = []
+        matched_terms: dict[str, list[str]] = {}
+        for group_name, terms in groups.items():
+            hits = _matched_terms(text, terms)
+            if hits:
+                matched_groups.append(group_name)
+                matched_terms[group_name] = hits
+        if len(matched_groups) < 2:
+            continue
+        signals.append(
+            {
+                "risk_type": risk_type,
+                "risk_name": RISK_NAME_MAP[risk_type],
+                "scenario": RISK_SCENARIO_MAP[risk_type],
+                "floor": int(rule["floor"]),
+                "score_100": int(round(score * 100)),
+                "matched_groups": matched_groups,
+                "matched_terms": matched_terms,
+                "reason": rule["reason"],
+            }
+        )
+    return signals
+
+
 def scan_fast_signals(text: str) -> SignalScanResult:
     cleaned = str(text or "")
     try:
@@ -1173,6 +1341,7 @@ def scan_fast_signals(text: str) -> SignalScanResult:
     }
     risk_type_stats = _risk_type_stats(raw_scores)
     high_risk_route = _high_risk_route(raw_scores)
+    high_risk_floor_signals = _high_risk_floor_signals(cleaned, raw_scores)
 
     scenario_scores: dict[ScenarioId, float] = {}
     positive: list[Signal] = []
@@ -1223,6 +1392,7 @@ def scan_fast_signals(text: str) -> SignalScanResult:
             "rule_types": raw.get("rule_types"),
             "risk_type_stats": risk_type_stats,
             "high_risk_route": high_risk_route,
+            "high_risk_floor_signals": high_risk_floor_signals,
         },
     )
 

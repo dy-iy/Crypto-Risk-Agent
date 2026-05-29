@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import PortfolioRiskRadar from "@/components/portfolio-risk-radar";
 import SimTradingPanel from "@/components/sim-trading-panel";
 import { AgentProgress, LoadingDots } from "@/components/ui/loading-states";
 import {
@@ -12,6 +14,7 @@ import {
   fetchNewsUpdateJob,
   fetchNewsRanking,
   fetchRiskOverview,
+  FinalContextMeta,
   NewsUpdateJob,
   NewsUpdateProgress,
   NewsUpdateResponse,
@@ -20,17 +23,18 @@ import {
   readCachedNewsRanking,
   readCachedRiskOverview,
   RiskOverview,
+  ChatProgressStage,
   ChatAgentResult,
   AdviceGeneration,
   ImpactAnalysis,
   RiskReport,
   RiskTypeBranch,
-  sendChatMessage,
   startNewsUpdateJob,
+  streamChatMessage,
   streamRiskAssistant,
 } from "@/lib/api";
 
-type ActiveView = "home" | "chat" | "news" | "coin" | "sim" | "reports" | "settings";
+type ActiveView = "home" | "chat" | "news" | "coin" | "portfolio" | "sim" | "reports" | "settings";
 type ChatRole = "user" | "assistant";
 
 type ChatMessage = {
@@ -51,6 +55,17 @@ type AnalysisRecord = {
   createdAt: string;
   input: string;
   report: RiskReport;
+};
+
+type AnalysisTaskSnapshot = {
+  id: string;
+  input: string;
+  status: "running" | "success" | "error";
+  stage: ChatProgressStage;
+  startedAt: string;
+  updatedAt: string;
+  recordId?: string;
+  error?: string;
 };
 
 type NavItem = {
@@ -181,6 +196,7 @@ const viewRoutes: Record<ActiveView, string> = {
   chat: "/analysize",
   news: "/news",
   coin: "/coins",
+  portfolio: "/portfolio",
   sim: "/sim",
   reports: "/reports",
   settings: "/settings",
@@ -189,7 +205,10 @@ const viewRoutes: Record<ActiveView, string> = {
 const analysisRecordsStorageKey = "cryptorisk.analysisRecords";
 const selectedRecordStorageKey = "cryptorisk.selectedRecordId";
 const chatMessagesStorageKey = "cryptorisk.chatMessages";
+const activeAnalysisTaskStorageKey = "cryptorisk.activeAnalysisTask";
 const newsUpdateJobStorageKey = "cryptorisk.newsUpdateJobId";
+
+const initialChatProgressStage: ChatProgressStage = "input_standardization";
 
 const initialChatMessages: ChatMessage[] = [
   {
@@ -227,6 +246,143 @@ function readStoredChatMessages() {
   } catch {
     return initialChatMessages;
   }
+}
+
+function writeStoredChatMessages(messages: ChatMessage[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(chatMessagesStorageKey, JSON.stringify(messages));
+}
+
+function writeStoredAnalysisRecords(records: AnalysisRecord[]) {
+  if (typeof window === "undefined") return;
+  if (records.length) {
+    window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify(records));
+  } else {
+    window.localStorage.removeItem(analysisRecordsStorageKey);
+  }
+}
+
+function appendStoredChatMessages(messages: ChatMessage[]) {
+  const existing = readStoredChatMessages();
+  const existingIds = new Set(existing.map((item) => item.id));
+  const nextMessages = [
+    ...existing,
+    ...messages.filter((item) => !existingIds.has(item.id)),
+  ];
+  writeStoredChatMessages(nextMessages);
+  return nextMessages;
+}
+
+function persistAnalysisTaskSnapshot(snapshot: AnalysisTaskSnapshot | null) {
+  if (typeof window === "undefined") return;
+  if (!snapshot || snapshot.status !== "running") {
+    window.sessionStorage.removeItem(activeAnalysisTaskStorageKey);
+    return;
+  }
+  window.sessionStorage.setItem(activeAnalysisTaskStorageKey, JSON.stringify(snapshot));
+}
+
+function clearStoredAnalysisTaskSnapshot() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(activeAnalysisTaskStorageKey);
+}
+
+let activeAnalysisTask: AnalysisTaskSnapshot | null = null;
+let activeAnalysisPromise: Promise<void> | null = null;
+const analysisTaskListeners = new Set<(snapshot: AnalysisTaskSnapshot | null) => void>();
+
+function notifyAnalysisTaskListeners() {
+  analysisTaskListeners.forEach((listener) => listener(activeAnalysisTask));
+}
+
+function getActiveAnalysisTaskSnapshot() {
+  return activeAnalysisTask;
+}
+
+function subscribeAnalysisTask(listener: (snapshot: AnalysisTaskSnapshot | null) => void) {
+  analysisTaskListeners.add(listener);
+  listener(activeAnalysisTask);
+  return () => {
+    analysisTaskListeners.delete(listener);
+  };
+}
+
+function startAnalysisTask(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (activeAnalysisTask?.status === "running" && activeAnalysisPromise) {
+    return activeAnalysisTask;
+  }
+
+  const now = new Date();
+  const taskId = `analysis-${now.getTime()}`;
+  const userMessageId = `user-${now.getTime()}`;
+  const snapshot: AnalysisTaskSnapshot = {
+    id: taskId,
+    input: trimmed,
+    status: "running",
+    stage: initialChatProgressStage,
+    startedAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+
+  activeAnalysisTask = snapshot;
+  persistAnalysisTaskSnapshot(snapshot);
+  appendStoredChatMessages([{ id: userMessageId, role: "user", content: trimmed }]);
+  notifyAnalysisTaskListeners();
+
+  activeAnalysisPromise = (async () => {
+    try {
+      const response = await streamChatMessage(trimmed, (event) => {
+        activeAnalysisTask = {
+          ...(activeAnalysisTask || snapshot),
+          stage: event.stage,
+          updatedAt: new Date().toISOString(),
+        };
+        persistAnalysisTaskSnapshot(activeAnalysisTask);
+        notifyAnalysisTaskListeners();
+      });
+      const record: AnalysisRecord = {
+        id: `report-${Date.now()}`,
+        title: buildReportTitle(trimmed, response.data),
+        createdAt: formatTimestamp(new Date()),
+        input: trimmed,
+        report: response.data,
+      };
+      const nextRecords = [record, ...readStoredAnalysisRecords()];
+      writeStoredAnalysisRecords(nextRecords);
+      window.localStorage.setItem(selectedRecordStorageKey, record.id);
+      appendStoredChatMessages([
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: buildBriefAnalysis(record),
+        },
+      ]);
+      activeAnalysisTask = {
+        ...snapshot,
+        status: "success",
+        stage: "report_generation",
+        recordId: record.id,
+        updatedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error(error);
+      activeAnalysisTask = {
+        ...snapshot,
+        status: "error",
+        stage: activeAnalysisTask?.stage || snapshot.stage,
+        error: error instanceof Error ? error.message : "请求后端失败",
+        updatedAt: new Date().toISOString(),
+      };
+    } finally {
+      activeAnalysisPromise = null;
+      clearStoredAnalysisTaskSnapshot();
+      notifyAnalysisTaskListeners();
+    }
+  })();
+
+  return snapshot;
 }
 
 function isActiveNewsUpdateJob(job: NewsUpdateJob | null) {
@@ -281,8 +437,12 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [analysisRecords, setAnalysisRecords] = useState<AnalysisRecord[]>(() => readStoredAnalysisRecords());
   const [selectedRecordId, setSelectedRecordId] = useState(() => readStoredSelectedRecordId());
   const [reportSidebarCollapsed, setReportSidebarCollapsed] = useState(false);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState("");
+  const [chatLoading, setChatLoading] = useState(() => getActiveAnalysisTaskSnapshot()?.status === "running");
+  const [chatError, setChatError] = useState(() => {
+    const task = getActiveAnalysisTaskSnapshot();
+    return task?.status === "error" ? `分析失败：${task.error || "请求后端失败"}` : "";
+  });
+  const [chatProgressStage, setChatProgressStage] = useState<ChatProgressStage>(() => getActiveAnalysisTaskSnapshot()?.stage || initialChatProgressStage);
 
   useEffect(() => {
     let ignore = false;
@@ -335,51 +495,22 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }, [chatMessages]);
 
   useEffect(() => {
-    let ignore = false;
+    return subscribeAnalysisTask((task) => {
+      const records = readStoredAnalysisRecords();
+      setChatLoading(task?.status === "running");
+      setChatProgressStage(task?.stage || initialChatProgressStage);
+      setChatError(task?.status === "error" ? `分析失败：${task.error || "请求后端失败"}` : "");
+      setChatMessages(readStoredChatMessages());
+      setAnalysisRecords(records);
 
-    async function resumeNewsUpdateJob() {
-      const storedJobId = readStoredNewsUpdateJobId();
-      let job: NewsUpdateJob | null = null;
-
-      if (storedJobId) {
-        try {
-          job = await fetchNewsUpdateJob(storedJobId);
-        } catch {
-          job = null;
-        }
-      }
-
-      if (!job || !isActiveNewsUpdateJob(job)) {
-        try {
-          job = await fetchCurrentNewsUpdateJob();
-        } catch {
-          job = null;
-        }
-      }
-
-      if (ignore || !job) return;
-      if (isActiveNewsUpdateJob(job)) {
-        void pollNewsUpdateJob(job).catch((error) => {
-          console.error(error);
-          if (!ignore) {
-            setNewsUpdateError(error instanceof Error ? `更新失败：${error.message}` : "更新任务恢复失败。");
-            setNewsUpdateLoading(false);
-          }
-        });
+      if (task?.recordId) {
+        setSelectedRecordId(task.recordId);
+        setLatestReport(records.find((record) => record.id === task.recordId)?.report || null);
         return;
       }
 
-      setNewsUpdateJob(job);
-      if (job.status === "success" && job.result) setNewsUpdateResult(job.result);
-      clearStoredNewsUpdateJobId();
-    }
-
-    void resumeNewsUpdateJob();
-
-    return () => {
-      ignore = true;
-      updatePollGenerationRef.current += 1;
-    };
+      setLatestReport(records[0]?.report || null);
+    });
   }, []);
 
   const displayNews = newsRanking;
@@ -475,63 +606,75 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     await refreshRankingsAfterUpdate();
   }
 
-  async function runAnalysis(input: string) {
+  useEffect(() => {
+    let ignore = false;
+
+    async function resumeNewsUpdateJob() {
+      const storedJobId = readStoredNewsUpdateJobId();
+      let job: NewsUpdateJob | null = null;
+
+      if (storedJobId) {
+        try {
+          job = await fetchNewsUpdateJob(storedJobId);
+        } catch {
+          job = null;
+        }
+      }
+
+      if (!job || !isActiveNewsUpdateJob(job)) {
+        try {
+          job = await fetchCurrentNewsUpdateJob();
+        } catch {
+          job = null;
+        }
+      }
+
+      if (ignore || !job) return;
+      if (isActiveNewsUpdateJob(job)) {
+        void pollNewsUpdateJob(job).catch((error) => {
+          console.error(error);
+          if (!ignore) {
+            setNewsUpdateError(error instanceof Error ? `更新失败：${error.message}` : "更新任务恢复失败。");
+            setNewsUpdateLoading(false);
+          }
+        });
+        return;
+      }
+
+      setNewsUpdateJob(job);
+      if (job.status === "success" && job.result) setNewsUpdateResult(job.result);
+      clearStoredNewsUpdateJobId();
+    }
+
+    void resumeNewsUpdateJob();
+
+    return () => {
+      ignore = true;
+      updatePollGenerationRef.current += 1;
+    };
+  }, []);
+
+  function runAnalysis(input: string) {
     const trimmed = input.trim();
     if (!trimmed) return;
+    if (getActiveAnalysisTaskSnapshot()?.status === "running") return;
 
-    setChatMessages((items) => [
-      ...items,
-      { id: `user-${Date.now()}`, role: "user", content: trimmed },
-    ]);
-    setChatLoading(true);
-    setChatError("");
     setMessage("");
-
-    try {
-      const response = await sendChatMessage(trimmed);
-      const record: AnalysisRecord = {
-        id: `report-${Date.now()}`,
-        title: buildReportTitle(trimmed, response.data),
-        createdAt: formatTimestamp(new Date()),
-        input: trimmed,
-        report: response.data,
-      };
-      setLatestReport(response.data);
-      setAnalysisRecords((items) => {
-        const nextRecords = [record, ...items];
-        window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify(nextRecords));
-        return nextRecords;
-      });
-      window.localStorage.setItem(selectedRecordStorageKey, record.id);
-      setSelectedRecordId(record.id);
-      const replyId = `assistant-${Date.now()}`;
-      setChatMessages((items) => [
-        ...items,
-        {
-          id: replyId,
-          role: "assistant",
-          content: "",
-        },
-      ]);
-      setChatLoading(false);
-      await streamBriefAnalysis(replyId, buildBriefAnalysis(record), setChatMessages);
-    } catch (error) {
-      console.error(error);
-      setChatError("请求后端失败，请检查 FastAPI 服务或后端日志。");
-    } finally {
-      setChatLoading(false);
-    }
+    setChatLoading(true);
+    setChatProgressStage(initialChatProgressStage);
+    setChatError("");
+    startAnalysisTask(trimmed);
   }
 
-  async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await runAnalysis(message);
+    runAnalysis(message);
   }
 
   function handleReanalyze(input: string) {
     setActiveView("chat");
     window.history.pushState(null, "", viewRoutes.chat);
-    void runAnalysis(input);
+    runAnalysis(input);
   }
 
   function handleClearChatHistory() {
@@ -573,11 +716,11 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
           <TopBar title={pageMeta.title} subtitle={pageMeta.subtitle} />
           <MobileNav activeView={activeView} onChangeView={handleChangeView} />
 
-          <div className="px-4 py-5 sm:px-6 2xl:px-8">
+          <div className="px-3 py-4 sm:px-6 sm:py-5 2xl:px-8">
             <div className="min-w-0 space-y-5">
               {rankingError && <Notice tone="amber" text={rankingError} />}
 
-              {activeView !== "chat" && activeView !== "sim" && activeView !== "reports" && activeView !== "settings" && (
+              {activeView !== "chat" && activeView !== "portfolio" && activeView !== "sim" && activeView !== "reports" && activeView !== "settings" && (
                 <MetricGrid
                   activeView={activeView}
                   coinItems={displayCoins}
@@ -602,6 +745,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   chatError={chatError}
                   chatLoading={chatLoading}
                   chatMessages={chatMessages}
+                  chatProgressStage={chatProgressStage}
                   message={message}
                   onClearChatHistory={handleClearChatHistory}
                   onExampleClick={setMessage}
@@ -625,6 +769,9 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   range={rankingRange}
                   onChangeRange={handleChangeRankingRange}
                 />
+              )}
+              {activeView === "portfolio" && (
+                <PortfolioRiskRadar />
               )}
               {activeView === "sim" && (
                 <SimTradingPanel embedded />
@@ -655,15 +802,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
           </div>
 
-          <AssistantPanel
-            activeView={activeView}
-            chatLoading={chatLoading}
-            latestReport={latestReport}
-            topCoin={topCoin}
-            topNews={topNews}
-          />
-
-          <footer className="px-4 pb-6 text-center text-xs text-slate-500 sm:px-6 2xl:px-8">
+          <footer className="px-3 pb-6 text-center text-xs text-slate-500 sm:px-6 2xl:px-8">
             粤ICP备2026061707号-1
           </footer>
         </div>
@@ -685,6 +824,7 @@ function Sidebar({
   const navItems: NavItem[] = [
     { key: "home", label: "首页总览", icon: <HomeIcon /> },
     { key: "chat", label: "事件风险分析", icon: <ChatIcon /> },
+    { key: "portfolio", label: "我的风险资产", icon: <PortfolioIcon /> },
     { key: "sim", label: "模拟交易盘", icon: <TradeIcon /> },
     { key: "reports", label: "分析报告", icon: <FileIcon /> },
     { key: "settings", label: "系统设置", icon: <GearIcon /> },
@@ -703,7 +843,7 @@ function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-2 px-4 py-6">
-        {navItems.slice(0, 3).map((item) => (
+        {navItems.slice(0, 4).map((item) => (
           <SidebarButton
             key={item.key}
             active={activeView === item.key}
@@ -743,7 +883,7 @@ function Sidebar({
           )}
         </div>
 
-        {navItems.slice(3).map((item) => (
+        {navItems.slice(4).map((item) => (
           <SidebarButton
             key={item.key}
             active={activeView === item.key}
@@ -826,10 +966,10 @@ function SidebarSubButton({
 function TopBar({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <header className="risk-topbar sticky top-0 z-20 border-b border-blue-100 backdrop-blur-xl">
-      <div className="flex min-h-[92px] items-center gap-4 px-4 sm:px-6 2xl:px-8">
+      <div className="flex min-h-[76px] items-center gap-4 px-4 sm:min-h-[92px] sm:px-6 2xl:px-8">
         <div className="min-w-0 flex-1">
-          <p className="text-2xl font-bold tracking-tight text-slate-950">{title}</p>
-          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+          <p className="truncate text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">{title}</p>
+          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{subtitle}</p>
         </div>
       </div>
     </header>
@@ -848,19 +988,20 @@ function MobileNav({
     ["chat", "对话"],
     ["news", "新闻榜"],
     ["coin", "币种榜"],
+    ["portfolio", "资产"],
     ["sim", "模拟盘"],
     ["reports", "报告"],
     ["settings", "设置"],
   ];
 
   return (
-    <nav className="risk-scroll sticky top-[92px] z-10 flex gap-2 overflow-x-auto border-b border-blue-100 bg-white px-4 py-3 lg:hidden">
+    <nav className="risk-scroll sticky top-[76px] z-10 flex gap-2 overflow-x-auto border-b border-blue-100 bg-white px-3 py-2.5 sm:top-[92px] sm:px-4 sm:py-3 lg:hidden">
       {items.map(([key, label]) => (
         <button
           key={key}
           type="button"
           onClick={() => onChangeView(key)}
-          className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
+          className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition-colors duration-200 sm:px-4 ${
             activeView === key
               ? "bg-blue-600 text-white"
               : "border border-blue-100 bg-white text-slate-600"
@@ -988,7 +1129,7 @@ function CommandHero({
           加密资产事件风控指挥舱
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400 sm:text-base">
-          聚合新闻、公告、链上异常与交易所事件，自动完成风险识别、证据抽取、评分拆解和处置建议生成。
+          聚合新闻、公告、链上异常与交易所事件，自动完成风险识别、风险类型分支审核、影响对象分析和处置建议生成。
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <button
@@ -1042,6 +1183,7 @@ function ChatView({
   chatError,
   chatLoading,
   chatMessages,
+  chatProgressStage,
   message,
   onClearChatHistory,
   onExampleClick,
@@ -1053,6 +1195,7 @@ function ChatView({
   chatError: string;
   chatLoading: boolean;
   chatMessages: ChatMessage[];
+  chatProgressStage: ChatProgressStage;
   message: string;
   onClearChatHistory: () => void;
   onExampleClick: (value: string) => void;
@@ -1068,9 +1211,9 @@ function ChatView({
   }, [chatMessages, chatLoading]);
 
   return (
-    <section className="grid min-h-[calc(100vh-170px)] gap-5 xl:h-[calc(100vh-170px)] xl:grid-cols-[minmax(0,4fr)_minmax(230px,1fr)]">
-      <div className="risk-card flex min-h-[calc(100vh-170px)] flex-col rounded-lg xl:h-full xl:min-h-0">
-        <div className="risk-scroll min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10">
+    <section className="grid min-h-[calc(100vh-168px)] gap-4 sm:gap-5 xl:h-[calc(100vh-170px)] xl:grid-cols-[minmax(0,4fr)_minmax(230px,1fr)]">
+      <div className="risk-card flex min-h-[calc(100vh-168px)] flex-col rounded-lg xl:h-full xl:min-h-0">
+        <div className="risk-scroll min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-8 sm:py-6 lg:px-10">
           <div className="mx-auto max-w-5xl space-y-5">
             {chatMessages.map((item) => (
               <div key={item.id} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -1080,7 +1223,7 @@ function ChatView({
                   </div>
                 )}
                 <div
-                  className={`max-w-[78%] rounded-2xl px-5 py-4 text-sm leading-7 shadow-sm ${
+                  className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm sm:max-w-[78%] sm:px-5 sm:py-4 ${
                     item.role === "user"
                       ? "bg-blue-600 text-white"
                       : "border border-blue-100 bg-slate-50 text-slate-700"
@@ -1096,7 +1239,8 @@ function ChatView({
                   <AgentProgress
                     icon={<ShieldIcon />}
                     title="Chat Agent 正在研判"
-                    steps={["输入标准化", "快速信号扫描", "风险分支并行", "证据审核", "影响对象", "处置建议"]}
+                    activeStage={chatProgressStage}
+                    steps={["输入标准化", "风险信号扫描", "提取证据", "生成报告"]}
                   />
                 </div>
               </div>
@@ -1105,7 +1249,7 @@ function ChatView({
           </div>
         </div>
 
-        <div className="border-t border-blue-100 bg-white/95 px-4 py-4 backdrop-blur sm:px-8">
+        <div className="border-t border-blue-100 bg-white/95 px-3 py-3 backdrop-blur sm:px-8 sm:py-4">
           <div className="mx-auto max-w-4xl">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div className="risk-scroll flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
@@ -1123,14 +1267,15 @@ function ChatView({
               <button
                 type="button"
                 onClick={onClearChatHistory}
-                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700 transition-colors duration-200 hover:bg-rose-100"
+                disabled={chatLoading}
+                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700 transition-colors duration-200 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <TrashIcon />
                 清除聊天
               </button>
             </div>
 
-            <form onSubmit={onSubmit} className="flex min-h-14 items-end gap-3 rounded-2xl border border-blue-100 bg-white px-4 py-3 shadow-xl shadow-blue-100/70">
+            <form onSubmit={onSubmit} className="flex min-h-14 items-end gap-2 rounded-xl border border-blue-100 bg-white px-3 py-3 shadow-xl shadow-blue-100/70 sm:gap-3 sm:rounded-2xl sm:px-4">
               <textarea
                 value={message}
                 onChange={(event) => onMessageChange(event.target.value)}
@@ -1164,7 +1309,7 @@ function AnalysisCardsPanel({
   records: AnalysisRecord[];
 }) {
   return (
-    <aside className="risk-card flex max-h-[520px] min-h-0 flex-col rounded-lg p-4 xl:h-[calc(100vh-170px)] xl:max-h-[calc(100vh-170px)]">
+    <aside className="risk-card flex max-h-[420px] min-h-0 flex-col rounded-lg p-4 sm:max-h-[520px] xl:h-[calc(100vh-170px)] xl:max-h-[calc(100vh-170px)]">
       <div className="flex items-center justify-between gap-3 border-b border-blue-100 pb-3">
         <PanelTitle icon={<FileIcon />} title="精简报告" />
         <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{records.length}</span>
@@ -1173,7 +1318,7 @@ function AnalysisCardsPanel({
       <div className="risk-scroll mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {records.length ? (
           records.map((record) => (
-            <a
+            <Link
               key={record.id}
               href={`/reports?record=${encodeURIComponent(record.id)}`}
               onClick={() => {
@@ -1191,7 +1336,7 @@ function AnalysisCardsPanel({
               </div>
               <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600">{record.report.summary || record.input}</p>
               <p className="mt-3 text-xs font-semibold text-blue-700">{record.createdAt}</p>
-            </a>
+            </Link>
           ))
         ) : (
           <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-4 text-sm leading-6 text-slate-600">
@@ -1497,7 +1642,7 @@ function ReportsView({
   selectedRecord: AnalysisRecord | null;
 }) {
   return (
-    <section className={`risk-card grid min-h-[calc(100vh-170px)] rounded-lg ${collapsed ? "lg:grid-cols-[68px_minmax(0,1fr)]" : "lg:grid-cols-[280px_minmax(0,1fr)]"}`}>
+    <section className={`risk-card grid min-h-[calc(100vh-168px)] rounded-lg ${collapsed ? "lg:grid-cols-[68px_minmax(0,1fr)]" : "lg:grid-cols-[280px_minmax(0,1fr)]"}`}>
       <aside className="border-b border-blue-100 bg-slate-50/80 lg:border-b-0 lg:border-r">
         <div className={`flex items-center gap-2 border-b border-blue-100 p-4 ${collapsed ? "justify-center" : ""}`}>
           {!collapsed && (
@@ -1534,7 +1679,7 @@ function ReportsView({
                 删除所有报告
               </button>
             </div>
-            <div className="risk-scroll max-h-[calc(100vh-305px)] space-y-2 overflow-y-auto p-3">
+            <div className="risk-scroll max-h-64 space-y-2 overflow-y-auto p-3 lg:max-h-[calc(100vh-305px)]">
               {records.length ? (
                 records.map((record) => {
                   const selected = record.id === selectedRecord?.id;
@@ -1579,8 +1724,8 @@ function ReportsView({
 
 function EmptyReportsView({ onChangeView }: { onChangeView: (view: ActiveView) => void }) {
   return (
-    <article className="flex min-h-[calc(100vh-170px)] min-w-0 items-center justify-center bg-white p-6">
-      <div className="max-w-md rounded-lg border border-dashed border-blue-200 bg-blue-50/70 p-8 text-center">
+    <article className="flex min-h-[420px] min-w-0 items-center justify-center bg-white p-4 sm:p-6 lg:min-h-[calc(100vh-170px)]">
+      <div className="max-w-md rounded-lg border border-dashed border-blue-200 bg-blue-50/70 p-6 text-center sm:p-8">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white text-blue-600 shadow-sm">
           <FileIcon />
         </div>
@@ -1671,8 +1816,9 @@ function SettingsView({
   const agentCards = [
     { name: "新闻采集 Agent", detail: "监听新闻更新", status: fallbackJob.crawler.status },
     { name: "信号扫描 Agent", detail: "规则粗筛风险方向", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
-    { name: "证据抽取 Agent", detail: "单次 LLM 字段抽取", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
-    { name: "场景评分 Agent", detail: "多场景并行规则评分", status: fallbackJob.agent.status === "running" ? "running" : hasWarning ? "warning" : "success" },
+    { name: "风险类型分支 Agent", detail: "并行审核风险类型证据", status: fallbackJob.agent.status === "running" ? "running" : hasError ? "error" : "success" },
+    { name: "影响对象 Agent", detail: "生成影响范围与不确定性", status: fallbackJob.agent.status === "running" ? "running" : hasWarning ? "warning" : "success" },
+    { name: "处置建议 Agent", detail: "生成可执行核验与处置动作", status: fallbackJob.agent.status === "running" ? "running" : hasWarning ? "warning" : "success" },
     { name: "决策校准 Agent", detail: "应用 cap / floor 校验", status: fallbackJob.agent.status === "running" ? "running" : hasWarning ? "warning" : "success" },
     { name: "排行榜 Agent", detail: "刷新风险榜单", status: fallbackJob.ranking.status },
     { name: "报告生成 Agent", detail: "生成证据链报告", status: hasError ? "error" : "success" },
@@ -2186,6 +2332,7 @@ function RankingCard({
 }
 
 function NewsTable({ compact = false, items }: { compact?: boolean; items: NewsRankingItem[] }) {
+  const router = useRouter();
   const headers = [
     { label: "#", className: "w-14 px-3 py-3 text-center font-semibold" },
     { label: "新闻标题", className: `${compact ? "min-w-[260px]" : "min-w-[340px]"} px-3 py-3 text-left font-semibold` },
@@ -2210,8 +2357,17 @@ function NewsTable({ compact = false, items }: { compact?: boolean; items: NewsR
           {items.length ? items.map((item, index) => (
             <tr
               key={item.news_id}
+              data-ai-context={JSON.stringify({
+                type: "news",
+                coin: item.coins,
+                title: item.title,
+                riskLevel: item.risk_level,
+                riskScore: item.risk_score,
+                riskType: item.risk_type,
+                time: item.published_at,
+              })}
               onClick={() => {
-                window.location.href = withReturnTo(`/news/${encodeURIComponent(item.news_id)}`);
+                router.push(withReturnTo(`/news/${encodeURIComponent(item.news_id)}`));
               }}
               className="cursor-pointer text-slate-700 transition-colors duration-200 hover:bg-blue-50/70"
             >
@@ -2241,6 +2397,7 @@ function NewsTable({ compact = false, items }: { compact?: boolean; items: NewsR
 }
 
 function CoinTable({ compact = false, items }: { compact?: boolean; items: CoinRankingItem[] }) {
+  const router = useRouter();
   const headers = [
     { label: "#", className: "w-14 px-3 py-3 text-center font-semibold" },
     { label: "币种", className: "min-w-[150px] px-3 py-3 text-left font-semibold" },
@@ -2265,8 +2422,16 @@ function CoinTable({ compact = false, items }: { compact?: boolean; items: CoinR
           {items.length ? items.map((item) => (
             <tr
               key={item.symbol}
+              data-ai-context={JSON.stringify({
+                type: "coin",
+                coin: item.symbol,
+                title: item.top_news_title,
+                riskLevel: item.risk_level,
+                riskScore: item.final_score,
+                riskType: item.main_risk_type,
+              })}
               onClick={() => {
-                window.location.href = withReturnTo(`/coins/${encodeURIComponent(item.symbol)}`);
+                router.push(withReturnTo(`/coins/${encodeURIComponent(item.symbol)}`));
               }}
               className="cursor-pointer text-slate-700 transition-colors duration-200 hover:bg-blue-50/70"
             >
@@ -2337,22 +2502,34 @@ function ReportDocument({
   const riskBranches = report.risk_type_branches || chatAgentResult.risk_type_branches || [];
   const impactAnalysis = report.impact_analysis || chatAgentResult.impact_analysis || {};
   const adviceGeneration = report.advice_generation || chatAgentResult.advice_generation || {};
+  const finalContextMeta = report.final_context_agents || {};
+  const isWeakRisk = detectWeakRisk(chatAgentResult, finalContextMeta, impactAnalysis, adviceGeneration);
   const summary = compactReportSummary(report.summary) || "事件已完成结构化风险研判。";
 
   return (
-    <article className="risk-scroll min-w-0 overflow-y-auto bg-white">
-      <div className="border-b border-blue-100 px-5 py-5 sm:px-8">
+    <article
+      className="risk-scroll min-w-0 overflow-y-auto bg-white"
+      data-ai-context={JSON.stringify({
+        type: "risk_report",
+        title: record.title,
+        riskLevel: report.risk_level,
+        riskScore: report.risk_score,
+        riskCategories: report.risk_categories,
+        createdAt: record.createdAt,
+      })}
+    >
+      <div className="border-b border-blue-100 px-4 py-5 sm:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">CryptoRisk Report</p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">{record.title}</h2>
+            <h2 className="mt-2 break-words text-xl font-bold text-slate-950 sm:text-2xl">{record.title}</h2>
             <p className="mt-2 text-sm text-slate-500">{record.createdAt}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <button
               type="button"
               onClick={() => onDeleteRecord(record.id)}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-bold text-rose-700 transition-colors duration-200 hover:bg-rose-100"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-bold text-rose-700 transition-colors duration-200 hover:bg-rose-100 sm:w-auto"
             >
               <TrashIcon />
               删除报告
@@ -2360,7 +2537,7 @@ function ReportDocument({
             <button
               type="button"
               onClick={() => onReanalyze(record.input)}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700 sm:w-auto"
             >
               <RefreshIcon />
               重新分析
@@ -2369,8 +2546,8 @@ function ReportDocument({
         </div>
       </div>
 
-      <div className="space-y-5 p-5 sm:p-8">
-        <section className="grid gap-5 rounded-lg border border-blue-100 bg-slate-50 p-5 lg:grid-cols-[180px_minmax(0,1fr)_220px]">
+      <div className="space-y-5 p-4 sm:p-8">
+        <section className="grid gap-4 rounded-lg border border-blue-100 bg-slate-50 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[180px_minmax(0,1fr)_220px]">
           <div className="rounded-lg bg-white p-5 text-center shadow-sm">
             <p className="text-sm font-semibold text-slate-500">风险评分</p>
             <p className={`mt-3 text-5xl font-bold ${riskScoreTextStyle(score, report.risk_level || "")}`}>
@@ -2392,7 +2569,7 @@ function ReportDocument({
             <div className="mt-4 flex flex-wrap gap-2">
               {(report.risk_signals || []).map(compactReportSummary).filter(Boolean).slice(0, 4).map((item, index) => (
                 <span key={`${item}-${index}`} className="rounded-md border border-blue-100 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
-                  {formatEvidenceSignal(item)}
+                  {formatRiskSignalLabel(item)}
                 </span>
               ))}
             </div>
@@ -2415,11 +2592,11 @@ function ReportDocument({
 
         <div className="grid gap-5 xl:grid-cols-2">
           <ReportSection title="影响对象" icon={<UsersIcon />}>
-            <ImpactObjectsPanel analysis={impactAnalysis} fallback={report.impact || []} />
+            <ImpactObjectsPanel analysis={impactAnalysis} fallback={report.impact || []} isWeakRisk={isWeakRisk} />
           </ReportSection>
 
           <ReportSection title="处置建议" icon={<BulbIcon />}>
-            <AdvicePanel advice={adviceGeneration} fallback={report.advice || []} />
+            <AdvicePanel advice={adviceGeneration} fallback={report.advice || []} isWeakRisk={isWeakRisk} />
           </ReportSection>
         </div>
 
@@ -2487,7 +2664,7 @@ function RiskCategoryEvidence({
                     </span>
                     {item.explanation && (
                       <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                        {formatEvidenceSignal(item.explanation)}
+                        {formatRiskSignalLabel(item.explanation)}
                       </span>
                     )}
                   </div>
@@ -2512,15 +2689,27 @@ function RiskCategoryEvidence({
   );
 }
 
-function ImpactObjectsPanel({ analysis, fallback }: { analysis: ImpactAnalysis; fallback: string[] }) {
+function ImpactObjectsPanel({ analysis, fallback, isWeakRisk }: { analysis: ImpactAnalysis; fallback: string[]; isWeakRisk?: boolean }) {
   const summary = compactReportSummary(analysis.impact_summary || fallback[0] || "影响对象尚不明确，需要补充更多上下文。");
+  const sourceLabel = formatAgentSource(analysis.source);
+  const emptyObjectLabel = isWeakRisk ? "弱风险未确认" : "未明确";
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <span className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+          {sourceLabel}
+        </span>
+        {isWeakRisk && (
+          <span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">
+            弱风险保护：不推断影响对象
+          </span>
+        )}
+      </div>
       <p className="rounded-lg border border-blue-100 bg-slate-50 p-4 text-sm font-semibold leading-7 text-slate-700">{summary}</p>
-      <InfoPillGroup title="资产 / 交易对" items={asStringList(analysis.affected_assets)} empty="未明确" />
-      <InfoPillGroup title="平台 / 协议" items={asStringList(analysis.affected_platforms)} empty="未明确" />
-      <InfoPillGroup title="用户群体" items={asStringList(analysis.affected_users)} empty="未明确" />
+      <InfoPillGroup title="资产 / 交易对" items={asStringList(analysis.affected_assets)} empty={emptyObjectLabel} />
+      <InfoPillGroup title="平台 / 协议" items={asStringList(analysis.affected_platforms)} empty={emptyObjectLabel} />
+      <InfoPillGroup title="用户群体" items={asStringList(analysis.affected_users)} empty={emptyObjectLabel} />
       <InfoPillGroup title="传导路径" items={asStringList(analysis.impact_channels)} empty="持续监测" />
       {asStringList(analysis.uncertainty).length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -2532,11 +2721,12 @@ function ImpactObjectsPanel({ analysis, fallback }: { analysis: ImpactAnalysis; 
   );
 }
 
-function AdvicePanel({ advice, fallback }: { advice: AdviceGeneration; fallback: string[] }) {
+function AdvicePanel({ advice, fallback, isWeakRisk }: { advice: AdviceGeneration; fallback: string[]; isWeakRisk?: boolean }) {
   const actions = sanitizeAdvice(asStringList(advice.recommended_actions).length ? asStringList(advice.recommended_actions) : fallback);
   const monitoringItems = asStringList(advice.monitoring_items);
   const verificationNeeded = asStringList(advice.verification_needed);
   const doNotDo = sanitizeAdvice(asStringList(advice.do_not_do));
+  const sourceLabel = formatAgentSource(advice.source);
 
   return (
     <div className="space-y-4">
@@ -2545,7 +2735,16 @@ function AdvicePanel({ advice, fallback }: { advice: AdviceGeneration; fallback:
         <span className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
           {formatAdvicePriority(advice.priority)}
         </span>
+        <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
+          {sourceLabel}
+        </span>
+        {isWeakRisk && (
+          <span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">
+            弱风险建议：仅监测与核验
+          </span>
+        )}
       </div>
+      {advice.reason && <p className="rounded-lg border border-blue-100 bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-700">{advice.reason}</p>}
       <BulletList items={actions.length ? actions : ["继续核验公告、链上资金流向和用户反馈。"]} />
       <InfoPillGroup title="监控项" items={monitoringItems} empty="官方公告、链上资金流向" />
       <InfoPillGroup title="补充核验" items={verificationNeeded} empty="事件时间线、影响范围" />
@@ -2624,11 +2823,18 @@ function EngineTrace({
   result: ChatAgentResult;
   validation: ChatAgentResult["validation"];
 }) {
-  const primaryScenario = formatScenario(String(result.primary_scenario || ""));
+  const primaryBranch = String((result.branch_score_merge?.primary_risk_name as string | undefined) || report.primary_category || formatScenario(String(result.primary_scenario || "")) || "");
   const extractionMode = formatExtractionMode(result.extraction_mode);
   const llmCalls = result.llm_call_count ?? 0;
   const fallbackCount = result.fallback_count ?? 0;
   const validationAnswers = Object.entries(validation?.answered_questions || {}).slice(0, 6);
+  const impactAnalysis = report.impact_analysis || result.impact_analysis || {};
+  const adviceGeneration = report.advice_generation || result.advice_generation || {};
+  const finalContextMeta = report.final_context_agents || {};
+  const isWeakRisk = detectWeakRisk(result, finalContextMeta, impactAnalysis, adviceGeneration);
+  const finalContextSources = [impactAnalysis.source, adviceGeneration.source]
+    .map(formatAgentSource)
+    .filter((item, index, values) => item && item !== "待确认" && values.indexOf(item) === index);
   const traceItems = [
     {
       title: "快速规则扫描",
@@ -2636,24 +2842,24 @@ function EngineTrace({
       detail: "完成风险方向粗筛与缓和语义识别",
     },
     {
-      title: "场景证据合约",
-      value: primaryScenario || "综合风险",
-      detail: "按主场景生成字段级证据清单",
+      title: "风险类型分支审核",
+      value: primaryBranch || "综合风险",
+      detail: "按命中 risk_type 独立审核证据强度、严重性与成立状态",
     },
     {
-      title: "LLM 证据抽取",
+      title: "分支评分合并",
       value: `${extractionMode} · ${llmCalls} 次调用`,
-      detail: fallbackCount ? `已启用规则兜底 ${fallbackCount} 次` : "单次集中抽取 active scenarios 字段",
+      detail: fallbackCount ? `分支兜底 ${fallbackCount} 次` : "最强成立分支决定主分，次要成立分支补充加权",
     },
     {
-      title: "场景评分器",
-      value: "Python 规则评分",
-      detail: "多场景评分器并行执行，LLM 不直接给最终分",
-    },
-    {
-      title: "决策校准",
+      title: "二次校验",
       value: `${clampScore(result.pre_cap_score ?? report.risk_score)} → ${clampScore(report.final_risk_score ?? report.risk_score)}`,
       detail: validation ? formatValidationAction(validation.action) : "未触发二次校验调整",
+    },
+    {
+      title: "影响与建议 Agent",
+      value: finalContextSources.length ? finalContextSources.join(" / ") : "待确认",
+      detail: isWeakRisk ? "弱风险保护：只输出监测建议，不推断具体影响对象" : "影响对象 Agent 与处置建议 Agent 分别生成上下文结论",
     },
   ];
 
@@ -2687,7 +2893,7 @@ function EngineTrace({
             <div className="mt-3 flex flex-wrap gap-2">
               {validationAnswers.map(([key, value]) => (
                 <span key={key} className="rounded-md border border-amber-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
-                  {formatEvidenceSignal(key)}：{formatUnknownValue(value)}
+                  {formatRiskSignalLabel(key)}：{formatUnknownValue(value)}
                 </span>
               ))}
             </div>
@@ -2764,8 +2970,78 @@ function formatEvidenceSignal(value: string) {
     validator_cap_score: "校验压分",
     validator_raise_floor: "校验抬分",
     insufficient_evidence: "关键证据不足",
+    exploit_confirmed: "攻击已确认",
+    loss_confirmed: "损失已确认",
+    mitigation_status: "处置状态",
+    recovery_time: "恢复时间",
+    affected_assets: "受影响资产",
+    affected_protocols: "受影响协议",
+    attacker_address: "攻击者地址",
   };
   return labels[normalized] || normalized || "证据类型";
+}
+
+function formatRiskTypeCode(value: string) {
+  const labels: Record<string, string> = {
+    score_hack: "链上漏洞 / 攻击风险",
+    score_fraud: "诈骗 / 跑路 / Rug Pull 风险",
+    score_regulatory: "监管与法律风险",
+    score_outage: "交易所与系统运维风险",
+    score_stablecoin: "稳定币异常风险",
+    score_liquidation: "爆仓 / 清算风险",
+    score_whale: "大额转账 / 巨鲸行为风险",
+    score_volatility: "异常行情波动风险",
+    score_team: "项目治理 / 团队异常风险",
+    score_solvency: "偿付能力 / 储备 / 流动性风险",
+    score_infra: "基础设施 / 协议层异常风险",
+    score_macro: "宏观 / 政策冲击风险",
+  };
+  return labels[value] || value;
+}
+
+function formatRiskSignalLabel(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return "风险信号";
+
+  const branchScore = normalized.match(/^(score_[a-z_]+),branch_score=(\d+)$/);
+  if (branchScore) {
+    return `${formatRiskTypeCode(branchScore[1])}：分支评分 ${branchScore[2]}`;
+  }
+
+  const primaryRisk = normalized.match(/^primary_risk_type:(score_[a-z_]+)$/);
+  if (primaryRisk) {
+    return `主风险：${formatRiskTypeCode(primaryRisk[1])}`;
+  }
+
+  const highRiskFloor = normalized.match(/^high_risk_floor:(score_[a-z_]+):(\d+)$/);
+  if (highRiskFloor) {
+    return `${formatRiskTypeCode(highRiskFloor[1])}：强信号保底 ${highRiskFloor[2]}`;
+  }
+
+  const labels: Record<string, string> = {
+    risk_type_branch_merge: "风险类型分支合并",
+    secondary_risk_bonus: "次要风险加权",
+    primary_branch_evidence_weak: "主风险证据偏弱",
+    no_established_risk_type_branch: "未形成明确风险分支",
+    high_risk_floor_signal: "触发高风险保底",
+    weak_rule_signal: "弱风险规则信号",
+    fast_exit: "快速低风险路径",
+    low_risk_gate_escalated: "低风险门控已升级",
+    validator_cap_score: "二次校验压低评分",
+    validator_raise_floor: "二次校验抬高评分",
+    discussion_only: "讨论或观点类信息",
+    security_research_only: "安全研究或漏洞披露",
+    planned_maintenance: "计划维护语境",
+    resolved_or_repaired: "事件已修复或恢复",
+    no_loss_or_no_impact: "暂未发现损失或影响",
+    rumor_without_confirmation: "传闻或待确认信息",
+    internal_transfer: "内部转账或钱包归集",
+    normal_market_commentary: "普通行情评论",
+    positive_regulatory_clarity: "监管利好或澄清",
+    ordinary_team_change: "普通团队变动",
+  };
+
+  return labels[normalized] || formatEvidenceSignal(normalized);
 }
 
 function formatRiskStatus(value?: string) {
@@ -2790,11 +3066,36 @@ function formatEnginePath(value?: string) {
 
 function formatExtractionMode(value?: string) {
   const labels: Record<string, string> = {
-    llm: "LLM 证据抽取",
-    heuristic_fallback: "规则兜底抽取",
-    fast_exit: "快速退出",
+    llm: "分支 LLM 审核",
+    heuristic_fallback: "分支规则兜底",
+    fast_exit: "快速低风险",
   };
   return labels[String(value || "")] || value || "待确认";
+}
+
+function formatAgentSource(value?: string) {
+  const labels: Record<string, string> = {
+    llm: "LLM Agent",
+    fallback: "规则兜底",
+    weak_risk_guard: "弱风险保护",
+    fallback_weak_risk_guard: "弱风险保护",
+  };
+  return labels[String(value || "")] || value || "待确认";
+}
+
+function detectWeakRisk(
+  result: ChatAgentResult,
+  meta: FinalContextMeta,
+  impact: ImpactAnalysis,
+  advice: AdviceGeneration,
+) {
+  const sources = [impact.source, advice.source].map((item) => String(item || ""));
+  return Boolean(
+    result.is_weak_risk
+      || meta.is_weak_risk
+      || sources.some((source) => source.includes("weak_risk"))
+      || result.report_mode === "fast_exit",
+  );
 }
 
 function formatReportMode(value?: string) {
@@ -3085,6 +3386,7 @@ function getPageMeta(view: ActiveView) {
     chat: ["事件风险分析", "面向新闻 / 公告 / 链上事件的多智能体风险研判"],
     news: ["新闻风险榜", "基于新闻文本与风险规则的实时风险排行"],
     coin: ["币种风险榜", "基于新闻、公告与链上事件聚合的币种风险排行"],
+    portfolio: ["我的风险资产", "Portfolio Risk Radar 个性化资产风险监控"],
     sim: ["模拟交易盘", "基于最近 7 天 15 分钟 K 线的现货模拟回放"],
     reports: ["分析报告", "查看、管理与导出风险分析结果报告"],
     settings: ["系统设置", "Agent 运行状态与新闻更新"],
@@ -3420,31 +3722,30 @@ function buildBriefAnalysis(record: AnalysisRecord) {
   const categories = report.risk_categories?.length ? report.risk_categories.join(" / ") : "综合风险";
   const summary = compactReportSummary(report.summary) || "事件已完成结构化风险研判";
   const signals = report.risk_signals?.map(compactReportSummary).filter(Boolean).slice(0, 2).join("、");
+  const lowRiskGate = (report.low_risk_gate || report.chat_agent_result?.low_risk_gate || {}) as Record<string, unknown>;
+  const lowRiskGateText = formatLowRiskGateBrief(lowRiskGate);
   const advice = sanitizeAdvice(report.advice || []).slice(0, 2).join("；");
 
   return [
     `${summary}。`,
     `风险 ${clampScore(report.risk_score)}/100（${report.risk_level || "待确认"}），置信度 ${clampScore(report.confidence_score ?? 0)}/100。`,
+    lowRiskGateText,
     signals ? `关键信号：${signals}。` : `类别：${categories}。`,
     advice ? `建议：${advice}。` : "",
   ].filter(Boolean).join("\n");
 }
 
-async function streamBriefAnalysis(
-  messageId: string,
-  text: string,
-  setMessages: (updater: (items: ChatMessage[]) => ChatMessage[]) => void
-) {
-  const chunks = text.match(/.{1,8}/g) || [text];
-
-  for (const chunk of chunks) {
-    await new Promise((resolve) => setTimeout(resolve, 24));
-    setMessages((items) =>
-      items.map((item) =>
-        item.id === messageId ? { ...item, content: item.content + chunk } : item
-      )
-    );
-  }
+function formatLowRiskGateBrief(gate: Record<string, unknown>) {
+  if (!Object.keys(gate).length) return "";
+  const escalated = Boolean(gate.escalate_to_high_risk);
+  const confirmed = Boolean(gate.low_risk_confirmed);
+  const reason = compactReportSummary(String(gate.reason || ""));
+  const status = escalated
+    ? "低风险门控：已升级进入深度分析"
+    : confirmed
+      ? "低风险门控：已复核，未升级"
+      : "低风险门控：已复核";
+  return `${status}${reason ? `（${reason}）` : ""}。`;
 }
 
 function getMetrics(
@@ -3541,6 +3842,7 @@ function HomeIcon() { return <IconSvg><path d="M3 10.5 12 3l9 7.5" /><path d="M5
 function ChatIcon() { return <IconSvg><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-6a8 8 0 1 1 18-5Z" /></IconSvg>; }
 function ChartIcon() { return <IconSvg><path d="M4 19V5" /><path d="M4 19h16" /><path d="m7 15 4-4 3 3 5-7" /></IconSvg>; }
 function TradeIcon() { return <IconSvg><path d="M4 17h16" /><path d="M7 14l3-4 3 2 4-6" /><path d="M7 7h10" /><path d="M8 21l-2-4 2-4" /><path d="M16 21l2-4-2-4" /></IconSvg>; }
+function PortfolioIcon() { return <IconSvg><path d="M4 19V5" /><path d="M4 19h16" /><path d="M7 15l3-3 3 2 5-7" /><circle cx="18" cy="7" r="2" /></IconSvg>; }
 function CoinIcon() { return <IconSvg><circle cx="12" cy="12" r="8" /><path d="M9 10h6" /><path d="M9 14h6" /></IconSvg>; }
 function FileIcon() { return <IconSvg><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M9 13h6" /><path d="M9 17h6" /></IconSvg>; }
 function GearIcon() { return <IconSvg><circle cx="12" cy="12" r="3" /><path d="M19.4 15a8 8 0 0 0 .1-2l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L15 5.5h-4l-.4 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a8 8 0 0 0 .1 2l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.4 2.6h4l.4-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.4z" /></IconSvg>; }

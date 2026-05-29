@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agents.chat_agent.schemas import RiskCaseResult, ScenarioEvaluation
+from app.agents.chat_agent.schemas import RiskCaseResult
 
 
 SCENARIO_CATEGORY_MAP = {
@@ -39,21 +39,6 @@ def _summary(result: RiskCaseResult) -> str:
     if decision.risk_status == "resolved_or_mitigated":
         return f"文本涉及{category}，但包含已恢复、已修复或缓和证据，风险被限制。"
     return f"文本触发{category}场景，风险评分为 {decision.risk_score}/100，等级为{decision.risk_level}。"
-
-
-def _evidence_items(evaluations: list[ScenarioEvaluation]) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
-    for evaluation in evaluations:
-        category = SCENARIO_CATEGORY_MAP.get(evaluation.scenario, "综合风险")
-        for text in evaluation.evidence_summary:
-            items.append(
-                {
-                    "risk_category": category,
-                    "evidence_text": text,
-                    "explanation": ",".join(evaluation.reason_codes[:3]) or "evidence_contract",
-                }
-            )
-    return items[:8]
 
 
 def _branch_evidence_items(branches: list[dict[str, object]]) -> list[dict[str, str]]:
@@ -143,6 +128,7 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
     risk_type_branches = result.signal_scan.debug.get("risk_type_branches", [])
     branch_score_merge = result.signal_scan.debug.get("branch_score_merge", {})
     final_context_agents = result.signal_scan.debug.get("final_context_agents", {})
+    final_context_is_dict = isinstance(final_context_agents, dict)
     if isinstance(branch_score_merge, dict) and branch_score_merge.get("primary_risk_name"):
         category = str(branch_score_merge["primary_risk_name"])
 
@@ -162,7 +148,7 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
     confidence_score = int(round(decision.confidence * 100))
     severity = decision.risk_score
     chat_agent_result = {
-        "engine": "CryptoRisk Evidence-Contracted Case Engine",
+        "engine": "CryptoRisk Risk-Type Branch Engine",
         "primary_scenario": decision.primary_scenario,
         "secondary_scenarios": decision.secondary_scenarios,
         "confidence": decision.confidence,
@@ -178,12 +164,13 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
         "low_risk_gate": low_risk_gate,
         "risk_type_branches": risk_type_branches,
         "branch_score_merge": branch_score_merge,
-        "impact_analysis": final_context_agents.get("impact_analysis", {}) if isinstance(final_context_agents, dict) else {},
-        "advice_generation": final_context_agents.get("advice_generation", {}) if isinstance(final_context_agents, dict) else {},
+        "impact_analysis": final_context_agents.get("impact_analysis", {}) if final_context_is_dict else {},
+        "advice_generation": final_context_agents.get("advice_generation", {}) if final_context_is_dict else {},
+        "context_keys": final_context_agents.get("context_keys", []) if final_context_is_dict else [],
+        "is_weak_risk": final_context_agents.get("is_weak_risk") if final_context_is_dict else None,
+        "has_established_risk": final_context_agents.get("has_established_risk") if final_context_is_dict else None,
     }
     evidence_items = _branch_evidence_items(risk_type_branches) if isinstance(risk_type_branches, list) else []
-    if not evidence_items:
-        evidence_items = _evidence_items(result.evaluations)
     report = {
         "summary": _summary(result),
         "input_type": result.case_input.input_type,
@@ -210,11 +197,16 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
             "urgency": severity if severity >= 41 else max(10, severity - 5),
             "reversibility": max(0, 100 - severity),
         },
-        "impact": _llm_impact(final_context_agents, _impact(decision.risk_score, category)) if isinstance(final_context_agents, dict) else _impact(decision.risk_score, category),
-        "advice": _llm_advice(final_context_agents, _advice(decision.risk_score, decision.risk_status)) if isinstance(final_context_agents, dict) else _advice(decision.risk_score, decision.risk_status),
-        "impact_analysis": final_context_agents.get("impact_analysis", {}) if isinstance(final_context_agents, dict) else {},
-        "advice_generation": final_context_agents.get("advice_generation", {}) if isinstance(final_context_agents, dict) else {},
-        "missing_info": sorted({missing for item in result.evaluations for missing in item.missing_evidence})[:8],
+        "impact": _llm_impact(final_context_agents, _impact(decision.risk_score, category)) if final_context_is_dict else _impact(decision.risk_score, category),
+        "advice": _llm_advice(final_context_agents, _advice(decision.risk_score, decision.risk_status)) if final_context_is_dict else _advice(decision.risk_score, decision.risk_status),
+        "impact_analysis": final_context_agents.get("impact_analysis", {}) if final_context_is_dict else {},
+        "advice_generation": final_context_agents.get("advice_generation", {}) if final_context_is_dict else {},
+        "final_context_agents": {
+            "context_keys": final_context_agents.get("context_keys", []),
+            "is_weak_risk": final_context_agents.get("is_weak_risk"),
+            "has_established_risk": final_context_agents.get("has_established_risk"),
+        } if final_context_is_dict else {},
+        "missing_info": result.evidence.missing_fields[:8],
         "uncertainty_points": result.evidence.extraction_errors,
         "score_reason": "；".join(decision.reason_codes),
         "calibration_rules": decision.score_caps_applied + decision.score_floors_applied,
@@ -225,7 +217,6 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
             "risk_type_branches": risk_type_branches,
             "branch_score_merge": branch_score_merge,
             "final_context_agents": final_context_agents,
-            "scenario_evaluations": [item.model_dump() for item in result.evaluations],
             "evidence_extraction": {
                 "mode": result.evidence.extraction_mode,
                 "llm_call_count": result.evidence.llm_call_count,

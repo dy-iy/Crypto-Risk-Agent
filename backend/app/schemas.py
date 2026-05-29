@@ -127,7 +127,9 @@ class ChatResponse(BaseModel):
 
 
 class RiskAssistantRequest(BaseModel):
-    question: str = Field(..., min_length=1, description="User question for risk assistant")
+    question: str | None = Field(default=None, description="User question for risk assistant")
+    selected_text: str | None = Field(default=None, description="Quoted page selection")
+    user_question: str | None = Field(default=None, description="Question typed after quoting selected text")
     context: dict[str, object] = Field(default_factory=dict)
 
 

@@ -34,21 +34,47 @@ RISK_ASSISTANT_SKILL = """
 """.strip()
 
 
-def build_risk_assistant_prompt(question: str, context: dict[str, object] | None = None) -> str:
+def build_risk_assistant_prompt(
+    question: str,
+    context: dict[str, object] | None = None,
+    selected_text: str | None = None,
+    user_question: str | None = None,
+) -> str:
     compact_context = json.dumps(context or {}, ensure_ascii=False, indent=2)
+    clean_question = (user_question or question or "").strip()
+    clean_selected_text = (selected_text or "").strip()
+    quoted_section = ""
+    if clean_selected_text:
+        quoted_section = f"""
+用户选中的页面内容：
+{clean_selected_text}
+""".strip()
+
     return f"""
 用户问题：
-{question}
+{clean_question}
+
+{quoted_section}
 
 当前页面上下文：
 {compact_context}
 
-请根据你的金融风控助手能力回答。先理解用户问题本身，优先使用 DeepSeek 的金融知识和推理能力；只有当用户问题与页面上下文直接相关时，才结合上下文。不要输出 Markdown 表格，不要给交易方向建议。
+请根据你的金融风控助手能力回答。先理解用户问题本身，优先使用 DeepSeek 的金融知识和推理能力；如果提供了“用户选中的页面内容”，需要把它当作被引用的原文来解释和分析。只有当用户问题与页面上下文直接相关时，才结合上下文。不要输出 Markdown 表格，不要给交易方向建议。
 """.strip()
 
 
-def answer_risk_assistant(question: str, context: dict[str, object] | None = None) -> str:
-    prompt = build_risk_assistant_prompt(question, context)
+def answer_risk_assistant(
+    question: str,
+    context: dict[str, object] | None = None,
+    selected_text: str | None = None,
+    user_question: str | None = None,
+) -> str:
+    prompt = build_risk_assistant_prompt(
+        question,
+        context,
+        selected_text=selected_text,
+        user_question=user_question,
+    )
 
     answer = call_llm_text(
         prompt=prompt,
@@ -67,8 +93,15 @@ def answer_risk_assistant(question: str, context: dict[str, object] | None = Non
 async def stream_risk_assistant_answer(
     question: str,
     context: dict[str, object] | None = None,
+    selected_text: str | None = None,
+    user_question: str | None = None,
 ) -> AsyncIterator[str]:
-    prompt = build_risk_assistant_prompt(question, context)
+    prompt = build_risk_assistant_prompt(
+        question,
+        context,
+        selected_text=selected_text,
+        user_question=user_question,
+    )
 
     async for chunk in stream_llm_text(
         prompt=prompt,

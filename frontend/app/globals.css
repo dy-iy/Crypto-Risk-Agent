@@ -22,6 +22,12 @@
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -220,6 +226,98 @@ button:disabled {
   display: none;
 }
 
+.agent-progress-card {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96)),
+    linear-gradient(90deg, rgba(29, 78, 216, 0.07), rgba(22, 101, 52, 0.06));
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
+  padding: 28px;
+}
+
+.agent-progress-icon {
+  display: flex;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #088b5c;
+  color: #ffffff;
+  box-shadow: 0 14px 28px rgba(8, 139, 92, 0.22);
+}
+
+.agent-step-stage {
+  position: relative;
+  height: 58px;
+  margin-top: 22px;
+}
+
+.agent-step-item {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #eef5ff;
+  padding: 0 22px;
+  color: #334155;
+  opacity: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  transform: translateY(12px);
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+
+.agent-step-item.is-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.agent-step-item::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -70%;
+  width: 48%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0));
+  transform: skewX(-24deg);
+  opacity: 0;
+}
+
+.agent-step-item.is-active::after {
+  opacity: 1;
+  animation: agent-step-shimmer 1.15s ease-out infinite;
+}
+
+.agent-step-dot {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #059669;
+}
+
+.agent-step-item.is-active .agent-step-dot {
+  animation: agent-step-dot-pulse 1.2s ease-out infinite;
+}
+
+.agent-step-text {
+  position: relative;
+  z-index: 1;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .dot-pulse {
   animation: dot-pulse 900ms ease-in-out infinite;
 }
@@ -241,6 +339,27 @@ button:disabled {
   }
 }
 
+@keyframes agent-step-shimmer {
+  0% {
+    left: -70%;
+  }
+  100% {
+    left: 128%;
+  }
+}
+
+@keyframes agent-step-dot-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.42);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(5, 150, 105, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(5, 150, 105, 0);
+  }
+}
+
 @keyframes dot-pulse {
   0%,
   80%,
@@ -254,6 +373,33 @@ button:disabled {
   }
 }
 
+@media (max-width: 640px) {
+  .agent-progress-card {
+    border-radius: 14px;
+    padding: 18px;
+  }
+
+  .agent-progress-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .agent-step-stage {
+    height: 54px;
+    margin-top: 18px;
+  }
+
+  .agent-step-item {
+    min-height: 54px;
+    gap: 12px;
+    padding: 0 16px;
+  }
+
+  .agent-step-text {
+    font-size: 14px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -263,4 +409,16 @@ button:disabled {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+@keyframes portfolio-refresh-sweep {
+  0% {
+    transform: translateX(-140%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+.portfolio-refresh-sweep {
+  animation: portfolio-refresh-sweep 1.8s ease-in-out infinite;
 }

@@ -54,7 +54,14 @@ export type AdviceGeneration = {
   monitoring_items?: string[];
   verification_needed?: string[];
   do_not_do?: string[];
+  reason?: string;
   source?: string;
+};
+
+export type FinalContextMeta = {
+  context_keys?: string[];
+  is_weak_risk?: boolean | null;
+  has_established_risk?: boolean | null;
 };
 
 export type RiskValidation = {
@@ -84,6 +91,9 @@ export type ChatAgentResult = {
   branch_score_merge?: Record<string, unknown>;
   impact_analysis?: ImpactAnalysis;
   advice_generation?: AdviceGeneration;
+  context_keys?: string[];
+  is_weak_risk?: boolean | null;
+  has_established_risk?: boolean | null;
   report_mode?: string;
 };
 
@@ -114,6 +124,7 @@ export type RiskReport = {
   advice: string[];
   impact_analysis?: ImpactAnalysis;
   advice_generation?: AdviceGeneration;
+  final_context_agents?: FinalContextMeta;
   missing_info?: string[];
   uncertainty_points?: string[];
   score_reason?: string;
@@ -128,6 +139,18 @@ export type ChatResponse = {
   status: string;
   message: string;
   data: RiskReport;
+};
+
+export type ChatProgressStage =
+  | "input_standardization"
+  | "risk_signal_scan"
+  | "evidence_extraction"
+  | "report_generation";
+
+export type ChatProgressEvent = {
+  stage: ChatProgressStage;
+  index: number;
+  label: string;
 };
 
 export type RiskAssistantResponse = {
@@ -260,7 +283,110 @@ export type NewsUpdateJob = {
   finished_at: string;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+export type PortfolioRiskLevel = "low" | "medium" | "high" | "critical";
+
+export type PortfolioWatchlistRecord = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  base_asset: string;
+  is_holding: boolean;
+  amount: number;
+  avg_buy_price: number;
+  alert_threshold: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PortfolioWatchlistItem = PortfolioWatchlistRecord & {
+  current_price: number;
+  price_change_24h: number;
+  market_value: number;
+  floating_pnl: number;
+  floating_pnl_rate: number;
+  risk_score: number;
+  risk_level: PortfolioRiskLevel;
+  ai_summary: string;
+};
+
+export type PortfolioWatchlistPayload = {
+  symbol: string;
+  is_holding?: boolean;
+  amount?: number;
+  avg_buy_price?: number;
+  alert_threshold?: number;
+};
+
+export type PortfolioMarketCandle = {
+  id: string;
+  symbol: string;
+  interval: string;
+  open_time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  source: string;
+  created_at: string;
+};
+
+export type PortfolioNewsItem = {
+  news_id: string;
+  title: string;
+  content: string;
+  published_at: string;
+  risk_score: number;
+  risk_level: string;
+  risk_type: string;
+  evidence: string;
+  summary: string;
+  source_url: string;
+  matched_reason: string;
+  confidence: number;
+};
+
+export type CoinRiskSnapshot = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  risk_score: number;
+  risk_level: PortfolioRiskLevel;
+  main_risk_types: string[];
+  price_change_24h: number;
+  related_news_count: number;
+  high_risk_news_count: number;
+  holding_impact: string;
+  ai_summary: string;
+  ai_advice: string;
+  evidence_refs: string[];
+  generated_at: string;
+};
+
+export type PortfolioRefreshResponse = {
+  status: string;
+  message: string;
+  updated_at: string;
+  success_symbols: number;
+  related_news_count: number;
+  risk_snapshots: number;
+  symbols: string[];
+  market_source: string;
+};
+
+export type PortfolioRefreshJob = {
+  job_id: string;
+  user_id: string;
+  status: "queued" | "running" | "success" | "error";
+  stage: string;
+  message: string;
+  result: PortfolioRefreshResponse | null;
+  error: string;
+  started_at: string;
+  updated_at: string;
+  finished_at: string;
+};
+
 const apiCachePrefix = "cryptorisk.api-cache:";
 const apiCacheTtlMs = 5 * 60 * 1000;
 const memoryCache = new Map<string, { expiresAt: number; data: unknown }>();
@@ -328,7 +454,7 @@ export function clearApiCache() {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(path, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -376,6 +502,80 @@ export function sendChatMessage(message: string) {
   });
 }
 
+export async function streamChatMessage(
+  message: string,
+  onProgress: (event: ChatProgressEvent) => void
+): Promise<ChatResponse> {
+  const response = await fetch("/api/chat/stream", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+
+  if (!response.body) {
+    throw new Error("ReadableStream is not supported in this browser");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: ChatResponse | null = null;
+  let streamError = "";
+
+  const flushEvents = () => {
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+
+    events.forEach((eventText) => {
+      const eventName = eventText
+        .split("\n")
+        .find((line) => line.startsWith("event:"))
+        ?.slice(6)
+        .trim() || "message";
+      const dataLine = eventText
+        .split("\n")
+        .find((line) => line.startsWith("data:"));
+      if (!dataLine) return;
+
+      const payload = dataLine.slice(5).trim();
+      if (!payload || payload === "{}") return;
+      const parsed = JSON.parse(payload) as unknown;
+
+      if (eventName === "progress") {
+        onProgress(parsed as ChatProgressEvent);
+      } else if (eventName === "result") {
+        result = parsed as ChatResponse;
+      } else if (eventName === "error") {
+        streamError = String((parsed as { detail?: string }).detail || "Agent workflow failed");
+      }
+    });
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    flushEvents();
+  }
+
+  buffer += decoder.decode();
+  flushEvents();
+
+  if (streamError) {
+    throw new Error(streamError);
+  }
+  if (!result) {
+    throw new Error("Agent workflow finished without result");
+  }
+  return result as ChatResponse;
+}
+
 export async function updateTodayNews() {
   const response = await requestJson<NewsUpdateResponse>("/api/rankings/update-news", {
     method: "POST",
@@ -401,17 +601,104 @@ export function fetchCurrentNewsUpdateJob() {
   return requestJson<NewsUpdateJob>("/api/rankings/update-news/jobs/current");
 }
 
+export function fetchPortfolioWatchlist() {
+  return requestJson<PortfolioWatchlistItem[]>("/api/portfolio/watchlist");
+}
+
+export async function createPortfolioWatchlistItem(payload: PortfolioWatchlistPayload) {
+  const response = await requestJson<PortfolioWatchlistRecord>("/api/portfolio/watchlist", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  clearApiCache();
+  return response;
+}
+
+export async function updatePortfolioWatchlistItem(symbol: string, payload: Omit<PortfolioWatchlistPayload, "symbol">) {
+  const response = await requestJson<PortfolioWatchlistRecord>(
+    `/api/portfolio/watchlist/${encodeURIComponent(symbol)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+  clearApiCache();
+  return response;
+}
+
+export async function deletePortfolioWatchlistItem(symbol: string) {
+  const response = await requestJson<{ status: string; message: string }>(
+    `/api/portfolio/watchlist/${encodeURIComponent(symbol)}`,
+    { method: "DELETE" }
+  );
+  clearApiCache();
+  return response;
+}
+
+export function fetchPortfolioMarket(symbol: string, interval = "15m", limit = 200) {
+  const params = new URLSearchParams({ interval, limit: String(limit) });
+  return requestJson<PortfolioMarketCandle[]>(
+    `/api/portfolio/market/${encodeURIComponent(symbol)}?${params.toString()}`
+  );
+}
+
+export function fetchPortfolioNews(symbol: string) {
+  return requestJson<PortfolioNewsItem[]>(
+    `/api/portfolio/news/${encodeURIComponent(symbol)}`
+  );
+}
+
+export function fetchPortfolioRisk(symbol: string) {
+  return requestJson<CoinRiskSnapshot>(
+    `/api/portfolio/risk/${encodeURIComponent(symbol)}`
+  );
+}
+
+export async function refreshPortfolioRisk() {
+  const response = await requestJson<PortfolioRefreshResponse>("/api/portfolio/refresh", {
+    method: "POST",
+  });
+  clearApiCache();
+  return response;
+}
+
+export function startPortfolioRefreshJob() {
+  clearApiCache();
+  return requestJson<PortfolioRefreshJob>("/api/portfolio/refresh/jobs", {
+    method: "POST",
+  });
+}
+
+export function fetchPortfolioRefreshJob(jobId: string) {
+  return requestJson<PortfolioRefreshJob>(
+    `/api/portfolio/refresh/jobs/${encodeURIComponent(jobId)}`
+  );
+}
+
+export function fetchCurrentPortfolioRefreshJob() {
+  return requestJson<PortfolioRefreshJob>("/api/portfolio/refresh/jobs/current");
+}
+
 export async function streamRiskAssistant(
   question: string,
   context: Record<string, unknown>,
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
+  options?: {
+    selectedText?: string;
+    userQuestion?: string;
+  }
 ) {
-  const response = await fetch(`${API_BASE_URL}/api/risk-assistant/stream`, {
+  const response = await fetch("/api/risk-assistant/stream", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ question, context }),
+    body: JSON.stringify({
+      question,
+      context,
+      selected_text: options?.selectedText,
+      user_question: options?.userQuestion,
+    }),
   });
 
   if (!response.ok) {

@@ -1211,7 +1211,7 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
   }, []);
 
   const content = (
-    <div className={embedded ? "flex flex-col gap-4" : "mx-auto flex max-w-[1440px] flex-col gap-4"} data-tour-id="sim-shell">
+    <div className={embedded ? "flex min-w-0 flex-col gap-4" : "mx-auto flex w-full max-w-[1440px] flex-col gap-4"} data-tour-id="sim-shell">
       {toast ? <TradeToastView toast={toast} onClose={() => setToast(null)} /> : null}
       {tourWelcomeOpen ? <TourWelcomeModal onSkip={() => finishTour(false)} onStart={startTour} /> : null}
       {tourOpen ? (
@@ -1256,7 +1256,7 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
               </button>
             </div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-4" data-tour-id="asset-metrics">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-tour-id="asset-metrics">
             <Metric label={<WithTerm term="模拟时间">{labels.simTime}</WithTerm>} value={formatTime(state?.sim_time || "")} />
             <Metric label={labels.candleIndex} value={`${state?.current_index ?? 0}/${state?.max_index ?? 0}`} />
             <Metric label={<WithTerm term="总资产">{labels.totalAsset}</WithTerm>} value={formatUsdt(state?.total_asset ?? 10000)} />
@@ -1265,7 +1265,7 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
         </div>
       </header>
       <button
-        className="fixed bottom-6 right-24 z-[70] rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 shadow-lg shadow-slate-900/10 transition-colors duration-200 hover:bg-emerald-50"
+        className="fixed bottom-4 left-4 z-[70] rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 shadow-lg shadow-slate-900/10 transition-colors duration-200 hover:bg-emerald-50 sm:bottom-6 sm:left-auto sm:right-24"
         onClick={startTour}
         type="button"
       >
@@ -1283,13 +1283,13 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
       ) : null}
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div> : null}
 
-      <section className="grid gap-3 overflow-x-auto xl:grid-cols-[190px_minmax(760px,1fr)_270px]">
-        <aside className="risk-panel rounded-lg p-2.5" data-tour-id="symbol-list">
+      <section className="grid min-w-0 gap-3 xl:grid-cols-[190px_minmax(0,1fr)_270px]">
+        <aside className="risk-panel min-w-0 rounded-lg p-2.5" data-tour-id="symbol-list">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Symbols</h2>
             <span className="text-xs text-slate-500">{symbols.length}</span>
           </div>
-          <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-1">
             {symbols.map((item) => {
               const active = item.symbol === selectedSymbol;
               return (
@@ -1312,7 +1312,7 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
           />
         </aside>
 
-        <section className="flex min-w-[760px] flex-col gap-3">
+        <section className="flex min-w-0 flex-col gap-3">
           <div className="risk-panel rounded-lg p-2.5">
             <div className="mb-2">
               <ReplayControls
@@ -1723,20 +1723,20 @@ function ReplayControls({
   state: SimState | null;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex min-w-[220px] items-center gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:min-w-[220px]">
         <div className="min-w-0">
           <p className="truncate text-xs font-medium text-slate-500">{selectedMeta.name}</p>
           <h2 className="truncate text-lg font-semibold leading-5 text-slate-950">{selectedSymbol}</h2>
         </div>
-        <div className="border-l border-slate-200 pl-3">
-          <p className="text-lg font-semibold leading-5 text-slate-950">{formatUsdt(currentPrice)}</p>
+        <div className="min-w-0 border-l border-slate-200 pl-3">
+          <p className="truncate text-lg font-semibold leading-5 text-slate-950">{formatUsdt(currentPrice)}</p>
           <p className={`mt-0.5 text-xs font-semibold ${currentReturn >= 0 ? "text-emerald-600" : "text-red-600"}`}>
             {currentReturn >= 0 ? "+" : ""}{formatPercent(currentReturn)}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
         <ControlButton disabled={!isPlaying} onClick={onPause}>{labels.pause}</ControlButton>
         <ControlButton onClick={onStep} tourId="next-button">{labels.next}</ControlButton>
         <ControlButton disabled={isBusy} tone="red" onClick={onReset}>{labels.reset}</ControlButton>
@@ -1755,11 +1755,11 @@ function ReplayControls({
           ))}
         </div>
       </div>
-      <form className="flex flex-wrap items-center gap-2" onSubmit={onJump}>
-        <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+      <form className="flex w-full flex-wrap items-center gap-2 sm:w-auto" onSubmit={onJump}>
+        <label className="flex w-full flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 sm:w-auto">
           <span>{labels.jumpTime}</span>
           <input
-            className="h-9 w-[180px] rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-medium normal-case tracking-normal text-slate-800"
+            className="h-9 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-medium normal-case tracking-normal text-slate-800 sm:w-[180px]"
             max={toDatetimeLocalValue(state?.end_time || "")}
             min={toDatetimeLocalValue(state?.start_time || "")}
             onChange={(event) => onJumpTimeChange(event.target.value)}
@@ -1767,7 +1767,7 @@ function ReplayControls({
             value={jumpTime}
           />
         </label>
-        <button className="h-9 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50" disabled={isBusy || !jumpTime} type="submit">
+        <button className="h-9 w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 sm:w-auto" disabled={isBusy || !jumpTime} type="submit">
           {labels.jump}
         </button>
       </form>
@@ -2054,9 +2054,9 @@ function PriceLineChart({
   const endPercent = maxIndex ? (safeRange.end / rangeSpan) * 100 : 100;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm sm:p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="mr-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Price Replay</span>
           <span className="text-xs font-semibold text-slate-600"><WithTerm term="K线">K 线</WithTerm></span>
           {zoomPresets.map((preset) => (
@@ -2074,7 +2074,7 @@ function PriceLineChart({
               {preset.label}
             </button>
           ))}
-          <span className="text-xs text-slate-400">Wheel zoom / drag pan</span>
+          <span className="hidden text-xs text-slate-400 sm:inline">Wheel zoom / drag pan</span>
         </div>
         <div className="text-right text-xs font-semibold text-slate-500">
           <span>{visibleCandles.length} candles</span>
@@ -2121,7 +2121,7 @@ function PriceLineChart({
         onMouseLeave={stopDrag}
         onMouseMove={handleMouseMove}
         onMouseUp={stopDrag}
-        style={{ height: "clamp(480px, 50vh, 520px)" }}
+        style={{ height: "clamp(340px, 58vh, 520px)" }}
       >
         <div
           aria-hidden="true"
@@ -2524,7 +2524,7 @@ function TradePanel({
   state: SimState | null;
 }) {
   return (
-    <aside className="risk-panel min-w-[270px] rounded-lg p-3">
+    <aside className="risk-panel min-w-0 rounded-lg p-3">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Trade</h2>
       {currentRiskEvent ? (
         <RiskEventInTradePanel
@@ -2614,7 +2614,7 @@ function RiskEventInTradePanel({
           x
         </button>
       </div>
-      <h3 className="mt-2 min-w-[250px] max-w-full whitespace-normal break-words text-sm font-semibold leading-5">{event.title}</h3>
+      <h3 className="mt-2 min-w-0 max-w-full whitespace-normal break-words text-sm font-semibold leading-5">{event.title}</h3>
       <p className={`mt-1 whitespace-normal break-words text-xs leading-5 ${tone.softText}`}>{event.summary || event.risk_type}</p>
       <p className={`mt-2 text-xs font-medium ${tone.softText}`}>
         {labels.affected}: {(event.affected_assets?.length ? event.affected_assets : event.affected_symbols).join(" / ")}
@@ -2871,8 +2871,8 @@ function RiskRadarChart({ metrics }: { metrics: Array<{ label: string; value: nu
     return `${point.x},${point.y}`;
   }).join(" ");
   return (
-    <div className="shrink-0">
-      <svg className="h-56 w-56" viewBox="0 0 192 192" role="img" aria-label="risk control radar chart">
+    <div className="mx-auto shrink-0 md:mx-0">
+      <svg className="h-48 w-48 sm:h-56 sm:w-56" viewBox="0 0 192 192" role="img" aria-label="risk control radar chart">
         {[25, 50, 75, 100].map((ring) => (
           <polygon key={ring} points={ringPoints(ring)} fill="none" stroke="#dbe4f0" strokeWidth="1" />
         ))}
