@@ -14,10 +14,19 @@ from typing import Any
 
 
 DEFAULT_BASE_URL = "https://kassa-wiki.top"
+DEFAULT_TIMEOUT_SECONDS = 90
 
 
 def api_base() -> str:
     return os.environ.get("CRYPTO_RISK_API_BASE", DEFAULT_BASE_URL).rstrip("/")
+
+
+def api_timeout() -> float:
+    raw = os.environ.get("CRYPTO_RISK_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS))
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return float(DEFAULT_TIMEOUT_SECONDS)
 
 
 def request_json(method: str, path: str, body: dict[str, Any] | None = None) -> Any:
@@ -30,7 +39,7 @@ def request_json(method: str, path: str, body: dict[str, Any] | None = None) -> 
 
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=90) as response:
+        with urllib.request.urlopen(req, timeout=api_timeout()) as response:
             raw = response.read().decode("utf-8")
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
@@ -53,6 +62,8 @@ def emit(payload: Any, json_output: bool) -> None:
 
 
 def to_markdown(payload: Any) -> str:
+    if isinstance(payload, dict) and payload.get("status") == "ok" and set(payload) == {"status"}:
+        return "Health: ok"
     if isinstance(payload, dict) and "data" in payload and isinstance(payload["data"], dict):
         return format_report(payload["data"])
     if isinstance(payload, dict) and payload.get("ranking_type") == "news":
@@ -74,6 +85,13 @@ def to_markdown(payload: Any) -> str:
 
 def risk_score(report: dict[str, Any]) -> Any:
     return report.get("final_risk_score") or report.get("risk_score") or 0
+
+
+def number(value: Any, default: float = 0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def format_report(report: dict[str, Any]) -> str:
@@ -215,6 +233,10 @@ def cmd_analyze_news(args: argparse.Namespace) -> Any:
     return request_json("POST", "/api/chat", {"message": args.text})
 
 
+def cmd_health(_: argparse.Namespace) -> Any:
+    return request_json("GET", "/health")
+
+
 def cmd_assistant(args: argparse.Namespace) -> Any:
     context = json.loads(args.context) if args.context else {}
     return request_json("POST", "/api/risk-assistant", {"question": args.question, "context": context})
@@ -233,7 +255,7 @@ def cmd_high_risk_news(args: argparse.Namespace) -> Any:
     items = payload.get("items", []) if isinstance(payload, dict) else []
     filtered = [
         item for item in items
-        if isinstance(item, dict) and int(item.get("risk_score") or 0) >= args.min_score
+        if isinstance(item, dict) and number(item.get("risk_score")) >= args.min_score
     ][: args.limit]
     if isinstance(payload, dict):
         payload = {**payload, "items": filtered}
@@ -266,8 +288,13 @@ def cmd_update_status(args: argparse.Namespace) -> Any:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Call the CryptoRisk API")
+    parser.add_argument("--base-url", default="", help="override API base URL; defaults to CRYPTO_RISK_API_BASE or public site")
+    parser.add_argument("--timeout", type=float, default=0, help="request timeout in seconds; defaults to 90")
     parser.add_argument("--json", action="store_true", help="print raw JSON")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    health = subparsers.add_parser("health", help="check API health")
+    health.set_defaults(func=cmd_health)
 
     analyze = subparsers.add_parser("analyze-news", help="analyze one crypto news/event text")
     analyze.add_argument("text")
@@ -321,6 +348,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    if args.base_url:
+        os.environ["CRYPTO_RISK_API_BASE"] = args.base_url
+    if args.timeout:
+        os.environ["CRYPTO_RISK_TIMEOUT"] = str(args.timeout)
     payload = args.func(args)
     emit(payload, args.json)
     return 0

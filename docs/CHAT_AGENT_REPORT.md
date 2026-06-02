@@ -2,6 +2,8 @@
 
 这份文档用于向导师汇报项目中的 `chat_agent`。重点不是泛泛介绍 Multi-Agent，而是结合当前代码说明：用户输入如何进入系统、每个 Agent 做什么、prompt 如何约束模型、结构化状态如何流转，以及为什么要加入规则校准。
 
+当前 LangGraph 结构图与 Mermaid 源文件见：[CHAT_AGENT_LANGGRAPH.md](CHAT_AGENT_LANGGRAPH.md)。
+
 ## 1. 一句话介绍
 
 `chat_agent` 是一个面向加密货币金融风控的聊天式 Multi-Agent 工作流。

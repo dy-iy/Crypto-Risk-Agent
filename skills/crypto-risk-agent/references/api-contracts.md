@@ -4,6 +4,16 @@ Base URL defaults to `https://kassa-wiki.top`.
 
 All public app endpoints are under `/api/...` except backend health/root internals. Nginx maps `/api/` to the FastAPI backend.
 
+## Health
+
+`GET /health`
+
+Response:
+
+```json
+{"status":"ok"}
+```
+
 ## Analyze News
 
 `POST /api/chat`
@@ -44,6 +54,31 @@ Response:
 }
 ```
 
+Important `data` fields:
+- `summary`: short event summary.
+- `has_risk`: whether risk was detected.
+- `risk_status`: `confirmed`, `suspected`, or `uncertain`.
+- `risk_score` / `final_risk_score`: 0-100 risk score. Prefer `final_risk_score` when non-zero.
+- `risk_level`: Chinese risk level, usually `低风险`, `中风险`, or `高风险`.
+- `confidence_level`: model/report confidence.
+- `risk_categories`, `primary_category`, `secondary_categories`: risk classification.
+- `supporting_evidence`, `counter_evidence`, `evidence`, `evidence_items`: evidence views. Use concise evidence in user-facing summaries.
+- `missing_info`, `missing_information`, `unverified_claims`, `overclaiming_risks`: uncertainty and missing facts.
+- `affected_entities`, `affected_assets`, `impact`, `structured_impact`: impact scope.
+- `advice`, `priority`, `action_type`: recommended handling.
+- `chat_agent_result`: detailed chat-agent internals for debugging and advanced explanations.
+
+## Analyze News Stream
+
+`POST /api/chat/stream`
+
+Request is the same as `/api/chat`. Response is Server-Sent Events:
+- `progress`: workflow progress event
+- `result`: final `ChatResponse`
+- `error`: failure detail
+
+Use the normal `/api/chat` endpoint for scripted skill calls unless the user specifically needs progress streaming.
+
 ## Risk Assistant
 
 `POST /api/risk-assistant`
@@ -55,6 +90,19 @@ Request:
 ```
 
 Use this for follow-up explanation when the user asks why a score is high, how to respond, or how to interpret an existing report.
+
+Additional request fields accepted by the backend:
+- `selected_text`: quoted text from a page selection.
+- `user_question`: question typed after selecting text.
+- `context_type`: typed source such as news, coin, report, or portfolio page.
+- `page_context`: page metadata including `path`, `page_type`, `news_id`, `symbol`, and `title`.
+- `use_portfolio_context`: whether portfolio context should be considered.
+
+## Risk Assistant Stream
+
+`POST /api/risk-assistant/stream`
+
+Server-Sent Events stream of answer chunks. Prefer `/api/risk-assistant` for the bundled script.
 
 ## Ranking Overview
 
@@ -94,6 +142,8 @@ Each item usually includes:
 
 Use `limit=0` to fetch all ranked news when filtering locally.
 
+For "high-risk news", fetch with `limit=0` and filter by `risk_score` locally. The bundled script's `high-risk-news` command does this.
+
 ## News Detail
 
 `GET /api/rankings/news/{news_id}?date=24h`
@@ -127,6 +177,10 @@ Symbol matching is case-insensitive.
 Start async update:
 
 `POST /api/rankings/update-news/jobs`
+
+Legacy synchronous-style update endpoint:
+
+`POST /api/rankings/update-news`
 
 Get current update job:
 

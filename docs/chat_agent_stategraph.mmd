@@ -1,0 +1,31 @@
+%% chat_agent simplified LangGraph flow
+%% Source: backend/app/agents/chat_agent/graph.py
+%% Render:
+%% ./frontend/node_modules/.bin/mmdc -i docs/chat_agent_stategraph.mmd -o docs/chat_agent_graph/chat_agent_stategraph.png -b transparent -s 2 -p docs/chat_agent_graph/puppeteer-config.json
+
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Inter, Arial, sans-serif","primaryColor":"#eef2ff","primaryTextColor":"#1f2937","primaryBorderColor":"#4f46e5","lineColor":"#475569","secondaryColor":"#ecfeff","tertiaryColor":"#f8fafc"}}}%%
+flowchart LR
+    input_stage["输入解析<br/>标准化文本 + 规则信号扫描"]
+    route_gate{"风险路由<br/>低风险快出或深度分析"}
+    fast_exit["低风险复核<br/>确认后快速给出低风险结论"]
+    deep_analysis["深度风险分析<br/>按风险类型抽取证据并评分"]
+    decision_stage["决策校准<br/>合并评分 + 冲突校验 + 上下限保护"]
+    final_context["影响与建议<br/>影响对象、传导路径、处置建议"]
+    report_stage["报告输出<br/>生成前端结构化风险报告"]
+
+    input_stage --> route_gate
+    route_gate -->|低风险| fast_exit --> final_context
+    route_gate -->|疑似风险| deep_analysis --> decision_stage --> final_context
+    final_context --> report_stage
+
+    classDef stage fill:#eff6ff,color:#172554,stroke:#2563eb,stroke-width:2px;
+    classDef router fill:#fff7ed,color:#7c2d12,stroke:#f97316,stroke-width:2px;
+    classDef llm fill:#f5f3ff,color:#3b0764,stroke:#7c3aed,stroke-width:2px;
+    classDef decision fill:#ecfdf5,color:#064e3b,stroke:#059669,stroke-width:2px;
+    classDef report fill:#fdf2f8,color:#831843,stroke:#db2777,stroke-width:2px;
+
+    class input_stage stage;
+    class route_gate router;
+    class fast_exit,deep_analysis,final_context llm;
+    class decision_stage decision;
+    class report_stage report;
