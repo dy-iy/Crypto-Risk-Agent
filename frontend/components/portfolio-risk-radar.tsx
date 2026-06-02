@@ -10,15 +10,22 @@ import {
   fetchCoinRanking,
   fetchCurrentPortfolioRefreshJob,
   fetchPortfolioMarket,
+  fetchPortfolioImpact,
   fetchPortfolioNews,
   fetchPortfolioRefreshJob,
   fetchPortfolioRisk,
   fetchPortfolioWatchlist,
   PortfolioMarketCandle,
+  PortfolioImpactAsset,
+  PortfolioImpactEvent,
+  PortfolioImpactResponse,
+  PortfolioExposureBucket,
+  PortfolioExposureMode,
   PortfolioNewsItem,
   PortfolioRefreshJob,
   PortfolioRiskLevel,
   PortfolioWatchlistItem,
+  PortfolioWatchlistPayload,
   startPortfolioRefreshJob,
   updatePortfolioWatchlistItem,
 } from "@/lib/api";
@@ -35,7 +42,11 @@ type HoldingFormState = {
   alertThreshold: string;
   amount: string;
   avgBuyPrice: string;
+  customExposurePct: string;
+  exposureBucket: PortfolioExposureBucket;
+  exposureMode: PortfolioExposureMode;
   isHolding: boolean;
+  isWatched: boolean;
 };
 
 const portfolioZoomPresets = [
@@ -182,6 +193,18 @@ const portfolioMiniChartSpec = {
 };
 const portfolioCoinCandidateCacheKey = "cryptorisk.portfolio-coin-candidates:v1";
 const portfolioRefreshJobStorageKey = "cryptorisk.portfolio-refresh-job-id";
+const popularAssets = [
+  { name: "Bitcoin", symbol: "BTCUSDT" },
+  { name: "Ethereum", symbol: "ETHUSDT" },
+  { name: "Solana", symbol: "SOLUSDT" },
+  { name: "BNB", symbol: "BNBUSDT" },
+  { name: "XRP", symbol: "XRPUSDT" },
+  { name: "Cardano", symbol: "ADAUSDT" },
+  { name: "Dogecoin", symbol: "DOGEUSDT" },
+  { name: "Avalanche", symbol: "AVAXUSDT" },
+  { name: "Chainlink", symbol: "LINKUSDT" },
+  { name: "Polkadot", symbol: "DOTUSDT" },
+];
 
 const emptyAddForm: AddFormState = {
   alertThreshold: "70",
@@ -196,7 +219,11 @@ function defaultHoldingForm(item: PortfolioWatchlistItem | null): HoldingFormSta
     alertThreshold: String(item?.alert_threshold ?? 70),
     amount: item?.amount ? String(item.amount) : "",
     avgBuyPrice: item?.avg_buy_price ? String(item.avg_buy_price) : "",
+    customExposurePct: item?.custom_exposure_pct ? String(Math.round(item.custom_exposure_pct * 100)) : "",
+    exposureBucket: item?.exposure_bucket || (item?.is_holding ? "medium" : "none"),
+    exposureMode: item?.exposure_mode || "bucket",
     isHolding: Boolean(item?.is_holding),
+    isWatched: item?.is_watched ?? Boolean(item),
   };
 }
 
@@ -206,6 +233,7 @@ export default function PortfolioRiskRadar() {
   const [selectedSymbol, setSelectedSymbol] = useState("");
   const [candles, setCandles] = useState<PortfolioMarketCandle[]>([]);
   const [newsItems, setNewsItems] = useState<PortfolioNewsItem[]>([]);
+  const [portfolioImpact, setPortfolioImpact] = useState<PortfolioImpactResponse | null>(null);
   const [riskSnapshot, setRiskSnapshot] = useState<CoinRiskSnapshot | null>(null);
   const [coinCandidates, setCoinCandidates] = useState<CoinRankingItem[]>(() => readCachedPortfolioCoinCandidates());
   const [loading, setLoading] = useState(true);
@@ -233,6 +261,10 @@ export default function PortfolioRiskRadar() {
     () => buildPortfolioRiskEvents(newsItems, candles, riskSnapshot),
     [candles, newsItems, riskSnapshot]
   );
+  const selectedImpactAsset = useMemo(
+    () => portfolioImpact?.assets.find((item) => item.assetSymbol === selectedSymbol) || null,
+    [portfolioImpact, selectedSymbol]
+  );
   const addSymbolCandidates = useMemo(
     () => buildPortfolioCoinCandidates(coinCandidates, watchlist),
     [coinCandidates, watchlist]
@@ -250,10 +282,12 @@ export default function PortfolioRiskRadar() {
     async function loadInitialWatchlist() {
       try {
         const items = await fetchPortfolioWatchlist();
+        const impactData = await fetchPortfolioImpact().catch(() => null);
         if (ignore) return;
         const requestedSymbol = readRequestedPortfolioSymbol();
         const nextSymbol = items.find((item) => item.symbol === requestedSymbol)?.symbol || items[0]?.symbol || "";
         setWatchlist(items);
+        setPortfolioImpact(impactData);
         setLastUpdated(formatNow());
         setSelectedSymbol(nextSymbol);
         setHoldingForm(defaultHoldingForm(items.find((item) => item.symbol === nextSymbol) || null));
@@ -270,6 +304,27 @@ export default function PortfolioRiskRadar() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    async function handleUserAssetsUpdated() {
+      try {
+        const items = await fetchPortfolioWatchlist();
+        const impactData = await fetchPortfolioImpact().catch(() => null);
+        if (!mountedRef.current) return;
+        setWatchlist(items);
+        setPortfolioImpact(impactData);
+        setLastUpdated(formatNow());
+        const nextSymbol = items.find((item) => item.symbol === selectedSymbol)?.symbol || items[0]?.symbol || "";
+        setSelectedSymbol(nextSymbol);
+        setHoldingForm(defaultHoldingForm(items.find((item) => item.symbol === nextSymbol) || null));
+      } catch (fetchError) {
+        console.error(fetchError);
+      }
+    }
+
+    window.addEventListener("cryptorisk:user-assets-updated", handleUserAssetsUpdated);
+    return () => window.removeEventListener("cryptorisk:user-assets-updated", handleUserAssetsUpdated);
+  }, [selectedSymbol]);
 
   useEffect(() => {
     let ignore = false;
@@ -415,9 +470,11 @@ export default function PortfolioRiskRadar() {
 
   async function reloadPortfolioAfterRefresh() {
     const items = await fetchPortfolioWatchlist();
+    const impactData = await fetchPortfolioImpact().catch(() => null);
     const nextSymbol = selectedSymbol || items[0]?.symbol || "";
     if (!mountedRef.current) return;
     setWatchlist(items);
+    if (impactData) setPortfolioImpact(impactData);
     setHoldingForm(defaultHoldingForm(items.find((item) => item.symbol === nextSymbol) || null));
     if (nextSymbol) await loadSymbolDetail(nextSymbol);
   }
@@ -430,7 +487,10 @@ export default function PortfolioRiskRadar() {
     try {
       await createPortfolioWatchlistItem({
         symbol,
+        is_watched: true,
         is_holding: addForm.isHolding,
+        exposure_bucket: addForm.isHolding ? "medium" : "none",
+        exposure_mode: "bucket",
         amount: toNumber(addForm.amount),
         avg_buy_price: toNumber(addForm.avgBuyPrice),
         alert_threshold: Math.round(toNumber(addForm.alertThreshold, 70)),
@@ -438,7 +498,9 @@ export default function PortfolioRiskRadar() {
       setAddForm(emptyAddForm);
       setAddOpen(false);
       const items = await fetchPortfolioWatchlist();
+      const impactData = await fetchPortfolioImpact().catch(() => null);
       setWatchlist(items);
+      if (impactData) setPortfolioImpact(impactData);
       const normalized = normalizeInputSymbol(symbol);
       const nextSymbol = items.find((item) => item.symbol === normalized)?.symbol || items[0]?.symbol || "";
       setSelectedSymbol(nextSymbol);
@@ -451,25 +513,60 @@ export default function PortfolioRiskRadar() {
 
   async function handleSaveHolding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedItem) return;
+    const symbol = selectedItem?.symbol || selectedSymbol;
+    if (!symbol) return;
     setSavingHolding(true);
     setDetailError("");
+    const payload = {
+      is_watched: holdingForm.isWatched || holdingForm.isHolding,
+      is_holding: holdingForm.isHolding,
+      exposure_mode: holdingForm.exposureMode,
+      exposure_bucket: holdingForm.isHolding && holdingForm.exposureMode === "bucket" && holdingForm.exposureBucket === "none" ? "medium" as const : holdingForm.exposureBucket,
+      custom_exposure_pct: holdingForm.exposureMode === "custom" ? toNumber(holdingForm.customExposurePct) / 100 : null,
+      amount: toNumber(holdingForm.amount),
+      avg_buy_price: toNumber(holdingForm.avgBuyPrice),
+      alert_threshold: Math.round(toNumber(holdingForm.alertThreshold, 70)),
+    };
     try {
-      await updatePortfolioWatchlistItem(selectedItem.symbol, {
-        is_holding: holdingForm.isHolding,
-        amount: toNumber(holdingForm.amount),
-        avg_buy_price: toNumber(holdingForm.avgBuyPrice),
-        alert_threshold: Math.round(toNumber(holdingForm.alertThreshold, 70)),
-      });
+      if (selectedItem) {
+        await updatePortfolioWatchlistItem(symbol, payload);
+      } else {
+        await createPortfolioWatchlistItem({ symbol, ...payload });
+      }
       const items = await fetchPortfolioWatchlist();
       setWatchlist(items);
-      setHoldingForm(defaultHoldingForm(items.find((item) => item.symbol === selectedItem.symbol) || null));
-      await loadSymbolDetail(selectedItem.symbol);
+      setHoldingForm(defaultHoldingForm(items.find((item) => item.symbol === symbol) || null));
+      const impactData = await fetchPortfolioImpact().catch(() => null);
+      if (impactData) setPortfolioImpact(impactData);
+      await loadSymbolDetail(symbol);
     } catch (saveError) {
       console.error(saveError);
       setDetailError("持仓设置保存失败，请稍后重试。");
     } finally {
       setSavingHolding(false);
+    }
+  }
+
+  async function updateAssetPreference(symbol: string, updates: Partial<PortfolioWatchlistPayload>) {
+    const normalized = normalizeInputSymbol(symbol);
+    const existing = watchlist.find((item) => item.symbol === normalized);
+    setDetailError("");
+    try {
+      if (existing) {
+        await updatePortfolioWatchlistItem(normalized, updates);
+      } else {
+        await createPortfolioWatchlistItem({ symbol: normalized, is_watched: true, ...updates });
+      }
+      const items = await fetchPortfolioWatchlist();
+      const impactData = await fetchPortfolioImpact().catch(() => null);
+      setWatchlist(items);
+      if (impactData) setPortfolioImpact(impactData);
+      setSelectedSymbol(normalized);
+      setHoldingForm(defaultHoldingForm(items.find((item) => item.symbol === normalized) || null));
+      await loadSymbolDetail(normalized);
+    } catch (updateError) {
+      console.error(updateError);
+      setDetailError("资产偏好保存失败，请稍后重试。");
     }
   }
 
@@ -479,8 +576,10 @@ export default function PortfolioRiskRadar() {
     try {
       await deletePortfolioWatchlistItem(symbol);
       const nextItems = await fetchPortfolioWatchlist();
+      const impactData = await fetchPortfolioImpact().catch(() => null);
       const nextSymbol = nextItems[0]?.symbol || "";
       setWatchlist(nextItems);
+      if (impactData) setPortfolioImpact(impactData);
       setSelectedSymbol(nextSymbol);
       setHoldingForm(defaultHoldingForm(nextItems.find((item) => item.symbol === nextSymbol) || null));
       if (!nextSymbol) {
@@ -566,7 +665,11 @@ export default function PortfolioRiskRadar() {
       alertThreshold: holdingForm.alertThreshold,
       amount: formatPlainNumber(nextAmount),
       avgBuyPrice: formatPlainNumber(nextAvg),
+      customExposurePct: holdingForm.customExposurePct,
+      exposureBucket: nextAmount > 0 ? holdingForm.exposureBucket === "none" ? "medium" : holdingForm.exposureBucket : "none",
+      exposureMode: nextAmount > 0 ? "exact" : "bucket",
       isHolding: nextAmount > 0,
+      isWatched: true,
     };
     const marker: PortfolioTradeMarker = {
       candle_index: tradeDraft.candle_index,
@@ -582,7 +685,11 @@ export default function PortfolioRiskRadar() {
     setDetailError("");
     try {
       await updatePortfolioWatchlistItem(selectedItem.symbol, {
+        is_watched: true,
         is_holding: nextForm.isHolding,
+        exposure_bucket: nextForm.exposureBucket,
+        exposure_mode: nextForm.exposureMode,
+        custom_exposure_pct: nextForm.exposureMode === "custom" ? toNumber(nextForm.customExposurePct) / 100 : null,
         amount: toNumber(nextForm.amount),
         avg_buy_price: toNumber(nextForm.avgBuyPrice),
         alert_threshold: Math.round(toNumber(nextForm.alertThreshold, 70)),
@@ -595,8 +702,10 @@ export default function PortfolioRiskRadar() {
         fetchPortfolioWatchlist(),
         fetchPortfolioRisk(selectedItem.symbol),
       ]);
+      const impactData = await fetchPortfolioImpact().catch(() => null);
       setWatchlist(items);
       setRiskSnapshot(riskData);
+      if (impactData) setPortfolioImpact(impactData);
       setHoldingForm(defaultHoldingForm(items.find((item) => item.symbol === selectedItem.symbol) || null));
     } catch (tradeError) {
       console.error(tradeError);
@@ -657,24 +766,28 @@ export default function PortfolioRiskRadar() {
 
       {loading ? (
         <LoadingPanel text="正在加载个人资产风险雷达" />
-      ) : watchlist.length ? (
+      ) : watchlist.length || coinCandidates.length ? (
         <>
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-            <WatchlistPanel
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[300px_minmax(0,1fr)_380px]">
+            <AssetSelectorSidebar
+              candidates={coinCandidates}
               items={watchlist}
-              onDelete={handleDeleteSymbol}
+              onCancelHolding={(symbol) => updateAssetPreference(symbol, { is_holding: false, exposure_bucket: "none" })}
+              onMarkHolding={(symbol) => updateAssetPreference(symbol, { is_holding: true, is_watched: true, exposure_mode: "bucket", exposure_bucket: "medium" })}
+              onRemoveWatch={handleDeleteSymbol}
               onSelect={(symbol) => {
                 setSelectedSymbol(symbol);
                 setHoldingForm(defaultHoldingForm(watchlist.find((item) => item.symbol === symbol) || null));
               }}
-              selectedSymbol={selectedItem?.symbol || ""}
+              onWatch={(symbol) => updateAssetPreference(symbol, { is_watched: true, is_holding: false, exposure_bucket: "none" })}
+              selectedSymbol={selectedSymbol}
             />
 
             <section className="min-w-0 rounded-lg border border-slate-200/70 bg-white p-3 shadow-sm sm:p-4">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Market Candles</p>
-                  <h2 className="mt-1 text-lg font-bold text-slate-950">{selectedItem?.symbol || "--"} 15m 实时行情</h2>
+                  <h2 className="mt-1 text-lg font-bold text-slate-950">{selectedSymbol || "--"} 15m 实时行情</h2>
                 </div>
                 <span className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
                   {candles[0]?.source === "binance_public" ? "Binance public" : "Fallback mock"}
@@ -715,15 +828,16 @@ export default function PortfolioRiskRadar() {
 
             <RiskSummaryPanel
               form={holdingForm}
+              impactAsset={selectedImpactAsset}
               onChangeForm={setHoldingForm}
               onSubmit={handleSaveHolding}
               saving={savingHolding}
-              snapshot={riskSnapshot}
+              selectedSymbol={selectedSymbol}
               watchItem={selectedItem}
             />
           </div>
 
-          <RelatedNewsSection items={newsItems} selectedSymbol={selectedItem?.symbol || ""} />
+          <RelatedNewsSection impactAsset={selectedImpactAsset} items={newsItems} selectedSymbol={selectedItem?.symbol || ""} />
         </>
       ) : (
         <EmptyPortfolio onAdd={() => setAddOpen(true)} />
@@ -870,138 +984,111 @@ function PortfolioKpiCard({
   );
 }
 
-function WatchlistPanel({
+function AssetSelectorSidebar({
+  candidates,
   items,
-  onDelete,
+  onCancelHolding,
+  onMarkHolding,
+  onRemoveWatch,
   onSelect,
+  onWatch,
   selectedSymbol,
 }: {
+  candidates: CoinRankingItem[];
   items: PortfolioWatchlistItem[];
-  onDelete: (symbol: string) => void;
+  onCancelHolding: (symbol: string) => void;
+  onMarkHolding: (symbol: string) => void;
+  onRemoveWatch: (symbol: string) => void;
   onSelect: (symbol: string) => void;
+  onWatch: (symbol: string) => void;
   selectedSymbol: string;
 }) {
-  const [deleteMode, setDeleteMode] = useState(false);
-  const [sortMode, setSortMode] = useState<WatchlistSortMode>("risk");
-  const [alertsOnly, setAlertsOnly] = useState(false);
-  const sortedItems = useMemo(() => {
-    const base = alertsOnly
-      ? items.filter((item) => item.risk_score >= item.alert_threshold || ["high", "critical"].includes(item.risk_level))
-      : items;
-    return [...base].sort((a, b) => {
-      if (sortMode === "loss") return a.floating_pnl_rate - b.floating_pnl_rate;
-      if (sortMode === "value") return (b.market_value || 0) - (a.market_value || 0);
-      if (sortMode === "volatility") return Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0);
-      return (b.risk_score || 0) - (a.risk_score || 0);
+  const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<"all" | "watched" | "holding">("all");
+  const assetItems = useMemo(() => {
+    const bySymbol = new Map<string, {
+      name: string;
+      ranking?: CoinRankingItem;
+      symbol: string;
+      watch?: PortfolioWatchlistItem;
+    }>();
+    popularAssets.forEach((asset) => bySymbol.set(asset.symbol, { ...asset }));
+    candidates.slice(0, 40).forEach((candidate) => {
+      bySymbol.set(candidate.symbol, {
+        name: candidate.name || candidate.symbol.replace(/USDT$/, ""),
+        ranking: candidate,
+        symbol: candidate.symbol,
+      });
     });
-  }, [alertsOnly, items, sortMode]);
+    items.forEach((watch) => {
+      bySymbol.set(watch.symbol, {
+        name: bySymbol.get(watch.symbol)?.name || watch.base_asset,
+        ranking: bySymbol.get(watch.symbol)?.ranking,
+        symbol: watch.symbol,
+        watch,
+      });
+    });
+    const normalizedQuery = query.trim().toUpperCase();
+    return Array.from(bySymbol.values())
+      .filter((item) => {
+        if (scope === "watched" && !item.watch?.is_watched) return false;
+        if (scope === "holding" && !item.watch?.is_holding) return false;
+        if (!normalizedQuery) return true;
+        return item.symbol.includes(normalizedQuery) || item.name.toUpperCase().includes(normalizedQuery);
+      })
+      .sort((a, b) => {
+        const aHolding = a.watch?.is_holding ? 1 : 0;
+        const bHolding = b.watch?.is_holding ? 1 : 0;
+        if (aHolding !== bHolding) return bHolding - aHolding;
+        const aWatched = a.watch?.is_watched ? 1 : 0;
+        const bWatched = b.watch?.is_watched ? 1 : 0;
+        if (aWatched !== bWatched) return bWatched - aWatched;
+        return (b.watch?.risk_score || b.ranking?.final_score || 0) - (a.watch?.risk_score || a.ranking?.final_score || 0);
+      });
+  }, [candidates, items, query, scope]);
 
   return (
     <aside className="min-w-0 rounded-lg border border-slate-200/70 bg-white p-3 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Asset Risk Board</p>
-          <h2 className="mt-1 text-base font-bold text-slate-950">资产风险榜</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{sortedItems.length}</span>
+      <div className="mb-3">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Asset Selector</p>
+        <h2 className="mt-1 text-base font-bold text-slate-950">快速添加资产</h2>
+      </div>
+      <AssetSearchInput query={query} onChange={setQuery} />
+      <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+        {([
+          ["all", "热门资产"],
+          ["watched", "我的关注"],
+          ["holding", "我的持仓"],
+        ] as const).map(([key, label]) => (
           <button
-            aria-pressed={deleteMode}
-            aria-label={deleteMode ? "关闭删除模式" : "管理自选币种"}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-md border text-xs transition-colors duration-200 ${
-              deleteMode
-                ? "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"
-                : "border-slate-200 bg-white text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+            aria-pressed={scope === key}
+            className={`h-8 rounded-md text-xs font-bold transition-colors duration-200 ${
+              scope === key ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-white hover:text-blue-700"
             }`}
-            onClick={() => setDeleteMode((value) => !value)}
+            key={key}
+            onClick={() => setScope(key)}
             type="button"
           >
-            <TrashIcon />
+            {label}
           </button>
-        </div>
+        ))}
       </div>
-      <div className="mb-3 space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          {([
-            ["risk", "按风险"],
-            ["loss", "按亏损"],
-            ["value", "按持仓"],
-            ["volatility", "按波动"],
-          ] as Array<[WatchlistSortMode, string]>).map(([mode, label]) => (
-            <button
-              aria-pressed={sortMode === mode}
-              className={`h-8 rounded-md border text-xs font-bold transition-colors duration-200 ${
-                sortMode === mode ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-700"
-              }`}
-              key={mode}
-              onClick={() => setSortMode(mode)}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <label className="flex h-8 items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-600">
-          只看有预警资产
-          <input
-            checked={alertsOnly}
-            className="h-4 w-4 accent-blue-600"
-            onChange={(event) => setAlertsOnly(event.target.checked)}
-            type="checkbox"
+      <div className="risk-scroll mt-3 grid max-h-[calc(100vh-310px)] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-1">
+        {assetItems.map((item) => (
+          <AssetListItem
+            key={item.symbol}
+            item={item}
+            onCancelHolding={onCancelHolding}
+            onMarkHolding={onMarkHolding}
+            onRemoveWatch={onRemoveWatch}
+            onSelect={onSelect}
+            onWatch={onWatch}
+            selected={item.symbol === selectedSymbol}
           />
-        </label>
-      </div>
-      <div className="risk-scroll grid max-h-[calc(100vh-330px)] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-1">
-        {sortedItems.map((item) => {
-          const selected = item.symbol === selectedSymbol;
-          const alertCount = item.risk_score >= item.alert_threshold ? 1 : 0;
-          return (
-            <article
-              key={item.symbol}
-              className={`group relative rounded-lg border p-3 transition-colors duration-200 ${deleteMode ? "pr-10" : ""} ${
-                selected ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/60"
-              }`}
-            >
-              <button type="button" onClick={() => onSelect(item.symbol)} className="w-full text-left">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <CoinAvatar symbol={item.base_asset} />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-slate-950">{item.symbol}</p>
-                        <p className="text-xs text-slate-500">{item.is_holding ? "已设置持仓" : "仅关注"}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <RiskBadge level={item.risk_level} score={item.risk_score} />
-                </div>
-                <div className="mt-3 flex items-end justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">{formatUsdt(item.current_price)}</p>
-                    <p className={`mt-1 text-xs font-bold ${item.price_change_24h >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                      {formatPercent(item.price_change_24h)} ｜ 持仓 {formatUsdt(item.market_value || 0)}
-                    </p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">预警 {alertCount} ｜ 阈值 {item.alert_threshold}</p>
-                  </div>
-                  <AssetSparkline item={item} />
-                </div>
-              </button>
-              {deleteMode ? (
-                <button
-                  type="button"
-                  onClick={() => onDelete(item.symbol)}
-                  aria-label={`从自选币种移除 ${item.symbol}`}
-                  className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-100 bg-white text-rose-600 shadow-sm transition-colors duration-200 hover:bg-rose-50"
-                >
-                  <TrashIcon />
-                </button>
-              ) : null}
-            </article>
-          );
-        })}
-        {!sortedItems.length ? (
+        ))}
+        {!assetItems.length ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-            当前筛选下暂无资产。
+            没有匹配资产。
           </div>
         ) : null}
       </div>
@@ -1009,115 +1096,310 @@ function WatchlistPanel({
   );
 }
 
+function AssetSearchInput({ onChange, query }: { onChange: (value: string) => void; query: string }) {
+  return (
+    <label className="block">
+      <span className="sr-only">搜索资产</span>
+      <input
+        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition-colors duration-200 placeholder:text-slate-400 hover:bg-blue-50/40 focus:border-blue-300"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="搜索 BTC、Bitcoin、ETH、SOL"
+        value={query}
+      />
+    </label>
+  );
+}
+
+function AssetListItem({
+  item,
+  onCancelHolding,
+  onMarkHolding,
+  onRemoveWatch,
+  onSelect,
+  onWatch,
+  selected,
+}: {
+  item: {
+    name: string;
+    ranking?: CoinRankingItem;
+    symbol: string;
+    watch?: PortfolioWatchlistItem;
+  };
+  onCancelHolding: (symbol: string) => void;
+  onMarkHolding: (symbol: string) => void;
+  onRemoveWatch: (symbol: string) => void;
+  onSelect: (symbol: string) => void;
+  onWatch: (symbol: string) => void;
+  selected: boolean;
+}) {
+  const watch = item.watch;
+  const score = watch?.risk_score || item.ranking?.final_score || 0;
+  const isWatched = Boolean(watch?.is_watched);
+  const isHolding = Boolean(watch?.is_holding);
+  return (
+    <article className={`rounded-lg border p-3 transition-colors duration-200 ${selected ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
+      <button className="w-full text-left" onClick={() => onSelect(item.symbol)} type="button">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <CoinAvatar symbol={item.symbol.replace(/USDT$/, "")} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-slate-950">{item.symbol}</p>
+              <p className="truncate text-xs text-slate-500">{item.name}</p>
+            </div>
+          </div>
+          <span className={`rounded-lg px-2 py-1 text-xs font-bold ${score >= 80 ? "bg-red-50 text-red-700" : score >= 60 ? "bg-orange-50 text-orange-700" : "bg-blue-50 text-blue-700"}`}>
+            {score ? `风险 ${score}` : "待监控"}
+          </span>
+        </div>
+        <p className="mt-2 text-xs font-semibold text-slate-500">
+          {isHolding ? `已持仓 · ${formatExposureBucket(watch?.exposure_bucket || "medium")}` : isWatched ? "已关注" : "未关注"}
+        </p>
+      </button>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {isWatched ? (
+          <button className="h-8 rounded-md border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-600" onClick={() => onRemoveWatch(item.symbol)} type="button">
+            移除关注
+          </button>
+        ) : (
+          <button className="h-8 rounded-md border border-blue-100 bg-blue-50 text-xs font-bold text-blue-700 hover:bg-blue-100" onClick={() => onWatch(item.symbol)} type="button">
+            加入关注
+          </button>
+        )}
+        {isHolding ? (
+          <button className="h-8 rounded-md border border-emerald-100 bg-white text-xs font-bold text-emerald-700 hover:bg-emerald-50" onClick={() => onCancelHolding(item.symbol)} type="button">
+            取消持仓
+          </button>
+        ) : (
+          <button className="h-8 rounded-md bg-emerald-700 text-xs font-bold text-white hover:bg-emerald-800" onClick={() => onMarkHolding(item.symbol)} type="button">
+            标记为持仓
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
 function RiskSummaryPanel({
   form,
+  impactAsset,
   onChangeForm,
   onSubmit,
   saving,
-  snapshot,
+  selectedSymbol,
   watchItem,
 }: {
   form: HoldingFormState;
+  impactAsset: PortfolioImpactAsset | null;
   onChangeForm: (value: HoldingFormState) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   saving: boolean;
-  snapshot: CoinRiskSnapshot | null;
+  selectedSymbol: string;
   watchItem: PortfolioWatchlistItem | null;
 }) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const symbol = watchItem?.symbol || selectedSymbol;
   const threshold = Math.round(toNumber(form.alertThreshold, watchItem?.alert_threshold || 70));
-  const riskScore = snapshot?.risk_score ?? watchItem?.risk_score ?? 0;
-  const thresholdTriggered = riskScore >= threshold;
-  const pnl = watchItem?.floating_pnl || 0;
-  const pnlRate = watchItem?.floating_pnl_rate || 0;
-  const holdingDays = watchItem?.created_at ? Math.max(1, Math.round((Date.now() - Date.parse(watchItem.created_at)) / 86_400_000)) : 0;
-  const riskSources = buildRiskSources(snapshot, watchItem, thresholdTriggered);
+  const topImpactEvent = impactAsset?.topEvents[0] || null;
+  const impactScore = topImpactEvent?.portfolioImpactScore || 0;
+  const thresholdTriggered = impactScore >= threshold;
+  if (!symbol) {
+    return (
+      <aside className="min-w-0 rounded-lg border border-dashed border-slate-200 bg-white p-6 text-center shadow-sm xl:sticky xl:top-4 xl:self-start">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+          <CoinAvatar symbol="?" />
+        </div>
+        <h2 className="mt-4 text-lg font-bold text-slate-950">从左侧选择一个资产</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">加入关注或标记为持仓后，系统会计算个人资产影响分。</p>
+      </aside>
+    );
+  }
 
   return (
     <aside className="min-w-0 rounded-lg border border-slate-200/70 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:self-start">
-      <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Asset Holding Panel</p>
+        <h2 className="mt-1 text-lg font-bold text-slate-950">{symbol} 持仓配置</h2>
+      </div>
+
+      <form className="mt-4 space-y-4 rounded-lg border border-blue-100 bg-blue-50/50 p-3" onSubmit={onSubmit}>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            aria-pressed={form.isWatched}
+            className={`h-9 rounded-lg border text-xs font-bold transition-colors duration-200 ${form.isWatched ? "border-blue-600 bg-blue-600 text-white" : "border-blue-100 bg-white text-blue-700 hover:bg-blue-50"}`}
+            onClick={() => onChangeForm({ ...form, isWatched: !form.isWatched || form.isHolding })}
+            type="button"
+          >
+            {form.isWatched ? "已关注" : "加入关注"}
+          </button>
+          <button
+            aria-pressed={form.isHolding}
+            className={`h-9 rounded-lg border text-xs font-bold transition-colors duration-200 ${form.isHolding ? "border-emerald-700 bg-emerald-700 text-white" : "border-emerald-100 bg-white text-emerald-700 hover:bg-emerald-50"}`}
+            onClick={() => onChangeForm({
+              ...form,
+              exposureBucket: form.exposureBucket === "none" ? "medium" : form.exposureBucket,
+              exposureMode: form.exposureMode || "bucket",
+              isHolding: !form.isHolding,
+              isWatched: true,
+            })}
+            type="button"
+          >
+            {form.isHolding ? "已持仓" : "标记为持仓"}
+          </button>
+        </div>
+
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Decision Panel</p>
-          <h2 className="mt-1 text-lg font-bold text-slate-950">当前资产风险摘要</h2>
-        </div>
-        {snapshot ? <RiskBadge level={snapshot.risk_level} score={snapshot.risk_score} /> : null}
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <InfoTile label="当前仓位" value={watchItem?.is_holding ? `${formatNumber(watchItem.amount || 0, 6)} ${watchItem.base_asset}` : "仅关注"} />
-        <InfoTile label="当前盈亏" value={`${formatUsdt(pnl)} / ${formatPercent(pnlRate)}`} tone={pnl >= 0 ? "up" : "down"} />
-        <InfoTile label="持仓天数" value={holdingDays ? `${holdingDays} 天` : "--"} />
-        <InfoTile label="相关新闻" value={`${snapshot?.related_news_count || 0} 条`} />
-      </div>
-
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold text-slate-500">风险雷达</p>
-            <p className="mt-1 text-sm font-bold text-slate-950">综合风险 {riskScore}/100</p>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs font-bold text-slate-500">选择持仓档位</p>
+            <span className="text-xs font-semibold text-slate-400">不确定数量？先选档位</span>
           </div>
-          <RiskRadarMini snapshot={snapshot} watchItem={watchItem} />
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-2">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">主要风险来源</p>
-        {riskSources.map((source) => (
-          <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2" key={source.label}>
-            <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${source.tone}`} />
-            <div>
-              <p className="text-sm font-bold text-slate-900">{source.label}</p>
-              <p className="mt-0.5 text-xs leading-5 text-slate-500">{source.detail}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/70 p-3">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-700">风险提醒</p>
-        <p className="mt-2 text-sm leading-6 text-slate-700">
-          当前 AI 风险分 {riskScore}/100，提醒线为 {threshold}。达到提醒线后，系统只提示关注，不生成调仓动作。
-        </p>
-        <button
-          className="mt-3 h-9 w-full rounded-lg border border-blue-200 bg-white text-xs font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-50"
-          type="button"
-        >
-          设置风险提醒
-        </button>
-      </div>
-
-      <form className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3" onSubmit={onSubmit}>
-        <label className="flex items-center justify-between gap-3 text-sm font-bold text-slate-700">
-          标记为持仓
-          <input
-            checked={form.isHolding}
-            onChange={(event) => onChangeForm({ ...form, isHolding: event.target.checked })}
-            className="h-4 w-4 accent-emerald-700"
-            type="checkbox"
+          <ExposureBucketSelector
+            bucket={form.exposureBucket}
+            disabled={!form.isHolding}
+            onChange={(bucket) => onChangeForm({ ...form, exposureBucket: bucket, exposureMode: "bucket", isHolding: bucket !== "none" || form.isHolding, isWatched: true })}
           />
-        </label>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-          <PortfolioInput label="持有数量" value={form.amount} onChange={(value) => onChangeForm({ ...form, amount: value })} />
-          <PortfolioInput label="买入均价" value={form.avgBuyPrice} onChange={(value) => onChangeForm({ ...form, avgBuyPrice: value })} />
-          <PortfolioInput label="AI 风险分提醒线" value={form.alertThreshold} onChange={(value) => onChangeForm({ ...form, alertThreshold: value })} />
         </div>
+
+        <PortfolioInput label="个人影响分提醒线" value={form.alertThreshold} onChange={(value) => onChangeForm({ ...form, alertThreshold: value })} />
+
+        <AdvancedHoldingSettings
+          form={form}
+          onChange={onChangeForm}
+          onToggle={() => setAdvancedOpen((value) => !value)}
+          open={advancedOpen}
+          symbol={symbol}
+        />
+
         <div className={`rounded-lg border px-3 py-2 text-xs leading-5 ${thresholdTriggered ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-500"}`}>
-          {thresholdTriggered ? "当前 AI 风险分已达到提醒线，建议检查相关新闻和持仓敞口。" : "提醒线按 AI 风险分触发，用来提示关注风险，不是价格止损或自动卖出。"}
+          {thresholdTriggered
+            ? `当前 ${symbol.replace(/USDT$/, "")} 对你的持仓影响分已达到提醒线，建议检查相关新闻和持仓敞口。`
+            : "提醒线按个人资产影响分触发，用来提示关注风险。"}
         </div>
         <button
           type="submit"
-          disabled={saving || !watchItem}
+          disabled={saving}
           className="h-10 w-full rounded-lg bg-blue-600 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700 disabled:opacity-60"
         >
-          {saving ? "保存中" : "保存持仓设置"}
+          {saving ? "保存中" : "保存设置"}
         </button>
       </form>
 
-      <div className="mt-4 space-y-3">
-        <TextBlock title="AI 风险解释" text={snapshot?.ai_summary || "等待刷新后生成币种级风险解释。"} />
-        <TextBlock title="持仓影响" text={snapshot?.holding_impact || "设置持仓后会计算当前价值、浮动盈亏和敞口影响。"} />
-        <TextBlock title="AI 建议" text={snapshot?.ai_advice || "暂无建议。"} />
+      <div className="mt-4 rounded-lg border border-orange-100 bg-orange-50/70 p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-700">Portfolio Impact</p>
+            <h3 className="mt-1 text-base font-bold text-slate-950">个人资产影响分</h3>
+          </div>
+          <span className="shrink-0 rounded-lg bg-white px-3 py-2 text-2xl font-bold text-orange-700">
+            {topImpactEvent ? topImpactEvent.portfolioImpactScore : "--"}
+          </span>
+        </div>
+        {topImpactEvent ? (
+          <div className="mt-3">
+            <p className="line-clamp-2 text-sm font-bold leading-6 text-slate-950">{topImpactEvent.title}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              对 {impactAsset?.assetSymbol || symbol} 持仓影响 · 仓位 {formatPercent(impactAsset?.holdingPct || 0)}
+            </p>
+            <ul className="mt-3 space-y-1.5 text-xs leading-5 text-slate-600">
+              {topImpactEvent.reasons.slice(0, 3).map((reason) => (
+                <li className="flex gap-2" key={reason}>
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
+                  <span>{reason}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            当前没有与实际持仓强相关的高影响事件；高新闻风险但未持仓的事件不会在这里高亮。
+          </p>
+        )}
       </div>
     </aside>
+  );
+}
+
+function ExposureBucketSelector({
+  bucket,
+  disabled,
+  onChange,
+}: {
+  bucket: PortfolioExposureBucket;
+  disabled?: boolean;
+  onChange: (bucket: PortfolioExposureBucket) => void;
+}) {
+  const options: Array<[PortfolioExposureBucket, string, string]> = [
+    ["low", "轻仓", "约 5%"],
+    ["medium", "中仓", "约 15%"],
+    ["high", "重仓", "约 30%"],
+    ["none", "未持仓", "0%"],
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {options.map(([value, label, helper]) => (
+        <button
+          aria-pressed={bucket === value}
+          className={`min-h-12 rounded-lg border px-3 py-2 text-left transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
+            bucket === value
+              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+              : "border-slate-200 bg-white text-slate-600 hover:bg-blue-50"
+          }`}
+          disabled={disabled && value !== "none"}
+          key={value}
+          onClick={() => onChange(value)}
+          type="button"
+        >
+          <span className="block text-sm font-bold">{label}</span>
+          <span className="mt-0.5 block text-xs font-semibold opacity-70">{helper}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AdvancedHoldingSettings({
+  form,
+  onChange,
+  onToggle,
+  open,
+  symbol,
+}: {
+  form: HoldingFormState;
+  onChange: (form: HoldingFormState) => void;
+  onToggle: () => void;
+  open: boolean;
+  symbol: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white">
+      <button
+        className="flex h-10 w-full items-center justify-between px-3 text-sm font-bold text-slate-700 transition-colors duration-200 hover:bg-blue-50"
+        onClick={onToggle}
+        type="button"
+      >
+        高级设置
+        <span className="text-xs text-slate-400">{open ? "收起" : "展开"}</span>
+      </button>
+      {open ? (
+        <div className="space-y-3 border-t border-slate-100 p-3">
+          <p className="text-xs leading-5 text-slate-500">填写数量和均价后，影响分会更准确；也可以直接填自定义仓位占比。</p>
+          <PortfolioInput
+            label={`持有数量${symbol ? `（${symbol.replace(/USDT$/, "")}）` : ""}`}
+            value={form.amount}
+            onChange={(value) => onChange({ ...form, amount: value, exposureMode: value ? "exact" : form.exposureMode })}
+          />
+          <PortfolioInput
+            label="买入均价"
+            value={form.avgBuyPrice}
+            onChange={(value) => onChange({ ...form, avgBuyPrice: value })}
+          />
+          <PortfolioInput
+            label="自定义仓位占比（%）"
+            value={form.customExposurePct}
+            onChange={(value) => onChange({ ...form, customExposurePct: value, exposureMode: value ? "custom" : "bucket" })}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1922,8 +2204,21 @@ function PortfolioEventAnalysisModal({
   );
 }
 
-function RelatedNewsSection({ items, selectedSymbol }: { items: PortfolioNewsItem[]; selectedSymbol: string }) {
+function RelatedNewsSection({
+  impactAsset,
+  items,
+  selectedSymbol,
+}: {
+  impactAsset: PortfolioImpactAsset | null;
+  items: PortfolioNewsItem[];
+  selectedSymbol: string;
+}) {
   const [filter, setFilter] = useState<"all" | "high" | "holding" | "recent">("all");
+  const impactByEventId = useMemo(() => {
+    const map = new Map<string, PortfolioImpactEvent>();
+    impactAsset?.topEvents.forEach((event) => map.set(event.eventId, event));
+    return map;
+  }, [impactAsset]);
   const filteredItems = useMemo(() => {
     const now = Date.now();
     return items.filter((item) => {
@@ -1936,7 +2231,14 @@ function RelatedNewsSection({ items, selectedSymbol }: { items: PortfolioNewsIte
       return true;
     });
   }, [filter, items, selectedSymbol]);
-  const sortedItems = useMemo(() => [...filteredItems].sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0)), [filteredItems]);
+  const sortedItems = useMemo(() => {
+    return [...filteredItems].sort((a, b) => {
+      const impactDelta = (impactByEventId.get(b.news_id)?.portfolioImpactScore || 0) - (impactByEventId.get(a.news_id)?.portfolioImpactScore || 0);
+      if (impactDelta) return impactDelta;
+      return (b.risk_score || 0) - (a.risk_score || 0);
+    });
+  }, [filteredItems, impactByEventId]);
+  const topImpactEvents = impactAsset?.topEvents || [];
 
   return (
     <section className="rounded-lg border border-slate-200/70 bg-white shadow-sm">
@@ -1967,12 +2269,46 @@ function RelatedNewsSection({ items, selectedSymbol }: { items: PortfolioNewsIte
         </div>
       </div>
       <div className="p-4 sm:p-5">
+        {topImpactEvents.length ? (
+          <div className="mb-4 rounded-lg border border-orange-100 bg-orange-50/70 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-700">Portfolio Impact Score</p>
+                <h3 className="mt-1 text-base font-bold text-slate-950">
+                  对你的 {impactAsset?.assetSymbol} 持仓影响最大的事件
+                </h3>
+              </div>
+              <span className="rounded-lg bg-white px-3 py-2 text-sm font-bold text-orange-700">
+                仓位 {formatPercent(impactAsset?.holdingPct || 0)}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-3">
+              {topImpactEvents.slice(0, 3).map((event) => (
+                <div className="rounded-lg bg-white p-3" key={event.eventId}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="line-clamp-2 text-sm font-bold leading-6 text-slate-950">{event.title}</p>
+                    <span className="shrink-0 text-2xl font-bold text-orange-700">{event.portfolioImpactScore}</span>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    新闻风险 {event.eventRiskScore}/100 · 关联度 {event.assetRelationScore}
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+                    {event.reasons.slice(0, 2).map((reason) => (
+                      <li className="line-clamp-1" key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {sortedItems.length ? (
           <div className="risk-scroll overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-[920px] text-left text-sm">
+            <table className="w-full min-w-[1040px] text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-500">
                 <tr>
-                  <th className="w-24 px-3 py-3 text-center">风险分</th>
+                  <th className="w-28 px-3 py-3 text-center">个人影响分</th>
+                  <th className="w-24 px-3 py-3 text-center">新闻风险</th>
                   <th className="min-w-[320px] px-3 py-3">新闻</th>
                   <th className="min-w-[150px] px-3 py-3">风险类别</th>
                   <th className="min-w-[260px] px-3 py-3">关联原因</th>
@@ -1980,9 +2316,20 @@ function RelatedNewsSection({ items, selectedSymbol }: { items: PortfolioNewsIte
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sortedItems.slice(0, 12).map((item) => (
+                {sortedItems.slice(0, 12).map((item) => {
+                  const impact = impactByEventId.get(item.news_id);
+                  return (
                   <tr key={item.news_id} className="transition-colors duration-200 hover:bg-blue-50/40">
-                    <td className={`px-3 py-3 text-center text-lg font-bold ${item.risk_score >= 80 ? "text-rose-600" : item.risk_score >= 50 ? "text-orange-600" : "text-amber-600"}`}>
+                    <td className="px-3 py-3 text-center">
+                      {impact ? (
+                        <span className="inline-flex h-10 min-w-12 items-center justify-center rounded-lg bg-orange-50 px-3 text-lg font-bold text-orange-700">
+                          {impact.portfolioImpactScore}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-400">未持仓相关</span>
+                      )}
+                    </td>
+                    <td className={`px-3 py-3 text-center text-sm font-bold ${item.risk_score >= 80 ? "text-rose-600" : item.risk_score >= 50 ? "text-orange-600" : "text-slate-500"}`}>
                       {item.risk_score}
                     </td>
                     <td className="px-3 py-3">
@@ -1998,11 +2345,16 @@ function RelatedNewsSection({ items, selectedSymbol }: { items: PortfolioNewsIte
                       <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{formatPortfolioRiskType(item.risk_type || "综合风险")}</span>
                     </td>
                     <td className="px-3 py-3 text-xs leading-5 text-slate-600">
-                      <span className="line-clamp-2">{item.matched_reason || item.evidence || `与 ${selectedSymbol} 风险快照相关。`}</span>
+                      <span className="line-clamp-2">
+                        {impact
+                          ? impact.reasons.slice(0, 2).join("；")
+                          : item.matched_reason || item.evidence || `与 ${selectedSymbol} 风险快照相关。`}
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-xs font-semibold text-slate-500">{item.published_at || "--"}</td>
                   </tr>
-                ))}
+                );
+                })}
               </tbody>
             </table>
           </div>
@@ -2163,43 +2515,12 @@ function PortfolioMetric({ helper, label, value }: { helper?: string; label: str
   );
 }
 
-function InfoTile({ label, tone, value }: { label: string; tone?: "up" | "down"; value: string }) {
-  const toneClass = tone === "up" ? "text-emerald-600" : tone === "down" ? "text-rose-600" : "text-slate-950";
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
-      <p className="text-xs font-bold text-slate-500">{label}</p>
-      <p className={`mt-1 truncate text-sm font-bold ${toneClass}`}>{value}</p>
-    </div>
-  );
-}
-
 function TextBlock({ text, title }: { text: string; title: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
       <p className="text-xs font-bold text-slate-500">{title}</p>
       <p className="mt-1 text-sm leading-6 text-slate-700">{text}</p>
     </div>
-  );
-}
-
-function RiskRadarMini({ snapshot, watchItem }: { snapshot: CoinRiskSnapshot | null; watchItem: PortfolioWatchlistItem | null }) {
-  const values = buildRiskRadarValues(snapshot, watchItem);
-  const points = values.map((value, index) => {
-    const angle = (-90 + index * 60) * Math.PI / 180;
-    const radius = 10 + (value.value / 100) * 38;
-    return `${50 + Math.cos(angle) * radius},${50 + Math.sin(angle) * radius}`;
-  }).join(" ");
-  return (
-    <svg className="h-24 w-24 shrink-0" viewBox="0 0 100 100" aria-label="资产风险雷达图">
-      {[24, 38, 50].map((radius) => (
-        <circle key={radius} cx="50" cy="50" fill="none" r={radius} stroke="#cbd5e1" strokeDasharray="2 4" strokeWidth="1" />
-      ))}
-      {values.map((_, index) => {
-        const angle = (-90 + index * 60) * Math.PI / 180;
-        return <line key={index} stroke="#e2e8f0" strokeWidth="1" x1="50" x2={50 + Math.cos(angle) * 48} y1="50" y2={50 + Math.sin(angle) * 48} />;
-      })}
-      <polygon fill="#2563eb" opacity="0.16" points={points} stroke="#2563eb" strokeLinejoin="round" strokeWidth="2" />
-    </svg>
   );
 }
 
@@ -2234,15 +2555,6 @@ function Notice({ text, tone }: { text: string; tone: "red" | "amber" }) {
   return <div className={`rounded-lg border px-4 py-3 text-sm font-semibold ${style}`}>{text}</div>;
 }
 
-function RiskBadge({ level, score }: { level: PortfolioRiskLevel; score: number }) {
-  const style = riskLevelStyle(level);
-  return (
-    <span className={`inline-flex shrink-0 items-center rounded-lg border px-2.5 py-1 text-xs font-bold ${style}`}>
-      {formatRiskLevel(level)} {score ? `${score}` : "--"}
-    </span>
-  );
-}
-
 function CoinAvatar({ symbol }: { symbol: string }) {
   return (
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">
@@ -2262,13 +2574,6 @@ function AssetSparkline({ item }: { item: PortfolioWatchlistItem }) {
   );
 }
 
-function riskLevelStyle(level: PortfolioRiskLevel) {
-  if (level === "critical") return "border-red-300 bg-red-900 text-white";
-  if (level === "high") return "border-orange-200 bg-orange-50 text-orange-700";
-  if (level === "medium") return "border-amber-200 bg-amber-50 text-amber-700";
-  return "border-emerald-200 bg-emerald-50 text-emerald-700";
-}
-
 function formatRiskLevel(level: PortfolioRiskLevel) {
   const labels: Record<PortfolioRiskLevel, string> = {
     low: "安全",
@@ -2277,6 +2582,15 @@ function formatRiskLevel(level: PortfolioRiskLevel) {
     critical: "预警",
   };
   return labels[level];
+}
+
+function formatExposureBucket(bucket: PortfolioExposureBucket) {
+  return {
+    high: "重仓",
+    low: "轻仓",
+    medium: "中仓",
+    none: "未持仓",
+  }[bucket];
 }
 
 function buildPortfolioRiskEvents(
@@ -2310,74 +2624,6 @@ function buildPortfolioDecisionAdvice(averageRisk: number, highRiskCount: number
   if (averageRisk >= 75 || highRiskCount >= 2) return "降低仓位";
   if (warningCount > 0 || averageRisk >= 45 || pnlRate < -0.05) return "观察";
   return "可加仓";
-}
-
-function buildRiskSources(
-  snapshot: CoinRiskSnapshot | null,
-  watchItem: PortfolioWatchlistItem | null,
-  thresholdTriggered: boolean,
-) {
-  const priceChange = snapshot?.price_change_24h ?? watchItem?.price_change_24h ?? 0;
-  return [
-    {
-      detail: priceChange < 0 ? `24h 下跌 ${formatPercent(priceChange)}，短期趋势偏弱。` : `24h 变化 ${formatPercent(priceChange)}，趋势信号暂未恶化。`,
-      label: "技术面",
-      tone: priceChange < -0.03 ? "bg-orange-500" : "bg-blue-500",
-    },
-    {
-      detail: `${snapshot?.high_risk_news_count || 0} 条高风险新闻，${snapshot?.related_news_count || 0} 条相关新闻纳入分析。`,
-      label: "新闻面",
-      tone: (snapshot?.high_risk_news_count || 0) ? "bg-rose-500" : "bg-slate-400",
-    },
-    {
-      detail: Math.abs(priceChange) >= 0.04 ? "近 24h 波动扩大，需要关注支撑位和止损线。" : "波动暂处于可观察区间。",
-      label: "波动率",
-      tone: Math.abs(priceChange) >= 0.04 ? "bg-amber-500" : "bg-emerald-500",
-    },
-    {
-      detail: thresholdTriggered ? "AI 风险分已超过你设置的提醒阈值。" : "当前风险分未超过提醒阈值。",
-      label: "预警阈值",
-      tone: thresholdTriggered ? "bg-orange-500" : "bg-emerald-500",
-    },
-  ];
-}
-
-function buildDecisionActions(snapshot: CoinRiskSnapshot | null, watchItem: PortfolioWatchlistItem | null, threshold: number) {
-  const riskScore = snapshot?.risk_score ?? watchItem?.risk_score ?? 0;
-  const price = watchItem?.current_price || 0;
-  const softStop = price ? price * 0.97 : 0;
-  if (riskScore >= 80) {
-    return [
-      "保守：减仓 30%，先降低单资产敞口。",
-      softStop ? `中性：设置 ${formatNumber(softStop, 2)} 附近的风险提醒。` : "中性：设置价格与 AI 风险分双提醒。",
-      "激进：等待重新站上短期均线后再判断。",
-    ];
-  }
-  if (riskScore >= threshold || riskScore >= 50) {
-    return [
-      "保守：暂停新增仓位，等待风险分回落。",
-      softStop ? `中性：跌破 ${formatNumber(softStop, 2)} 时提醒我。` : "中性：开启阈值提醒并跟踪相关新闻。",
-      "激进：只在成交量回落且新闻面转中性后加仓。",
-    ];
-  }
-  return [
-    "保守：保持观察，维持当前仓位。",
-    "中性：保留 AI 风险分提醒线。",
-    "激进：若重新放量上行，再考虑增加仓位。",
-  ];
-}
-
-function buildRiskRadarValues(snapshot: CoinRiskSnapshot | null, watchItem: PortfolioWatchlistItem | null) {
-  const risk = snapshot?.risk_score ?? watchItem?.risk_score ?? 0;
-  const change = Math.abs(snapshot?.price_change_24h ?? watchItem?.price_change_24h ?? 0);
-  return [
-    { label: "技术", value: clampNumber(risk * 0.85 + change * 500, 0, 100) },
-    { label: "新闻", value: clampNumber((snapshot?.high_risk_news_count || 0) * 22 + (snapshot?.related_news_count || 0) * 2, 0, 100) },
-    { label: "波动", value: clampNumber(change * 900, 0, 100) },
-    { label: "流动性", value: clampNumber(risk * 0.55, 0, 100) },
-    { label: "集中", value: watchItem?.market_value ? clampNumber(35 + risk * 0.45, 0, 100) : 20 },
-    { label: "回撤", value: clampNumber(Math.abs(watchItem?.floating_pnl_rate || 0) * 700, 0, 100) },
-  ];
 }
 
 function buildChartDecisionText(

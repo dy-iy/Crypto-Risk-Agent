@@ -97,7 +97,10 @@ def _state_template() -> dict[str, Any]:
                 user_id=DEFAULT_USER_ID,
                 symbol=symbol,
                 base_asset=_base_asset(symbol),
+                is_watched=True,
                 is_holding=is_holding,
+                exposure_mode="exact" if is_holding and amount > 0 else "bucket",
+                exposure_bucket="medium" if is_holding and amount <= 0 else "none",
                 amount=amount,
                 avg_buy_price=avg_buy_price,
                 alert_threshold=threshold,
@@ -144,6 +147,8 @@ def _load_state_unlocked() -> dict[str, Any]:
     state.setdefault("candles", {})
     state.setdefault("news_links", [])
     state.setdefault("risk_snapshots", {})
+    state.setdefault("event_asset_relations", [])
+    state.setdefault("portfolio_impact_cache", {})
     return state
 
 
@@ -164,6 +169,10 @@ def _watch_items(user_id: str = DEFAULT_USER_ID) -> list[UserWatchlist]:
 def add_watchlist_item(payload: UserWatchlistCreate, user_id: str = DEFAULT_USER_ID) -> UserWatchlist:
     symbol = _normalize_symbol(payload.symbol)
     now = _now()
+    exposure_bucket = payload.exposure_bucket
+    exposure_mode = payload.exposure_mode
+    if payload.is_holding and exposure_mode == "bucket" and exposure_bucket == "none":
+        exposure_bucket = "medium"
     with _state_lock:
         state = _load_state_unlocked()
         items = state.get("watchlist", [])
@@ -173,6 +182,10 @@ def add_watchlist_item(payload: UserWatchlistCreate, user_id: str = DEFAULT_USER
                 updated = item.model_copy(
                     update={
                         "is_holding": payload.is_holding,
+                        "is_watched": payload.is_watched or payload.is_holding,
+                        "exposure_mode": exposure_mode,
+                        "exposure_bucket": exposure_bucket,
+                        "custom_exposure_pct": payload.custom_exposure_pct,
                         "amount": payload.amount,
                         "avg_buy_price": payload.avg_buy_price,
                         "alert_threshold": payload.alert_threshold,
@@ -188,7 +201,11 @@ def add_watchlist_item(payload: UserWatchlistCreate, user_id: str = DEFAULT_USER
             user_id=user_id,
             symbol=symbol,
             base_asset=_base_asset(symbol),
+            is_watched=payload.is_watched or payload.is_holding,
             is_holding=payload.is_holding,
+            exposure_mode=exposure_mode,
+            exposure_bucket=exposure_bucket,
+            custom_exposure_pct=payload.custom_exposure_pct,
             amount=payload.amount,
             avg_buy_price=payload.avg_buy_price,
             alert_threshold=payload.alert_threshold,
@@ -204,6 +221,12 @@ def update_watchlist_item(symbol: str, payload: UserWatchlistUpdate, user_id: st
     normalized = _normalize_symbol(symbol)
     now = _now()
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("is_holding") is True and updates.get("exposure_mode", "bucket") == "bucket" and updates.get("exposure_bucket", "none") == "none":
+        updates["exposure_bucket"] = "medium"
+    if updates.get("is_holding") is True:
+        updates["is_watched"] = True
+    if updates.get("is_watched") is False and updates.get("is_holding") is not False:
+        updates["is_watched"] = True
     with _state_lock:
         state = _load_state_unlocked()
         for index, raw_item in enumerate(state.get("watchlist", [])):

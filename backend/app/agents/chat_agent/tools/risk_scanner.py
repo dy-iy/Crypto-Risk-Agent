@@ -257,6 +257,13 @@ def has_any(text, kws):
     return any(k in t for k in kws)
 
 
+def has_illicit_fund_flow(text):
+    actor_terms = ["疑似黑客", "黑客", "钓鱼活动", "钓鱼资金", "攻击者", "被盗资金", "赃款", "非法资金", "黑客地址"]
+    flow_terms = ["链上监测", "地址", "资金", "买入", "购入", "持续买入", "大额买入", "转入", "转出", "流入", "流出"]
+    impact_terms = ["明显影响", "价格影响", "市场价格", "价格产生", "抛压", "拉升", "波动", "市场影响"]
+    return has_any(text, actor_terms) and has_any(text, flow_terms) and (extract_usd_equiv(text) >= 1_000_000 or has_any(text, impact_terms))
+
+
 def extract_max_pct(text):
     mx = 0.0
     for m in PCT_RE.finditer(text or ""):
@@ -594,7 +601,8 @@ KW_WHALE_BEHAVIOUR = ["准备出售", "抛售", "清仓", "接近清仓", "大�
 
 
 def score_whale(text):
-    if has_any(text, NEG_WHALE_FALSE):
+    illicit_fund_flow = has_illicit_fund_flow(text)
+    if has_any(text, NEG_WHALE_FALSE) and not illicit_fund_flow:
         return 0.0
 
     position_discount = 1.0
@@ -622,6 +630,14 @@ def score_whale(text):
         return 0.02
 
     usd = extract_usd_equiv(text)
+    if illicit_fund_flow:
+        base = 0.58
+        if usd > 1_000_000:
+            base = clip01(0.58 + 0.18 * smooth_strength(usd, 1_000_000, 20_000_000))
+        if has_any(text, ["明显影响", "价格影响", "市场价格", "价格产生"]):
+            base = max(base, 0.62)
+        return base * position_discount
+
     # 行为触发：基础分0.45，金额门槛1M
     if has_any(text, KW_WHALE_BEHAVIOUR):
         base = 0.45
@@ -969,7 +985,10 @@ HIGH_RISK_FLOOR_RULES = {
         "trigger_score": 0.0,
         "groups": {
             "exploit": ["漏洞利用", "利用漏洞", "被利用", "exploit", "exploited"],
-            "security_event": ["安全事件", "攻击事件", "被黑", "黑客攻击", "遭受攻击", "合约异常"],
+            "security_event": ["安全事件", "攻击事件", "被黑", "黑客攻击", "遭受攻击", "合约异常", "黑客", "疑似黑客", "钓鱼活动"],
+            "illicit_funds": ["被盗资金", "钓鱼资金", "赃款", "非法资金", "黑客地址", "疑似黑客或钓鱼活动相关资金"],
+            "fund_flow": ["链上监测", "资金", "持续买入", "买入", "购入", "转入", "转出", "流入", "流出"],
+            "market_impact": ["明显影响", "价格影响", "市场价格", "价格产生"],
             "abnormal_mint": ["无限铸币", "无限铸造", "异常铸造", "未授权铸造", "非法铸造", "被铸造"],
             "pause_interaction": ["暂勿交互", "暂停交互", "暂勿与", "不要交互", "避免交互", "合约暂停"],
             "official_warning": ["官方提醒", "官方建议", "建议用户", "安全团队", "项目方回应", "在 X 平台回应"],
@@ -980,9 +999,12 @@ HIGH_RISK_FLOOR_RULES = {
         "floor": 65,
         "trigger_score": 0.0,
         "groups": {
+            "phishing": ["钓鱼", "钓鱼活动", "钓鱼资金", "假冒"],
+            "illicit_actor": ["疑似黑客", "黑客", "攻击者", "黑客地址"],
             "rug": ["Rug Pull", "rug pull", "跑路", "撤池", "抽走流动性"],
             "team": ["团队失联", "团队控制", "项目方失联", "社媒停更", "官网关闭"],
-            "funds": ["资金转移", "资金外流", "卷走", "被转出", "提款异常"],
+            "funds": ["资金转移", "资金外流", "卷走", "被转出", "提款异常", "资金", "持续买入", "购入", "买入"],
+            "market_impact": ["明显影响", "价格影响", "市场价格", "价格产生"],
             "warning": ["官方提醒", "用户预警", "社区预警", "安全团队"],
         },
         "reason": "诈骗/跑路强信号组合",
@@ -1057,10 +1079,10 @@ HIGH_RISK_FLOOR_RULES = {
         "floor": 61,
         "trigger_score": 0.40,
         "groups": {
-            "whale": ["巨鲸", "大户", "鲸鱼地址", "大额转账"],
-            "exchange": ["转入交易所", "流入交易所", "交易所充值", "向交易所转入"],
+            "whale": ["巨鲸", "大户", "鲸鱼地址", "大额转账", "疑似黑客", "黑客地址", "钓鱼活动相关资金"],
+            "exchange": ["转入交易所", "流入交易所", "交易所充值", "向交易所转入", "链上监测"],
             "scale": ["大额", "巨额", "多笔", "连续", "集中"],
-            "market": ["抛售压力", "出货", "价格承压", "流动性冲击"],
+            "market": ["抛售压力", "出货", "价格承压", "流动性冲击", "明显影响", "市场价格", "价格产生"],
         },
         "reason": "巨鲸/链上流向强信号组合",
     },
@@ -1375,7 +1397,7 @@ def scan_fast_signals(text: str) -> SignalScanResult:
     if medium_count >= 3:
         suggested_top_k = 3
     if high_count >= 3:
-        suggested_top_k = 4
+        suggested_top_k = 3
 
     return SignalScanResult(
         positive_signals=positive,

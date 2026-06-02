@@ -63,6 +63,9 @@ backend/app/data/*.tmp
 backend/app/data/*.bak
 backend/app/data/auth.sqlite3
 backend/app/data/auth.sqlite3-*
+backend/app/data/analysis_reports.sqlite3
+backend/app/data/analysis_reports.sqlite3-*
+backend/app/data/update_jobs.json
 
 # Tooling caches
 .cache/

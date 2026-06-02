@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
@@ -17,6 +17,7 @@ FEE_RATE = 0.001
 INTERVAL_MINUTES = 15
 LOOKBACK_DAYS = 7
 KLINE_COUNT = LOOKBACK_DAYS * 24 * 60 // INTERVAL_MINUTES
+DEFAULT_SIM_ACCOUNT_ID = "demo_user"
 SYMBOLS = [
     "BTCUSDT",
     "ETHUSDT",
@@ -81,8 +82,21 @@ class Position:
     avg_cost: float = 0.0
 
 
+@dataclass
+class SimAccountState:
+    current_index: int = 0
+    cash: float = INITIAL_CASH
+    positions: dict[str, Position] = field(default_factory=dict)
+    trade_history: list[dict[str, Any]] = field(default_factory=list)
+
+
 class SimError(ValueError):
     pass
+
+
+def _normalize_account_id(account_id: str | None) -> str:
+    normalized = str(account_id or DEFAULT_SIM_ACCOUNT_ID).strip()
+    return normalized or DEFAULT_SIM_ACCOUNT_ID
 
 
 def _normalize_symbol(symbol: str) -> str:
@@ -290,15 +304,13 @@ class SimEngine:
         self.klines = {symbol: _load_symbol_klines(symbol) for symbol in SYMBOLS}
         self.max_index = min(len(items) for items in self.klines.values()) - 1
         self.risk_events_by_index = self._load_risk_events_by_index()
-        self.reset()
+        self._accounts: dict[str, SimAccountState] = {}
 
-    def reset(self) -> dict[str, Any]:
+    def reset(self, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> dict[str, Any]:
         with self._lock:
-            self.current_index = 0
-            self.cash = INITIAL_CASH
-            self.positions: dict[str, Position] = {}
-            self.trade_history: list[dict[str, Any]] = []
-            return self._state_unlocked()
+            account = SimAccountState()
+            self._accounts[_normalize_account_id(account_id)] = account
+            return self._state_unlocked(account)
 
     def symbols(self) -> list[dict[str, str]]:
         return [
@@ -310,14 +322,21 @@ class SimEngine:
             for symbol in SYMBOLS
         ]
 
-    def next(self) -> dict[str, Any]:
+    def next(self, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> dict[str, Any]:
         with self._lock:
-            if self.current_index < self.max_index:
-                self.current_index += 1
-            return self._state_unlocked()
+            account = self._account_unlocked(account_id)
+            if account.current_index < self.max_index:
+                account.current_index += 1
+            return self._state_unlocked(account)
 
-    def jump(self, index: int | None = None, target_time: str | None = None) -> dict[str, Any]:
+    def jump(
+        self,
+        index: int | None = None,
+        target_time: str | None = None,
+        account_id: str | None = DEFAULT_SIM_ACCOUNT_ID,
+    ) -> dict[str, Any]:
         with self._lock:
+            account = self._account_unlocked(account_id)
             if index is None and target_time:
                 parsed_time = _parse_news_time(target_time)
                 if not parsed_time:
@@ -329,26 +348,28 @@ class SimEngine:
             if index is None:
                 raise SimError("Jump target is required")
 
-            self.current_index = max(0, min(self.max_index, int(index)))
-            return self._state_unlocked()
+            account.current_index = max(0, min(self.max_index, int(index)))
+            return self._state_unlocked(account)
 
-    def state(self) -> dict[str, Any]:
+    def state(self, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> dict[str, Any]:
         with self._lock:
-            return self._state_unlocked()
+            return self._state_unlocked(self._account_unlocked(account_id))
 
-    def candles(self, symbol: str) -> list[dict[str, Any]]:
+    def candles(self, symbol: str, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> list[dict[str, Any]]:
         normalized = _normalize_symbol(symbol)
         with self._lock:
+            account = self._account_unlocked(account_id)
             return [
                 self._public_candle(item)
-                for item in self.klines[normalized][: self.current_index + 1]
+                for item in self.klines[normalized][: account.current_index + 1]
             ]
 
-    def events(self, symbol: str) -> list[dict[str, Any]]:
+    def events(self, symbol: str, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> list[dict[str, Any]]:
         normalized = _normalize_symbol(symbol)
         with self._lock:
+            account = self._account_unlocked(account_id)
             events = []
-            for index in range(self.current_index + 1):
+            for index in range(account.current_index + 1):
                 for event in self.risk_events_by_index.get(index, []):
                     if normalized in event.get("affected_symbols", []):
                         events.append(event)
@@ -358,34 +379,47 @@ class SimEngine:
                 reverse=True,
             )
 
-    def buy(self, symbol: str, amount_usdt: float) -> dict[str, Any]:
+    def buy(
+        self,
+        symbol: str,
+        amount_usdt: float,
+        account_id: str | None = DEFAULT_SIM_ACCOUNT_ID,
+    ) -> dict[str, Any]:
         normalized = _normalize_symbol(symbol)
         amount = _float(amount_usdt)
         if amount <= 0:
             raise SimError("Buy amount must be greater than 0")
 
         with self._lock:
-            price = self._price_unlocked(normalized)
+            account = self._account_unlocked(account_id)
+            price = self._price_unlocked(normalized, account)
             fee = amount * FEE_RATE
             total_cost = amount + fee
-            if total_cost > self.cash + 1e-9:
+            if total_cost > account.cash + 1e-9:
                 raise SimError("Insufficient cash balance")
 
             quantity = amount / price
-            position = self.positions.get(normalized, Position())
+            position = account.positions.get(normalized, Position())
             existing_cost = position.quantity * position.avg_cost
             new_quantity = position.quantity + quantity
             new_avg_cost = (existing_cost + amount) / new_quantity
-            self.positions[normalized] = Position(quantity=new_quantity, avg_cost=new_avg_cost)
-            self.cash -= total_cost
-            self._append_trade_unlocked(normalized, "BUY", price, quantity, amount, fee)
-            return self._state_unlocked()
+            account.positions[normalized] = Position(quantity=new_quantity, avg_cost=new_avg_cost)
+            account.cash -= total_cost
+            self._append_trade_unlocked(account, normalized, "BUY", price, quantity, amount, fee)
+            return self._state_unlocked(account)
 
-    def sell(self, symbol: str, quantity: float | str | None = None, amount: str | None = None) -> dict[str, Any]:
+    def sell(
+        self,
+        symbol: str,
+        quantity: float | str | None = None,
+        amount: str | None = None,
+        account_id: str | None = DEFAULT_SIM_ACCOUNT_ID,
+    ) -> dict[str, Any]:
         normalized = _normalize_symbol(symbol)
 
         with self._lock:
-            position = self.positions.get(normalized, Position())
+            account = self._account_unlocked(account_id)
+            position = account.positions.get(normalized, Position())
             if position.quantity <= 0:
                 raise SimError("No position to sell")
 
@@ -399,24 +433,33 @@ class SimEngine:
             if sell_quantity > position.quantity + 1e-12:
                 raise SimError("Insufficient position quantity")
 
-            price = self._price_unlocked(normalized)
+            price = self._price_unlocked(normalized, account)
             gross = sell_quantity * price
             fee = gross * FEE_RATE
-            self.cash += gross - fee
+            account.cash += gross - fee
             remaining = position.quantity - sell_quantity
             if remaining <= 1e-12:
-                self.positions.pop(normalized, None)
+                account.positions.pop(normalized, None)
             else:
-                self.positions[normalized] = Position(quantity=remaining, avg_cost=position.avg_cost)
+                account.positions[normalized] = Position(quantity=remaining, avg_cost=position.avg_cost)
 
-            self._append_trade_unlocked(normalized, "SELL", price, sell_quantity, gross, fee)
-            return self._state_unlocked()
+            self._append_trade_unlocked(account, normalized, "SELL", price, sell_quantity, gross, fee)
+            return self._state_unlocked(account)
 
-    def _price_unlocked(self, symbol: str) -> float:
-        return float(self.klines[symbol][self.current_index]["close"])
+    def _account_unlocked(self, account_id: str | None) -> SimAccountState:
+        normalized = _normalize_account_id(account_id)
+        account = self._accounts.get(normalized)
+        if not account:
+            account = SimAccountState()
+            self._accounts[normalized] = account
+        return account
+
+    def _price_unlocked(self, symbol: str, account: SimAccountState) -> float:
+        return float(self.klines[symbol][account.current_index]["close"])
 
     def _append_trade_unlocked(
         self,
+        account: SimAccountState,
         symbol: str,
         side: str,
         price: float,
@@ -424,8 +467,8 @@ class SimEngine:
         amount_usdt: float,
         fee: float,
     ) -> None:
-        candle = self.klines[symbol][self.current_index]
-        self.trade_history.insert(
+        candle = self.klines[symbol][account.current_index]
+        account.trade_history.insert(
             0,
             {
                 "time": _iso_from_ms(int(candle["openTime"])),
@@ -438,10 +481,10 @@ class SimEngine:
             },
         )
 
-    def _state_unlocked(self) -> dict[str, Any]:
-        prices = {symbol: self._price_unlocked(symbol) for symbol in SYMBOLS}
+    def _state_unlocked(self, account: SimAccountState) -> dict[str, Any]:
+        prices = {symbol: self._price_unlocked(symbol, account) for symbol in SYMBOLS}
         positions = []
-        for symbol, position in self.positions.items():
+        for symbol, position in account.positions.items():
             current_price = prices[symbol]
             market_value = position.quantity * current_price
             cost = position.quantity * position.avg_cost
@@ -458,24 +501,24 @@ class SimEngine:
                 }
             )
 
-        total_asset = self.cash + sum(item["market_value"] for item in positions)
+        total_asset = account.cash + sum(item["market_value"] for item in positions)
         first_symbol = SYMBOLS[0]
-        sim_time = _iso_from_ms(int(self.klines[first_symbol][self.current_index]["openTime"]))
+        sim_time = _iso_from_ms(int(self.klines[first_symbol][account.current_index]["openTime"]))
         start_time = _iso_from_ms(int(self.klines[first_symbol][0]["openTime"]))
         end_time = _iso_from_ms(int(self.klines[first_symbol][self.max_index]["openTime"]))
         return {
-            "current_index": self.current_index,
+            "current_index": account.current_index,
             "max_index": self.max_index,
             "start_time": start_time,
             "end_time": end_time,
             "sim_time": sim_time,
-            "cash": round(self.cash, 8),
+            "cash": round(account.cash, 8),
             "positions": sorted(positions, key=lambda item: item["symbol"]),
             "prices": {symbol: round(price, 8) for symbol, price in prices.items()},
             "total_asset": round(total_asset, 8),
             "return_rate": round((total_asset - INITIAL_CASH) / INITIAL_CASH, 8),
-            "trade_history": self.trade_history,
-            "risk_events": self.risk_events_by_index.get(self.current_index, []),
+            "trade_history": list(account.trade_history),
+            "risk_events": self.risk_events_by_index.get(account.current_index, []),
         }
 
     def _load_risk_events_by_index(self) -> dict[int, list[dict[str, Any]]]:

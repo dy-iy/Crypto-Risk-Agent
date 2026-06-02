@@ -13,7 +13,13 @@ except ImportError:
     OpenAI = None  # type: ignore[assignment]
 
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+APP_DIR = Path(__file__).resolve().parent
+for env_path in [
+    APP_DIR.parents[1] / ".env",
+    APP_DIR.parent / ".env",
+    APP_DIR / ".env",
+]:
+    load_dotenv(env_path)
 
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")

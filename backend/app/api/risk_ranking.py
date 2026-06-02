@@ -1,5 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
+import json
+from pathlib import Path
 from threading import Lock, Thread
 from uuid import uuid4
 
@@ -13,6 +15,7 @@ from app.tools.ranking_tools import attach_coin_entities
 
 
 router = APIRouter(prefix="/api/rankings", tags=["ranking-agent"])
+UPDATE_JOBS_PATH = Path(__file__).resolve().parents[1] / "data" / "update_jobs.json"
 _update_lock = Lock()
 _jobs_lock = Lock()
 _scored_write_lock = Lock()
@@ -21,6 +24,36 @@ _update_jobs: dict[str, dict[str, object]] = {}
 
 def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _load_update_jobs() -> None:
+    if not UPDATE_JOBS_PATH.exists():
+        return
+    try:
+        raw = json.loads(UPDATE_JOBS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(raw, dict):
+        return
+    _update_jobs.update({
+        str(job_id): job
+        for job_id, job in raw.items()
+        if isinstance(job, dict)
+    })
+
+
+def _persist_update_jobs() -> None:
+    try:
+        UPDATE_JOBS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        UPDATE_JOBS_PATH.write_text(
+            json.dumps(_update_jobs, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        return
+
+
+_load_update_jobs()
 
 
 def _new_progress(label: str) -> dict[str, object]:
@@ -76,6 +109,7 @@ def _update_job(job_id: str, **updates: object) -> None:
             else:
                 job[key] = value
         job["updated_at"] = _now_text()
+        _persist_update_jobs()
 
 
 def _get_job(job_id: str) -> dict[str, object] | None:
@@ -405,6 +439,7 @@ def start_update_today_news_job():
     job_id = str(job["job_id"])
     with _jobs_lock:
         _update_jobs[job_id] = job
+        _persist_update_jobs()
 
     thread = Thread(target=_run_update_job, args=(job_id,), daemon=True)
     thread.start()

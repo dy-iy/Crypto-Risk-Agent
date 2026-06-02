@@ -8,6 +8,14 @@ def _compact(value: object, max_chars: int = 140) -> str:
     return " ".join(str(value or "").split())[:max_chars]
 
 
+def _clamp_score(value: object, default: int = 0) -> int:
+    try:
+        number = int(round(float(value)))
+    except (TypeError, ValueError):
+        number = default
+    return max(0, min(100, number))
+
+
 def _is_weak_context(context: dict[str, object]) -> bool:
     decision = context.get("decision") if isinstance(context.get("decision"), dict) else {}
     score = int(decision.get("risk_score") or 0) if isinstance(decision, dict) else 0
@@ -31,6 +39,63 @@ def _entity_list(context: dict[str, object], *keys: str) -> list[str]:
     return values[:6]
 
 
+def _score_breakdown_from_context(context: dict[str, object]) -> dict[str, int]:
+    decision = context.get("decision") if isinstance(context.get("decision"), dict) else {}
+    score = _clamp_score(decision.get("risk_score") if isinstance(decision, dict) else 0)
+    try:
+        confidence_raw = float(decision.get("confidence", 0) if isinstance(decision, dict) else 0)
+    except (TypeError, ValueError):
+        confidence_raw = 0
+    confidence = _clamp_score(confidence_raw * 100)
+    established = context.get("established_risk_type_branches")
+    branches = established if isinstance(established, list) else []
+    evidence_values = [
+        _clamp_score(branch.get("evidence_strength"))
+        for branch in branches
+        if isinstance(branch, dict) and branch.get("evidence_strength") is not None
+    ]
+    evidence_strength = max(evidence_values) if evidence_values else confidence
+    impact = context.get("impact_analysis") if isinstance(context.get("impact_analysis"), dict) else {}
+    impact_items = []
+    if isinstance(impact, dict):
+        for key in ("affected_assets", "affected_platforms", "affected_users", "impact_channels"):
+            value = impact.get(key)
+            if isinstance(value, list):
+                impact_items.extend(item for item in value if str(item or "").strip())
+    impact_scope = min(100, max(score if impact_items else score // 2, len(impact_items) * 12))
+    status = str(decision.get("risk_status") or "") if isinstance(decision, dict) else ""
+    urgency = score if status not in {"resolved_or_mitigated", "low_risk"} else min(score, 35)
+    reversibility = 20 if status == "resolved_or_mitigated" else max(10, min(95, score - 5 if score >= 60 else score // 2))
+    if _is_weak_context(context):
+        return {
+            "severity": min(score, 20),
+            "evidence_strength": min(evidence_strength, 35),
+            "impact_scope": min(impact_scope, 20),
+            "urgency": min(urgency, 20),
+            "reversibility": min(reversibility, 25),
+        }
+    return {
+        "severity": score,
+        "evidence_strength": evidence_strength,
+        "impact_scope": impact_scope,
+        "urgency": urgency,
+        "reversibility": reversibility,
+    }
+
+
+def _normalize_score_breakdown(raw: object, context: dict[str, object]) -> dict[str, int]:
+    fallback = _score_breakdown_from_context(context)
+    if not isinstance(raw, dict):
+        return fallback
+    return {
+        "severity": _clamp_score(raw.get("severity"), fallback["severity"]),
+        "evidence_strength": _clamp_score(raw.get("evidence_strength"), fallback["evidence_strength"]),
+        "impact_scope": _clamp_score(raw.get("impact_scope"), fallback["impact_scope"]),
+        "urgency": _clamp_score(raw.get("urgency"), fallback["urgency"]),
+        "reversibility": _clamp_score(raw.get("reversibility"), fallback["reversibility"]),
+    }
+
+
 def _weak_risk_advice(context: dict[str, object], source: str = "weak_risk_guard") -> dict[str, object]:
     assets = _entity_list(context, "coins", "tokens")
     platforms = _entity_list(context, "exchanges", "chains", "projects")
@@ -49,6 +114,8 @@ def _weak_risk_advice(context: dict[str, object], source: str = "weak_risk_guard
         "monitoring_items": monitoring_items[:6],
         "verification_needed": ["是否存在官方确认", "是否出现可量化损失", "是否影响用户资产"],
         "do_not_do": ["不要基于弱信号扩大处置范围", "不要给交易方向建议"],
+        "score_breakdown": _score_breakdown_from_context(context),
+        "score_breakdown_reason": "弱风险或未成立风险分支，仅保留低风险监测，影响范围和紧急度按保守低值处理。",
         "source": source,
     }
 
@@ -72,6 +139,8 @@ def _fallback_advice(context: dict[str, object], reason: str) -> dict[str, objec
         "monitoring_items": ["官方公告", "链上资金流向", "交易所状态页"],
         "verification_needed": ["事件时间线", "影响范围", "是否已有缓解措施"],
         "do_not_do": ["不要基于单条消息做交易决策"],
+        "score_breakdown": _score_breakdown_from_context(context),
+        "score_breakdown_reason": "LLM 不可用，按最终风险分、证据置信度和影响对象数量生成兜底评分拆解。",
         "source": "fallback",
         "reason": reason,
     }
@@ -89,6 +158,8 @@ def generate_risk_advice(context: dict[str, object]) -> dict[str, object]:
         priority = "medium"
     return {
         "priority": priority,
+        "score_breakdown": _normalize_score_breakdown(result.get("score_breakdown"), context),
+        "score_breakdown_reason": _compact(result.get("score_breakdown_reason"), 100),
         "recommended_actions": [_compact(item, 45) for item in list(result.get("recommended_actions") or [])[:6]],
         "monitoring_items": [_compact(item, 45) for item in list(result.get("monitoring_items") or [])[:6]],
         "verification_needed": [_compact(item, 45) for item in list(result.get("verification_needed") or [])[:6]],

@@ -6,12 +6,16 @@ from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from app.api.analysis_reports import router as analysis_reports_router
 from app.api.auth import router as auth_router
+from app.api.coin_library import router as coin_library_router
+from app.api.daily_report import router as daily_report_router
 from app.api.favorites import router as favorites_router
 from app.agents.chat_agent import run_chat_agent, run_chat_agent_with_progress
 from app.api.portfolio import router as portfolio_router
 from app.api.risk_ranking import router as risk_ranking_router
 from app.api.sim import router as sim_router
+from app.api.user_assets import router as user_assets_router
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -45,10 +49,14 @@ app.add_middleware(
 )
 
 app.include_router(risk_ranking_router)
+app.include_router(analysis_reports_router)
+app.include_router(coin_library_router)
 app.include_router(sim_router)
 app.include_router(portfolio_router)
 app.include_router(auth_router)
 app.include_router(favorites_router)
+app.include_router(daily_report_router)
+app.include_router(user_assets_router)
 
 
 @app.get("/")

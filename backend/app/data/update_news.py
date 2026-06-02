@@ -325,7 +325,8 @@ def fetch_binance_news(
                 {
                     "新闻id": _build_news_id(link, published_at, content, title),
                     "时间": published_at,
-                    "                    "内容": content,
+                    "标题": title,
+                    "内容": content,
                     "链接": link,
                 }
             )

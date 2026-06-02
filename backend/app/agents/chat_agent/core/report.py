@@ -45,21 +45,26 @@ def _branch_evidence_items(branches: list[dict[str, object]]) -> list[dict[str, 
     items: list[dict[str, str]] = []
     for branch in branches:
         category = str(branch.get("risk_name") or "综合风险")
-        explanations = [
-            str(branch.get("risk_type") or ""),
-            f"branch_score={branch.get('branch_score', 0)}",
-        ]
-        for text in branch.get("evidence_summary", []):
+        branch_score = branch.get("branch_score", 0)
+        explanation = f"风险类型：{category}；分支评分：{branch_score}"
+        summary_items = [str(text).strip() for text in branch.get("evidence_summary", []) if str(text).strip()]
+        if not summary_items:
+            fallback_text = str(branch.get("reasoning") or "").strip()
+            if not fallback_text:
+                missing = [str(item).strip() for item in branch.get("missing_evidence", []) if str(item).strip()]
+                fallback_text = "；".join(missing[:2]) if missing else "该风险类型未形成明确证据。"
+            summary_items = [fallback_text]
+        for text in summary_items:
             if not str(text).strip():
                 continue
             items.append(
                 {
                     "risk_category": category,
                     "evidence_text": str(text),
-                    "explanation": ",".join(explanations),
+                    "explanation": explanation,
                 }
             )
-    return items[:8]
+    return items
 
 
 def _impact(decision_score: int, category: str) -> list[str]:
@@ -119,6 +124,43 @@ def _llm_advice(final_context_agents: dict[str, object], fallback: list[str]) ->
     return actions[:7] or fallback
 
 
+def _clamp_score(value: object, default: int = 0) -> int:
+    try:
+        number = int(round(float(value)))
+    except (TypeError, ValueError):
+        number = default
+    return max(0, min(100, number))
+
+
+def _fallback_score_breakdown(severity: int, confidence_score: int) -> dict[str, int]:
+    return {
+        "severity": severity,
+        "evidence_strength": confidence_score,
+        "impact_scope": min(100, severity + 5 if severity >= 61 else severity),
+        "urgency": severity if severity >= 41 else max(10, severity - 5),
+        "reversibility": max(0, 100 - severity),
+    }
+
+
+def _llm_score_breakdown(
+    final_context_agents: dict[str, object],
+    fallback: dict[str, int],
+) -> dict[str, int]:
+    advice = final_context_agents.get("advice_generation") if isinstance(final_context_agents, dict) else {}
+    if not isinstance(advice, dict):
+        return fallback
+    raw = advice.get("score_breakdown")
+    if not isinstance(raw, dict):
+        return fallback
+    return {
+        "severity": _clamp_score(raw.get("severity"), fallback["severity"]),
+        "evidence_strength": _clamp_score(raw.get("evidence_strength"), fallback["evidence_strength"]),
+        "impact_scope": _clamp_score(raw.get("impact_scope"), fallback["impact_scope"]),
+        "urgency": _clamp_score(raw.get("urgency"), fallback["urgency"]),
+        "reversibility": _clamp_score(raw.get("reversibility"), fallback["reversibility"]),
+    }
+
+
 def build_report(result: RiskCaseResult) -> dict[str, object]:
     decision = result.decision
     category = SCENARIO_CATEGORY_MAP.get(decision.primary_scenario, "综合风险")
@@ -147,6 +189,12 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
 
     confidence_score = int(round(decision.confidence * 100))
     severity = decision.risk_score
+    fallback_score_breakdown = _fallback_score_breakdown(severity, confidence_score)
+    score_breakdown = _llm_score_breakdown(final_context_agents, fallback_score_breakdown) if final_context_is_dict else fallback_score_breakdown
+    advice_generation = final_context_agents.get("advice_generation", {}) if final_context_is_dict else {}
+    score_breakdown_reason = ""
+    if isinstance(advice_generation, dict):
+        score_breakdown_reason = str(advice_generation.get("score_breakdown_reason") or "").strip()
     chat_agent_result = {
         "engine": "CryptoRisk Risk-Type Branch Engine",
         "primary_scenario": decision.primary_scenario,
@@ -165,7 +213,7 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
         "risk_type_branches": risk_type_branches,
         "branch_score_merge": branch_score_merge,
         "impact_analysis": final_context_agents.get("impact_analysis", {}) if final_context_is_dict else {},
-        "advice_generation": final_context_agents.get("advice_generation", {}) if final_context_is_dict else {},
+        "advice_generation": advice_generation,
         "context_keys": final_context_agents.get("context_keys", []) if final_context_is_dict else [],
         "is_weak_risk": final_context_agents.get("is_weak_risk") if final_context_is_dict else None,
         "has_established_risk": final_context_agents.get("has_established_risk") if final_context_is_dict else None,
@@ -190,17 +238,11 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
         "risk_signals": decision.reason_codes,
         "non_risk_factors": [signal.reason for signal in result.signal_scan.cap_signals if signal.reason],
         "evidence": evidence_items,
-        "score_breakdown": {
-            "severity": severity,
-            "evidence_strength": confidence_score,
-            "impact_scope": min(100, severity + 5 if severity >= 61 else severity),
-            "urgency": severity if severity >= 41 else max(10, severity - 5),
-            "reversibility": max(0, 100 - severity),
-        },
+        "score_breakdown": score_breakdown,
         "impact": _llm_impact(final_context_agents, _impact(decision.risk_score, category)) if final_context_is_dict else _impact(decision.risk_score, category),
         "advice": _llm_advice(final_context_agents, _advice(decision.risk_score, decision.risk_status)) if final_context_is_dict else _advice(decision.risk_score, decision.risk_status),
         "impact_analysis": final_context_agents.get("impact_analysis", {}) if final_context_is_dict else {},
-        "advice_generation": final_context_agents.get("advice_generation", {}) if final_context_is_dict else {},
+        "advice_generation": advice_generation,
         "final_context_agents": {
             "context_keys": final_context_agents.get("context_keys", []),
             "is_weak_risk": final_context_agents.get("is_weak_risk"),
@@ -208,7 +250,7 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
         } if final_context_is_dict else {},
         "missing_info": result.evidence.missing_fields[:8],
         "uncertainty_points": result.evidence.extraction_errors,
-        "score_reason": "；".join(decision.reason_codes),
+        "score_reason": score_breakdown_reason or "；".join(decision.reason_codes),
         "calibration_rules": decision.score_caps_applied + decision.score_floors_applied,
         "chat_agent_result": chat_agent_result,
         "debug": {
@@ -232,7 +274,7 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
             {
                 "risk_category": category,
                 "evidence_text": "当前文本未提供可确认关键字段的原文证据。",
-                "explanation": "insufficient_evidence",
+                "explanation": "关键证据不足",
             }
         ]
     return report

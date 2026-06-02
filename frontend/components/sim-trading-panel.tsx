@@ -854,6 +854,7 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
   }, []);
 
   function startTour() {
+    window.localStorage.setItem(simTourWelcomeStorageKey, "true");
     setTourStep(0);
     setTourWelcomeOpen(false);
     setTourCongratsOpen(false);
@@ -1202,32 +1203,14 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
   }, [toast]);
 
   useEffect(() => {
-    if (window.localStorage.getItem(simTourStorageKey) || window.localStorage.getItem(simTourWelcomeStorageKey)) return;
-    const tourTimer = window.setTimeout(() => {
-      setTourWelcomeOpen(true);
-      setIsPlaying(false);
-    }, 0);
-    return () => window.clearTimeout(tourTimer);
+    const tourDone = window.localStorage.getItem(simTourStorageKey) === "true";
+    const welcomeSeen = window.localStorage.getItem(simTourWelcomeStorageKey) === "true";
+    if (!tourDone && !welcomeSeen) setTourWelcomeOpen(true);
   }, []);
 
   const content = (
     <div className={embedded ? "flex min-w-0 flex-col gap-4" : "mx-auto flex w-full max-w-[1440px] flex-col gap-4"} data-tour-id="sim-shell">
       {toast ? <TradeToastView toast={toast} onClose={() => setToast(null)} /> : null}
-      {tourWelcomeOpen ? <TourWelcomeModal onSkip={() => finishTour(false)} onStart={startTour} /> : null}
-      {tourOpen ? (
-        <GuidedTourOverlay
-          onClose={() => finishTour(false)}
-          onNext={() => {
-            if (tourStep >= beginnerTourSteps.length - 1) finishTour(true);
-            else setTourStep((step) => step + 1);
-          }}
-          onPrevious={() => setTourStep((step) => Math.max(0, step - 1))}
-          onSkipStep={skipTourStep}
-          step={tourStep}
-          steps={beginnerTourSteps}
-        />
-      ) : null}
-      {tourCongratsOpen ? <TourCompletionCard onClose={() => setTourCongratsOpen(false)} /> : null}
       {pendingHighRiskBuy !== null ? (
         <PreTradeWarningModal
           amount={pendingHighRiskBuy}
@@ -1248,11 +1231,11 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
             <div className="mt-1 flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl">{labels.title}</h1>
               <button
-                className="h-8 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 transition-colors duration-200 hover:bg-emerald-50"
-                onClick={startTour}
                 type="button"
+                onClick={startTour}
+                className="inline-flex h-9 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 transition-colors duration-200 hover:bg-emerald-100"
               >
-                新手引导
+                开始教程
               </button>
             </div>
           </div>
@@ -1264,14 +1247,6 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
           </div>
         </div>
       </header>
-      <button
-        className="fixed bottom-4 left-4 z-[70] rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 shadow-lg shadow-slate-900/10 transition-colors duration-200 hover:bg-emerald-50 sm:bottom-6 sm:left-auto sm:right-24"
-        onClick={startTour}
-        type="button"
-      >
-        新手引导
-      </button>
-
       {analysisEvent ? <RiskAnalysisPanel event={analysisEvent} impact={calculateEventImpact(candles, analysisEvent.candle_index)} onClose={() => setAnalysisEvent(null)} /> : null}
       {reportOpen && state ? (
         <ReplayReportModal
@@ -1282,6 +1257,18 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
         />
       ) : null}
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div> : null}
+      {tourWelcomeOpen ? <TourWelcomeModal onSkip={() => finishTour(false)} onStart={startTour} /> : null}
+      {tourOpen ? (
+        <GuidedTourOverlay
+          onClose={() => finishTour(false)}
+          onNext={skipTourStep}
+          onPrevious={() => setTourStep((step) => Math.max(0, step - 1))}
+          onSkipStep={skipTourStep}
+          step={tourStep}
+          steps={beginnerTourSteps}
+        />
+      ) : null}
+      {tourCongratsOpen ? <TourCompletionCard onClose={() => setTourCongratsOpen(false)} /> : null}
 
       <section className="grid min-w-0 gap-3 xl:grid-cols-[190px_minmax(0,1fr)_270px]">
         <aside className="risk-panel min-w-0 rounded-lg p-2.5" data-tour-id="symbol-list">

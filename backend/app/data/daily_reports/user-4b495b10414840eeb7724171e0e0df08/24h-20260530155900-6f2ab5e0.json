@@ -1,0 +1,574 @@
+{
+  "date": "24h",
+  "range": "24h",
+  "generated_at": "2026-05-30 14:13:34",
+  "source": "rule_fallback",
+  "user_id": "user-4b495b10414840eeb7724171e0e0df08",
+  "user_profile": {
+    "user_id": "user-4b495b10414840eeb7724171e0e0df08",
+    "display_name": "dy_iy",
+    "profile_source": "authenticated",
+    "assets": [
+      {
+        "symbol": "BTCUSDT",
+        "base_asset": "BTC",
+        "is_watched": true,
+        "is_holding": false,
+        "exposure_mode": "bucket",
+        "exposure_bucket": "none",
+        "custom_exposure_pct": null,
+        "amount": 0.0,
+        "avg_buy_price": 0.0,
+        "alert_threshold": 70,
+        "current_price": 68718.80714004,
+        "price_change_24h": -0.1349520620994741,
+        "market_value": 0.0,
+        "floating_pnl": 0.0,
+        "floating_pnl_rate": 0.0,
+        "existing_risk_score": 83,
+        "existing_risk_level": "high",
+        "ai_summary": "BTCUSDT 近期待监测新闻 20 条，最高风险新闻为“Echo Protocol 遭攻击，攻击者铸造 1000 枚 eBTC 据Odaily星球日报报道，Monad...”，风险分 95/100。24h 行情变化 -13.50%。"
+      },
+      {
+        "symbol": "ETHUSDT",
+        "base_asset": "ETH",
+        "is_watched": true,
+        "is_holding": false,
+        "exposure_mode": "bucket",
+        "exposure_bucket": "none",
+        "custom_exposure_pct": null,
+        "amount": 0.0,
+        "avg_buy_price": 0.0,
+        "alert_threshold": 70,
+        "current_price": 3538.99698059,
+        "price_change_24h": -0.13138558273866607,
+        "market_value": 0.0,
+        "floating_pnl": 0.0,
+        "floating_pnl_rate": 0.0,
+        "existing_risk_score": 83,
+        "existing_risk_level": "high",
+        "ai_summary": "ETHUSDT 近期待监测新闻 20 条，最高风险新闻为“Echo Protocol 遭攻击，攻击者铸造 1000 枚 eBTC 据Odaily星球日报报道，Monad...”，风险分 95/100。24h 行情变化 -13.14%。"
+      }
+    ],
+    "asset_count": 2,
+    "holding_count": 0,
+    "favorite_news": [
+      {
+        "item_id": "0f051e80ff063bee",
+        "title": "巨鲸开12900 ETH多头仓位",
+        "risk_score": 85,
+        "risk_level": "高风险",
+        "risk_type": "爆仓 / 清算风险",
+        "created_at": "2026-05-30 03:30:57"
+      },
+      {
+        "item_id": "60c4857c9da554df",
+        "title": "期货市场24小时爆仓7亿美元 据 NS3 报道，主要交易所在过去一小时内发生了价值1",
+        "risk_score": 85,
+        "risk_level": "高风险",
+        "risk_type": "爆仓 / 清算风险",
+        "created_at": "2026-05-29 09:42:01"
+      },
+      {
+        "item_id": "0289b0de5f075ea4",
+        "title": "法国发生41起加密绑架事件 Bitcoin记者Joe Nakamoto表示，约70%的加密勒索攻击发生在法国",
+        "risk_score": 85,
+        "risk_level": "高风险",
+        "risk_type": "监管与法律风险",
+        "created_at": "2026-05-29 09:42:00"
+      },
+      {
+        "item_id": "edf27cb15a490915",
+        "title": "Toncoin跨链桥将于2026年9月关闭 Toncoin官方宣布，其跨链桥及Token Bridge将于202...",
+        "risk_score": 90,
+        "risk_level": "高风险",
+        "risk_type": "基础设施 / 协议层异常风险",
+        "created_at": "2026-05-29 09:41:57"
+      }
+    ],
+    "favorite_news_count": 4,
+    "has_personal_assets": true
+  },
+  "user_assets_count": 2,
+  "holding_assets_count": 0,
+  "favorite_news_count": 4,
+  "affected_assets": [
+    "BTC",
+    "ETH"
+  ],
+  "personal_risk_score": 71,
+  "personal_high_count": 0,
+  "personal_red_count": 0,
+  "headline": "你的 BTCUSDT 等资产今日需关注 异常行情波动风险",
+  "summary": "你当前关注 2 个资产，日报命中 5 条相关风险事件，个人风险分 71。最高相关事件为「Anthropic AI 黑客Mythos模型引发DeFi安全危机 BitalkNews 在 X（原Twitte...」，影响资产 ETH，风险类型为 链上漏洞/攻击风险。",
+  "alert_level": "中风险",
+  "market_mood": "neutral",
+  "news_count": 241,
+  "average_score": 30,
+  "high_count": 30,
+  "red_count": 1,
+  "key_news": [
+    {
+      "news_id": "93d007380ee970e9",
+      "title": "Anthropic AI 黑客Mythos模型引发DeFi安全危机 BitalkNews 在 X（原Twitte...",
+      "summary": "Anthropic AI黑客模型引发大规模DeFi攻击，总损失超6.3亿美元，DeFi TVL骤降，安全危机加剧。",
+      "evidence": "2026年4月DeFi爆发14起超百万美元黑客事件，损失超6.3亿美元，KelpDAO损失2.92亿美元，Drift损失2.85亿美元，Hyperbridge在以太坊上铸造10亿美元DOT代币，DeFi TVL从1720亿降至1480亿。攻击者利用Anthropic的AI黑客Mythos模型绘制生态脆弱点并模拟攻击路径。",
+      "risk_score": 85,
+      "personal_score": 71,
+      "risk_level": "高风险",
+      "risk_type": "链上漏洞/攻击风险",
+      "published_at": "2026-05-29 17:00:19",
+      "coins": [
+        "ETH",
+        "DOT"
+      ],
+      "matched_assets": [
+        "ETH"
+      ],
+      "personal_relevance": 0.95,
+      "matched_reason": "ETH实体字段命中",
+      "exposure_note": "ETH为关注资产"
+    },
+    {
+      "news_id": "456c35215254c549",
+      "title": "比特币ETF连续九日净流出28亿美元",
+      "summary": "比特币ETF持续大规模资金流出，引发价格快速下跌和市场恐慌情绪。",
+      "evidence": "美国现货比特币ETF连续九个交易日净流出约28亿美元，比特币价格从约8万美元跌至7.3万美元，BlackRock的IBIT录得史上最大单日流出。",
+      "risk_score": 85,
+      "personal_score": 71,
+      "risk_level": "高风险",
+      "risk_type": "异常行情波动风险",
+      "published_at": "2026-05-29 18:47:09",
+      "coins": [
+        "BTC"
+      ],
+      "matched_assets": [
+        "BTC"
+      ],
+      "personal_relevance": 0.95,
+      "matched_reason": "BTC实体字段命中",
+      "exposure_note": "BTC为关注资产"
+    },
+    {
+      "news_id": "6ea0543eef98c20a",
+      "title": "台湾歌手黄立成加仓ETH多头",
+      "summary": "歌手黄立成以25倍高杠杆加仓ETH多头，存在较大爆仓风险",
+      "evidence": "台湾歌手黄立成在Hyperliquid平台关闭40倍杠杆BTC多头后，增持了25倍杠杆的ETH多头，当前持有4,588枚ETH，价值约923万美元，高杠杆操作面临剧烈价格波动下的爆仓风险。",
+      "risk_score": 85,
+      "personal_score": 71,
+      "risk_level": "高风险",
+      "risk_type": "爆仓/清算风险",
+      "published_at": "2026-05-29 18:25:21",
+      "coins": [
+        "BTC",
+        "ETH"
+      ],
+      "matched_assets": [
+        "BTC",
+        "ETH"
+      ],
+      "personal_relevance": 0.95,
+      "matched_reason": "BTC实体字段命中；ETH实体字段命中",
+      "exposure_note": "BTC为关注资产，ETH为关注资产"
+    },
+    {
+      "news_id": "a40ba412db3d60ac",
+      "title": "Bitcoin Depot因ATM诈骗被起诉",
+      "summary": "Bitcoin Depot因ATM诈骗被集体诉讼，并申请破产关闭全部北美业务，用户面临资金损失风险。",
+      "evidence": "Bitcoin Depot因涉及7.6万美元的ATM诈骗被提起联邦集体诉讼，诈骗者假冒Norton客服和FBI特工实施欺诈；公司随后申请自愿破产并关闭北美超9000台ATM。",
+      "risk_score": 85,
+      "personal_score": 71,
+      "risk_level": "高风险",
+      "risk_type": "诈骗/跑路/RugPull风险",
+      "published_at": "2026-05-30 02:09:44",
+      "coins": [
+        "BTC"
+      ],
+      "matched_assets": [
+        "BTC"
+      ],
+      "personal_relevance": 0.95,
+      "matched_reason": "BTC实体字段命中",
+      "exposure_note": "BTC为关注资产"
+    },
+    {
+      "news_id": "0f051e80ff063bee",
+      "title": "巨鲸开12900 ETH多头仓位",
+      "summary": "巨鲸高杠杆大额多头仓位面临极近清算价，存在爆仓及市场冲击风险",
+      "evidence": "一位Hyperliquid巨鲸以25倍高杠杆开设了12900 ETH的多头仓位，开仓价2011.7美元，清算价仅1967.1美元，距离开仓价价差极小（约2.2%），易触发清算并可能引发市场波动。",
+      "risk_score": 85,
+      "personal_score": 71,
+      "risk_level": "高风险",
+      "risk_type": "爆仓/清算风险",
+      "published_at": "2026-05-30 00:02:03",
+      "coins": [
+        "ETH"
+      ],
+      "matched_assets": [
+        "ETH"
+      ],
+      "personal_relevance": 0.95,
+      "matched_reason": "ETH实体字段命中",
+      "exposure_note": "ETH为关注资产"
+    }
+  ],
+  "asset_reports": [
+    {
+      "asset_symbol": "BTCUSDT",
+      "asset_name": "BTC",
+      "is_holding": false,
+      "exposure_label": "BTC 关注资产",
+      "exposure_mode": "bucket",
+      "exposure_bucket": "none",
+      "market_value": 0.0,
+      "price_change_24h": -0.1349520620994741,
+      "alert_threshold": 70,
+      "personal_risk_score": 71,
+      "risk_level": "中风险",
+      "summary": "BTC 今日命中 38 个相关风险事件，主要风险集中在 异常行情波动风险、爆仓/清算风险、诈骗/跑路/RugPull风险。",
+      "risk_types": [
+        "异常行情波动风险",
+        "爆仓/清算风险",
+        "诈骗/跑路/RugPull风险",
+        "基础设施/协议层异常风险",
+        "偿付能力/储备/流动性风险",
+        "宏观/政策冲击风险",
+        "大额转账/巨鲸行为风险",
+        "监管与法律风险"
+      ],
+      "key_drivers": [
+        "异常行情波动风险：比特币ETF持续大规模资金流出，引发价格快速下跌和市场恐慌情绪。",
+        "爆仓/清算风险：歌手黄立成以25倍高杠杆加仓ETH多头，存在较大爆仓风险",
+        "诈骗/跑路/RugPull风险：Bitcoin Depot因ATM诈骗被集体诉讼，并申请破产关闭全部北美业务，用户面临资金损失风险。"
+      ],
+      "evidence_summary": [
+        "美国现货比特币ETF连续九个交易日净流出约28亿美元，比特币价格从约8万美元跌至7.3万美元，BlackRock的IBIT录得史上最大单日流出。",
+        "台湾歌手黄立成在Hyperliquid平台关闭40倍杠杆BTC多头后，增持了25倍杠杆的ETH多头，当前持有4,588枚ETH，价值约923万美元，高杠杆操作面临剧烈价格波动下的爆仓风险。",
+        "Bitcoin Depot因涉及7.6万美元的ATM诈骗被提起联邦集体诉讼，诈骗者假冒Norton客服和FBI特工实施欺诈；公司随后申请自愿破产并关闭北美超9000台ATM。",
+        "Evaded 持有960 BTC的空头头寸，杠杆高达30倍，一旦市场反向波动可能引发大规模清算。"
+      ],
+      "monitoring_items": [
+        "BTC 官方公告与交易所充提状态",
+        "BTC 链上大额转账和交易所流入",
+        "BTC 价格、成交量和相关社群舆情变化"
+      ],
+      "actions": [
+        "BTC 已达到或接近你的风险阈值，优先复核持仓暴露和流动性。",
+        "核验 BTC 相关公告、交易所充提状态与链上大额转账。",
+        "对 BTC 设置价格波动、新闻连续命中和风险分阈值提醒。",
+        "避免依据单条未证实消息做方向性操作，等待多源证据确认。"
+      ],
+      "source_event_count": 38,
+      "source_news_ids": [
+        "456c35215254c549",
+        "6ea0543eef98c20a",
+        "a40ba412db3d60ac",
+        "58fdb3164ce2d7df",
+        "185a0fc45ae00ac7",
+        "1dfdfb20ba882226",
+        "782a4a75923f53e4",
+        "30e763a3ac33c413",
+        "f60697d3e5a881f3",
+        "8f437996180a0049",
+        "aa7b7208261ad99f",
+        "9b646e42f1de9411",
+        "da754ce1f820c75a",
+        "b0c85edd63235392",
+        "f7c65e251b118101",
+        "2dfe2b0eabe3cfb1",
+        "1ff89b366653ae15",
+        "b6eebf9d62a8ac1e",
+        "5771534b18d30e3b",
+        "1aef2325b7e34b95",
+        "582a7f51bcd34daf",
+        "0d6ce6904d1cade0",
+        "3ffe47a7ffb0ba2a",
+        "de0c23ffdf8d3d2c",
+        "c2e30410542b12d3",
+        "aa0c5d119d22ccd3",
+        "bbdb82b04f48f87c",
+        "b9f137bea24a354a",
+        "137a75ef616d49d4",
+        "5e1fe5097a51846e",
+        "79caf2f214d09122",
+        "f9bc7a6b5451b167",
+        "986537ddbe218bcc",
+        "52574123891c3645",
+        "152b41fa8fdbdabc",
+        "aab710a0aa216ab8",
+        "24fe9a7b720b50da",
+        "b2e2c5b398803a01"
+      ]
+    },
+    {
+      "asset_symbol": "ETHUSDT",
+      "asset_name": "ETH",
+      "is_holding": false,
+      "exposure_label": "ETH 关注资产",
+      "exposure_mode": "bucket",
+      "exposure_bucket": "none",
+      "market_value": 0.0,
+      "price_change_24h": -0.13138558273866607,
+      "alert_threshold": 70,
+      "personal_risk_score": 71,
+      "risk_level": "中风险",
+      "summary": "ETH 今日命中 25 个相关风险事件，主要风险集中在 链上漏洞/攻击风险、爆仓/清算风险、异常行情波动风险。",
+      "risk_types": [
+        "链上漏洞/攻击风险",
+        "爆仓/清算风险",
+        "异常行情波动风险",
+        "基础设施/协议层异常风险",
+        "宏观/政策冲击风险",
+        "偿付能力/储备/流动性风险",
+        "大额转账/巨鲸行为风险",
+        "项目治理/团队异常风险"
+      ],
+      "key_drivers": [
+        "链上漏洞/攻击风险：Anthropic AI黑客模型引发大规模DeFi攻击，总损失超6.3亿美元，DeFi TVL骤降，安全危机加剧。",
+        "爆仓/清算风险：歌手黄立成以25倍高杠杆加仓ETH多头，存在较大爆仓风险",
+        "爆仓/清算风险：巨鲸高杠杆大额多头仓位面临极近清算价，存在爆仓及市场冲击风险"
+      ],
+      "evidence_summary": [
+        "2026年4月DeFi爆发14起超百万美元黑客事件，损失超6.3亿美元，KelpDAO损失2.92亿美元，Drift损失2.85亿美元，Hyperbridge在以太坊上铸造10亿美元DOT代币，DeFi TVL从1720亿降至1480亿。攻击者利用Anthropic的AI黑客Mythos模型绘制生态脆弱点并模拟攻击路径。",
+        "台湾歌手黄立成在Hyperliquid平台关闭40倍杠杆BTC多头后，增持了25倍杠杆的ETH多头，当前持有4,588枚ETH，价值约923万美元，高杠杆操作面临剧烈价格波动下的爆仓风险。",
+        "一位Hyperliquid巨鲸以25倍高杠杆开设了12900 ETH的多头仓位，开仓价2011.7美元，清算价仅1967.1美元，距离开仓价价差极小（约2.2%），易触发清算并可能引发市场波动。",
+        "Evaded 持有960 BTC的空头头寸，杠杆高达30倍，一旦市场反向波动可能引发大规模清算。"
+      ],
+      "monitoring_items": [
+        "ETH 官方公告与交易所充提状态",
+        "ETH 链上大额转账和交易所流入",
+        "ETH 价格、成交量和相关社群舆情变化"
+      ],
+      "actions": [
+        "ETH 已达到或接近你的风险阈值，优先复核持仓暴露和流动性。",
+        "核验 ETH 相关公告、交易所充提状态与链上大额转账。",
+        "对 ETH 设置价格波动、新闻连续命中和风险分阈值提醒。",
+        "避免依据单条未证实消息做方向性操作，等待多源证据确认。"
+      ],
+      "source_event_count": 25,
+      "source_news_ids": [
+        "93d007380ee970e9",
+        "6ea0543eef98c20a",
+        "0f051e80ff063bee",
+        "58fdb3164ce2d7df",
+        "9aacdbfafbf9375d",
+        "c8bfcb8fe6761929",
+        "1dfdfb20ba882226",
+        "30e763a3ac33c413",
+        "f60697d3e5a881f3",
+        "0e671bf1f9042f5f",
+        "9b646e42f1de9411",
+        "da754ce1f820c75a",
+        "a769f145165d548b",
+        "b0c85edd63235392",
+        "f7c65e251b118101",
+        "f9ac4e1bb2cea634",
+        "b6eebf9d62a8ac1e",
+        "582a7f51bcd34daf",
+        "d83a5796c059426e",
+        "d98e5ab248733ad0",
+        "3ffe47a7ffb0ba2a",
+        "b6b49e0c2d5789da",
+        "de0c23ffdf8d3d2c",
+        "1e40534449007d06",
+        "e2e310ea35c56aa6"
+      ]
+    }
+  ],
+  "risk_themes": [
+    {
+      "theme_id": "theme-2",
+      "title": "BTC：异常行情波动风险",
+      "risk_type": "异常行情波动风险",
+      "affected_assets": [
+        "BTC"
+      ],
+      "event_count": 5,
+      "max_personal_score": 71,
+      "risk_level": "中风险",
+      "summary": "异常行情波动风险相关事件集中影响 BTC，需要结合证据强度与后续公告确认。",
+      "evidence_summary": [
+        "美国现货比特币ETF连续九个交易日净流出约28亿美元，比特币价格从约8万美元跌至7.3万美元，BlackRock的IBIT录得史上最大单日流出。",
+        "自5月15日以来，美国现货比特币ETF净流出29亿美元，Swan Bitcoin CEO将今年比特币创历史新高的概率下调至20%-25%，反映市场资金持续退出与看空情绪。",
+        "CryproQuant CEO 指出，比特币盈亏下滑趋势已于2025年10月转向，熊市可能持续至2027年初，目前未出现反转信号。"
+      ],
+      "monitoring_items": [
+        "官方公告与交易所状态变化",
+        "链上大额转账、提现与流动性异常",
+        "同类风险事件是否继续扩散"
+      ],
+      "source_event_count": 5,
+      "source_news_ids": [
+        "456c35215254c549",
+        "8f437996180a0049",
+        "aa7b7208261ad99f",
+        "bbdb82b04f48f87c",
+        "5e1fe5097a51846e"
+      ]
+    },
+    {
+      "theme_id": "theme-6",
+      "title": "ETH：异常行情波动风险",
+      "risk_type": "异常行情波动风险",
+      "affected_assets": [
+        "ETH"
+      ],
+      "event_count": 4,
+      "max_personal_score": 71,
+      "risk_level": "中风险",
+      "summary": "异常行情波动风险相关事件集中影响 ETH，需要结合证据强度与后续公告确认。",
+      "evidence_summary": [
+        "以太坊跌破2,000美元关键支撑，分析师警告短期下行压力，ETH估算杠杆率约0.74高位且资金费率持续为正，多头拥挤但价格走弱，RSI约31接近超卖却无反弹信号；同时美国现货以太坊ETF连续13个交易日净流出，累计约6.95亿美元，机构需求持续降温。",
+        "以太坊现货ETF连续第14天出现整体净流出，昨日净流出总额为1791.12万美元，其中BlackRock的ETHA单日净流出达4071.73万美元，尽管Fidelity的FETH有1053.37万美元净流入，但整体资金持续外流可能加大ETH价格的下行压力。",
+        "ETH 跌破 2,000 USDT，24 小时涨幅收窄至 0.50%，属于正常价格波动，未触发极端行情。"
+      ],
+      "monitoring_items": [
+        "官方公告与交易所状态变化",
+        "链上大额转账、提现与流动性异常",
+        "同类风险事件是否继续扩散"
+      ],
+      "source_event_count": 4,
+      "source_news_ids": [
+        "9aacdbfafbf9375d",
+        "d98e5ab248733ad0",
+        "b6b49e0c2d5789da",
+        "1e40534449007d06"
+      ]
+    },
+    {
+      "theme_id": "theme-3",
+      "title": "BTC、ETH：爆仓/清算风险",
+      "risk_type": "爆仓/清算风险",
+      "affected_assets": [
+        "BTC",
+        "ETH"
+      ],
+      "event_count": 2,
+      "max_personal_score": 71,
+      "risk_level": "中风险",
+      "summary": "爆仓/清算风险相关事件集中影响 BTC、ETH，需要结合证据强度与后续公告确认。",
+      "evidence_summary": [
+        "台湾歌手黄立成在Hyperliquid平台关闭40倍杠杆BTC多头后，增持了25倍杠杆的ETH多头，当前持有4,588枚ETH，价值约923万美元，高杠杆操作面临剧烈价格波动下的爆仓风险。",
+        "Evaded 持有960 BTC的空头头寸，杠杆高达30倍，一旦市场反向波动可能引发大规模清算。"
+      ],
+      "monitoring_items": [
+        "官方公告与交易所状态变化",
+        "链上大额转账、提现与流动性异常",
+        "同类风险事件是否继续扩散"
+      ],
+      "source_event_count": 2,
+      "source_news_ids": [
+        "6ea0543eef98c20a",
+        "58fdb3164ce2d7df"
+      ]
+    },
+    {
+      "theme_id": "theme-5",
+      "title": "ETH：爆仓/清算风险",
+      "risk_type": "爆仓/清算风险",
+      "affected_assets": [
+        "ETH"
+      ],
+      "event_count": 2,
+      "max_personal_score": 71,
+      "risk_level": "中风险",
+      "summary": "爆仓/清算风险相关事件集中影响 ETH，需要结合证据强度与后续公告确认。",
+      "evidence_summary": [
+        "一位Hyperliquid巨鲸以25倍高杠杆开设了12900 ETH的多头仓位，开仓价2011.7美元，清算价仅1967.1美元，距离开仓价价差极小（约2.2%），易触发清算并可能引发市场波动。",
+        "Coinglass数据显示，ETH突破2098美元将触发主流CEX上8.87亿美元空单清算；跌破1900美元将触发8.18亿美元多单清算，双向潜在清算规模巨大，可能引发连锁反应。"
+      ],
+      "monitoring_items": [
+        "官方公告与交易所状态变化",
+        "链上大额转账、提现与流动性异常",
+        "同类风险事件是否继续扩散"
+      ],
+      "source_event_count": 2,
+      "source_news_ids": [
+        "0f051e80ff063bee",
+        "c8bfcb8fe6761929"
+      ]
+    }
+  ],
+  "risk_types": [
+    {
+      "name": "异常行情波动风险",
+      "count": 10,
+      "high_count": 2,
+      "max_score": 85,
+      "weight": 59
+    },
+    {
+      "name": "爆仓/清算风险",
+      "count": 5,
+      "high_count": 5,
+      "max_score": 85,
+      "weight": 29
+    },
+    {
+      "name": "链上漏洞/攻击风险",
+      "count": 1,
+      "high_count": 1,
+      "max_score": 85,
+      "weight": 8
+    },
+    {
+      "name": "诈骗/跑路/RugPull风险",
+      "count": 1,
+      "high_count": 1,
+      "max_score": 85,
+      "weight": 8
+    },
+    {
+      "name": "基础设施/协议层异常风险",
+      "count": 2,
+      "high_count": 1,
+      "max_score": 80,
+      "weight": 12
+    }
+  ],
+  "watch_coins": [
+    {
+      "symbol": "BTCUSDT",
+      "name": "BTC",
+      "score": 71,
+      "level": "中风险",
+      "news_count": 38,
+      "risk_type": "异常行情波动风险",
+      "is_holding": false,
+      "exposure_mode": "bucket",
+      "exposure_bucket": "none",
+      "market_value": 0.0,
+      "price_change_24h": -0.1349520620994741,
+      "alert_threshold": 70
+    },
+    {
+      "symbol": "ETHUSDT",
+      "name": "ETH",
+      "score": 71,
+      "level": "中风险",
+      "news_count": 25,
+      "risk_type": "链上漏洞/攻击风险",
+      "is_holding": false,
+      "exposure_mode": "bucket",
+      "exposure_bucket": "none",
+      "market_value": 0.0,
+      "price_change_24h": -0.13138558273866607,
+      "alert_threshold": 70
+    }
+  ],
+  "focus_points": [],
+  "actions": [
+    "优先核验红色预警事件的官方公告、交易所状态页与链上地址证据。",
+    "对重点资产设置价格、提现、链上大额转账和社群舆情的连续监控。",
+    "避免依据单条未证实消息做方向性操作，等待多源证据交叉确认。",
+    "重点复核 BTCUSDT、ETHUSDT 的相关新闻和持仓暴露。"
+  ],
+  "impact_summary": "本期共生成 2 个资产分项报告，命中 50 条与用户资产相关的风险新闻。",
+  "errors": [
+    "llm_daily_writer_failed: Request timed out."
+  ],
+  "report_id": "24h-20260530155900-6f2ab5e0",
+  "created_at": "2026-05-30 15:59:00",
+  "generation_date": "2026-05-30",
+  "saved_at": "2026-05-30 15:59:00"
+}

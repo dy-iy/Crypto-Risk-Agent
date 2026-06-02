@@ -1,0 +1,64 @@
+{
+  "reports": [
+    {
+      "report_id": "24h-20260531104435-8a74d8fd",
+      "range": "24h",
+      "created_at": "2026-05-31 10:44:35",
+      "generation_date": "2026-05-31",
+      "headline": "你的 ETHUSDT 等资产今日需关注 爆仓/清算风险",
+      "alert_level": "高风险",
+      "personal_risk_score": 83,
+      "user_assets_count": 3,
+      "asset_report_count": 3,
+      "path": "24h-20260531104435-8a74d8fd.json"
+    },
+    {
+      "report_id": "24h-20260531093835-5a5b67cd",
+      "range": "24h",
+      "created_at": "2026-05-31 09:38:35",
+      "generation_date": "2026-05-31",
+      "headline": "你的 ETHUSDT 等资产今日需关注 链上漏洞/攻击风险",
+      "alert_level": "高风险",
+      "personal_risk_score": 83,
+      "user_assets_count": 2,
+      "asset_report_count": 2,
+      "path": "24h-20260531093835-5a5b67cd.json"
+    },
+    {
+      "report_id": "24h-20260530161247-e430b1b3",
+      "range": "24h",
+      "created_at": "2026-05-30 16:12:47",
+      "generation_date": "2026-05-30",
+      "headline": "你的 BTCUSDT 等资产今日需关注 异常行情波动风险",
+      "alert_level": "中风险",
+      "personal_risk_score": 71,
+      "user_assets_count": 3,
+      "asset_report_count": 3,
+      "path": "24h-20260530161247-e430b1b3.json"
+    },
+    {
+      "report_id": "24h-20260530155900-6f2ab5e0",
+      "range": "24h",
+      "created_at": "2026-05-30 15:59:00",
+      "generation_date": "2026-05-30",
+      "headline": "你的 BTCUSDT 等资产今日需关注 异常行情波动风险",
+      "alert_level": "中风险",
+      "personal_risk_score": 71,
+      "user_assets_count": 2,
+      "asset_report_count": 2,
+      "path": "24h-20260530155900-6f2ab5e0.json"
+    },
+    {
+      "report_id": "24h-20260530154626-cd6378a1",
+      "range": "24h",
+      "created_at": "2026-05-30 15:46:26",
+      "generation_date": "2026-05-30",
+      "headline": "你的 BTCUSDT 等资产今日需关注 异常行情波动风险",
+      "alert_level": "中风险",
+      "personal_risk_score": 71,
+      "user_assets_count": 1,
+      "asset_report_count": 1,
+      "path": "24h-20260530154626-cd6378a1.json"
+    }
+  ]
+}

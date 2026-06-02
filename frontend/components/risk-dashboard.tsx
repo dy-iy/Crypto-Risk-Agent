@@ -13,8 +13,12 @@ import {
 } from "@/lib/news-analysis";
 import {
   clearApiCache,
+  CoinLibraryItem,
   CoinRankingItem,
+  DailyRiskReport,
   fetchCoinRanking,
+  fetchCoinLibrary,
+  fetchDailyRiskReport,
   fetchCurrentNewsUpdateJob,
   fetchNewsUpdateJob,
   fetchNewsRanking,
@@ -25,6 +29,7 @@ import {
   NewsUpdateResponse,
   NewsRankingItem,
   readCachedCoinRanking,
+  readCachedDailyRiskReport,
   readCachedNewsRanking,
   readCachedRiskOverview,
   RiskOverview,
@@ -39,18 +44,26 @@ import {
   streamRiskAssistant,
   AuthUser,
   FavoriteItem,
+  AnalysisDisposition,
   addFavorite,
+  createUserAsset,
+  deleteAnalysisReport,
   deleteFavorite,
+  fetchAnalysisReports,
   fetchCurrentUser,
   fetchFavorites,
-  fetchPortfolioWatchlist,
+  fetchUserAssets,
+  generateDailyRiskReport,
   loginUser,
   logoutUser,
   PortfolioWatchlistItem,
   registerUser,
+  saveAnalysisReport,
+  updateAnalysisReportDisposition,
+  updateUserAsset,
 } from "@/lib/api";
 
-type ActiveView = "home" | "chat" | "news" | "coin" | "portfolio" | "sim" | "reports" | "favoriteNews" | "favoriteReports" | "my" | "settings";
+type ActiveView = "home" | "chat" | "news" | "coin" | "daily" | "portfolio" | "sim" | "reports" | "favoriteNews" | "favoriteReports" | "my" | "settings";
 type ChatRole = "user" | "assistant";
 
 type ChatMessage = {
@@ -65,6 +78,60 @@ type CoinFilter = "all" | "top10" | "high" | "medium" | "low";
 type CoinSort = "score_desc" | "score_asc" | "news_desc" | "news_asc";
 type RankingRange = "24h" | "7d";
 type MetricTone = "blue" | "red" | "orange" | "green" | "purple";
+type DailyWatchCoin = {
+  symbol: string;
+  name: string;
+  score: number;
+  level: string;
+  newsCount: number;
+  riskType: string;
+  isHolding?: boolean;
+  exposureMode?: string;
+  exposureBucket?: string;
+  marketValue?: number;
+  priceChange24h?: number;
+  alertThreshold?: number;
+};
+type DailyRiskTypeStat = {
+  name: string;
+  count: number;
+  highCount: number;
+  maxScore: number;
+  weight: number;
+};
+type DailyRiskTheme = {
+  themeId: string;
+  title: string;
+  riskType: string;
+  affectedAssets: string[];
+  eventCount: number;
+  maxPersonalScore: number;
+  riskLevel: string;
+  summary: string;
+  severityReason?: string;
+  evidenceSummary: string[];
+  monitoringItems: string[];
+};
+type DailyAssetReport = {
+  assetSymbol: string;
+  assetName: string;
+  isHolding: boolean;
+  exposureLabel: string;
+  exposureMode?: string;
+  exposureBucket?: string;
+  marketValue?: number;
+  priceChange24h?: number;
+  alertThreshold?: number;
+  personalRiskScore: number;
+  riskLevel: string;
+  summary: string;
+  riskTypes: string[];
+  keyDrivers: string[];
+  evidenceSummary: string[];
+  monitoringItems: string[];
+  actions: string[];
+  sourceEventCount: number;
+};
 type TrendPoint = {
   label: string;
   value: number;
@@ -80,6 +147,19 @@ type NewsTrendBucket = {
   timestamp: number;
 };
 type MyVaultTab = "overview" | "assets" | "news" | "reports" | "alerts" | "reviews";
+type UserAssetFormState = {
+  alertThreshold: string;
+  isHolding: boolean;
+  symbol: string;
+};
+type AccountCenterStats = {
+  favoriteNews: number;
+  favoriteReports: number;
+  highRiskAssets: number;
+  loadingAssets: boolean;
+  pendingAlerts: number;
+  watchedAssets: number;
+};
 
 type AnalysisRecord = {
   id: string;
@@ -87,6 +167,16 @@ type AnalysisRecord = {
   createdAt: string;
   input: string;
   report: RiskReport;
+  disposition?: AnalysisDisposition;
+  dispositionNote?: string;
+};
+
+type RankingDataStatus = {
+  mode: "real" | "demo";
+  updatedAt: string;
+  newsSourceStatus: "connected" | "fallback" | "unknown";
+  agentStatus: "ready" | "fallback" | "unknown";
+  message: string;
 };
 
 type AnalysisTaskSnapshot = {
@@ -98,6 +188,13 @@ type AnalysisTaskSnapshot = {
   updatedAt: string;
   recordId?: string;
   error?: string;
+};
+
+type AssistantEventReference = {
+  selectedText: string;
+  sourceInput: string;
+  title?: string;
+  newsId?: string;
 };
 
 type NavItem = {
@@ -196,6 +293,22 @@ const fallbackCoins: CoinRankingItem[] = [
   },
 ];
 
+const initialRankingDataStatus: RankingDataStatus = {
+  mode: "real",
+  updatedAt: "",
+  newsSourceStatus: "unknown",
+  agentStatus: "unknown",
+  message: "正在读取风险排行榜数据",
+};
+
+const demoRankingDataStatus: RankingDataStatus = {
+  mode: "demo",
+  updatedAt: "演示样例",
+  newsSourceStatus: "fallback",
+  agentStatus: "fallback",
+  message: "后端排行榜暂未连接，当前展示本地演示数据",
+};
+
 const emptyNewsItem: NewsRankingItem = {
   rank: 0,
   news_id: "empty-news",
@@ -228,6 +341,7 @@ const viewRoutes: Record<ActiveView, string> = {
   chat: "/analysize",
   news: "/news",
   coin: "/coins",
+  daily: "/daily",
   portfolio: "/portfolio",
   sim: "/sim",
   reports: "/reports",
@@ -242,6 +356,7 @@ function resolveViewFromPathname(pathname: string | null, fallback: ActiveView):
   if (pathname.startsWith("/analysize") || pathname.startsWith("/analysis")) return "chat";
   if (pathname.startsWith("/news")) return "news";
   if (pathname.startsWith("/coins")) return "coin";
+  if (pathname.startsWith("/daily")) return "daily";
   if (pathname.startsWith("/portfolio")) return "portfolio";
   if (pathname.startsWith("/sim")) return "sim";
   if (pathname.startsWith("/reports")) return "reports";
@@ -250,6 +365,13 @@ function resolveViewFromPathname(pathname: string | null, fallback: ActiveView):
   if (pathname.startsWith("/my")) return "my";
   if (pathname.startsWith("/settings")) return "settings";
   return fallback;
+}
+
+function parseMyVaultTab(value: string | null): MyVaultTab {
+  if (value === "assets" || value === "news" || value === "reports" || value === "alerts" || value === "reviews") {
+    return value;
+  }
+  return "overview";
 }
 
 function getWindowSearch() {
@@ -268,8 +390,21 @@ const activeAnalysisTaskStorageKey = "cryptorisk.activeAnalysisTask";
 const newsUpdateJobStorageKey = "cryptorisk.newsUpdateJobId";
 const authUsernameStorageKey = "cryptorisk.auth.username";
 const reportCreatedEventName = "cryptorisk:analysis-record-created";
+const userAssetsUpdatedEventName = "cryptorisk:user-assets-updated";
+const defaultUserAssetForm: UserAssetFormState = {
+  alertThreshold: "70",
+  isHolding: false,
+  symbol: "",
+};
 
 const initialChatProgressStage: ChatProgressStage = "input_standardization";
+const chatProgressLabels: Record<ChatProgressStage, string> = {
+  input_standardization: "输入标准化",
+  risk_signal_scan: "风险信号扫描",
+  evidence_extraction: "证据抽取",
+  report_generation: "报告生成",
+};
+const chatProgressSteps = Object.values(chatProgressLabels);
 
 const initialChatMessages: ChatMessage[] = [
   {
@@ -323,6 +458,60 @@ function writeStoredAnalysisRecords(records: AnalysisRecord[]) {
   }
 }
 
+function normalizeAnalysisRecord(record: AnalysisRecord): AnalysisRecord {
+  return {
+    ...record,
+    disposition: record.disposition || "pending",
+    dispositionNote: record.dispositionNote || "",
+  };
+}
+
+function mergeAnalysisRecords(localRecords: AnalysisRecord[], remoteRecords: AnalysisRecord[]) {
+  const byId = new Map<string, AnalysisRecord>();
+  [...localRecords, ...remoteRecords].forEach((record) => {
+    const existing = byId.get(record.id);
+    byId.set(record.id, normalizeAnalysisRecord(existing ? { ...existing, ...record } : record));
+  });
+  return Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function toAnalysisReportPayload(record: AnalysisRecord) {
+  const normalized = normalizeAnalysisRecord(record);
+  return {
+    id: normalized.id,
+    title: normalized.title,
+    created_at: normalized.createdAt,
+    input: normalized.input,
+    report: normalized.report,
+    disposition: normalized.disposition,
+    disposition_note: normalized.dispositionNote,
+  };
+}
+
+function persistRemoteAnalysisReport(record: AnalysisRecord) {
+  return saveAnalysisReport(toAnalysisReportPayload(record)).catch(() => undefined);
+}
+
+function mapRemoteAnalysisReport(item: {
+  id: string;
+  title: string;
+  created_at: string;
+  input: string;
+  report: RiskReport;
+  disposition?: AnalysisDisposition;
+  disposition_note?: string;
+}): AnalysisRecord {
+  return normalizeAnalysisRecord({
+    id: item.id,
+    title: item.title,
+    createdAt: item.created_at,
+    input: item.input,
+    report: item.report,
+    disposition: item.disposition || "pending",
+    dispositionNote: item.disposition_note || "",
+  });
+}
+
 function readStoredAuthUsername() {
   if (typeof window === "undefined") return "";
   return window.localStorage.getItem(authUsernameStorageKey) || "";
@@ -344,6 +533,15 @@ function appendStoredChatMessages(messages: ChatMessage[]) {
     ...messages.filter((item) => !existingIds.has(item.id)),
   ];
   writeStoredChatMessages(nextMessages);
+  return nextMessages;
+}
+
+function updateStoredChatMessage(messageId: string, updater: (message: ChatMessage) => ChatMessage) {
+  const nextMessages = readStoredChatMessages().map((message) =>
+    message.id === messageId ? updater(message) : message
+  );
+  writeStoredChatMessages(nextMessages);
+  notifyAnalysisTaskListeners();
   return nextMessages;
 }
 
@@ -379,6 +577,36 @@ function subscribeAnalysisTask(listener: (snapshot: AnalysisTaskSnapshot | null)
   return () => {
     analysisTaskListeners.delete(listener);
   };
+}
+
+function waitForAnalysisTaskCompletion(taskId: string) {
+  return new Promise<AnalysisRecord>((resolve, reject) => {
+    const finish = (task: AnalysisTaskSnapshot | null, cleanup: () => void) => {
+      if (!task || task.id !== taskId) return;
+      if (task.status === "success" && task.recordId) {
+        const record = readStoredAnalysisRecords().find((item) => item.id === task.recordId);
+        cleanup();
+        if (record) {
+          resolve(record);
+          return;
+        }
+        reject(new Error("事件分析已完成，但未找到报告记录。"));
+        return;
+      }
+      if (task.status === "error") {
+        cleanup();
+        reject(new Error(task.error || "事件分析失败。"));
+      }
+    };
+
+    const currentTask = getActiveAnalysisTaskSnapshot();
+    if (currentTask?.id === taskId && currentTask.status !== "running") {
+      finish(currentTask, () => {});
+      return;
+    }
+    let unsubscribe = () => {};
+    unsubscribe = subscribeAnalysisTask((task) => finish(task, unsubscribe));
+  });
 }
 
 function startAnalysisTask(input: string) {
@@ -422,17 +650,22 @@ function startAnalysisTask(input: string) {
         createdAt: formatTimestamp(new Date()),
         input: trimmed,
         report: response.data,
+        disposition: "pending",
+        dispositionNote: "",
       };
       const nextRecords = [record, ...readStoredAnalysisRecords()];
       writeStoredAnalysisRecords(nextRecords);
+      void persistRemoteAnalysisReport(record);
       window.localStorage.setItem(selectedRecordStorageKey, record.id);
-      appendStoredChatMessages([
-        {
-          id: `assistant-${Date.now()}`,
-          role: "assistant",
-          content: buildBriefAnalysis(record),
-        },
-      ]);
+      const followUpQuestion = extractEventAnalysisFollowUpQuestion(trimmed);
+      const assistantMessageId = `assistant-${Date.now()}`;
+      appendStoredChatMessages([{
+        id: assistantMessageId,
+        role: "assistant",
+        content: followUpQuestion
+          ? `${buildBriefAnalysis(record)}\n\n**风控助手追问回答**\n`
+          : `${buildBriefAnalysis(record)}\n\n完整事件分析链路已完成，报告已生成并保存。`,
+      }]);
       activeAnalysisTask = {
         ...snapshot,
         status: "success",
@@ -440,6 +673,43 @@ function startAnalysisTask(input: string) {
         recordId: record.id,
         updatedAt: new Date().toISOString(),
       };
+      persistAnalysisTaskSnapshot(activeAnalysisTask);
+      notifyAnalysisTaskListeners();
+      if (followUpQuestion) {
+        window.setTimeout(() => {
+          void streamRiskAssistant(
+            followUpQuestion,
+            {
+              active_view: "chat",
+              assistant_memory: {
+                event_analysis: {
+                  analysis_input: trimmed,
+                  report_id: record.id,
+                  report_title: record.title,
+                  report_created_at: record.createdAt,
+                  report: record.report,
+                },
+              },
+            },
+            (chunk) => {
+              updateStoredChatMessage(assistantMessageId, (message) => ({
+                ...message,
+                content: message.content + chunk,
+              }));
+            },
+            {
+              selectedText: trimmed,
+              userQuestion: followUpQuestion,
+            },
+          ).catch((assistantError) => {
+            console.error(assistantError);
+            updateStoredChatMessage(assistantMessageId, (message) => ({
+              ...message,
+              content: `${buildBriefAnalysis(record)}\n\n完整事件分析链路已完成，报告已生成并保存。助手追问回答暂时失败，请稍后再试。`,
+            }));
+          });
+        }, 0);
+      }
     } catch (error) {
       console.error(error);
       activeAnalysisTask = {
@@ -490,6 +760,10 @@ function readCachedCoinItems() {
   return readCachedCoinRanking(10, readRankingRange())?.items || [];
 }
 
+function readCachedDailyReport() {
+  return readCachedDailyRiskReport(readRankingRange());
+}
+
 export default function RiskDashboard({ initialView = "home" }: { initialView?: ActiveView }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -500,6 +774,11 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [overview, setOverview] = useState<RiskOverview | null>(() => readCachedOverview());
   const [newsRanking, setNewsRanking] = useState<NewsRankingItem[]>(() => readCachedNewsItems());
   const [coinRanking, setCoinRanking] = useState<CoinRankingItem[]>(() => readCachedCoinItems());
+  const [dailyReport, setDailyReport] = useState<DailyRiskReport | null>(() => readCachedDailyReport());
+  const [rankingDataStatus, setRankingDataStatus] = useState<RankingDataStatus>(initialRankingDataStatus);
+  const [dailyReportFetching, setDailyReportFetching] = useState(false);
+  const [dailyReportLoading, setDailyReportLoading] = useState(false);
+  const [dailyReportError, setDailyReportError] = useState("");
   const [rankingLoading, setRankingLoading] = useState(() => !readCachedOverview() && !readCachedNewsItems().length && !readCachedCoinItems().length);
   const [rankingError, setRankingError] = useState("");
   const [newsUpdateLoading, setNewsUpdateLoading] = useState(false);
@@ -522,7 +801,10 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [favoriteReports, setFavoriteReports] = useState<FavoriteItem[]>([]);
   const [favoriteNews, setFavoriteNews] = useState<FavoriteItem[]>([]);
   const [favoriteActionLoadingId, setFavoriteActionLoadingId] = useState("");
+  const [accountAssets, setAccountAssets] = useState<PortfolioWatchlistItem[]>([]);
+  const [accountAssetsLoading, setAccountAssetsLoading] = useState(true);
   const [reportSidebarCollapsed, setReportSidebarCollapsed] = useState(false);
+  const reportSyncUserRef = useRef("");
   const [chatLoading, setChatLoading] = useState(() => getActiveAnalysisTaskSnapshot()?.status === "running");
   const [chatError, setChatError] = useState(() => {
     const task = getActiveAnalysisTaskSnapshot();
@@ -548,12 +830,20 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
         setOverview(overviewData);
         setNewsRanking(newsData.items);
         setCoinRanking(coinData.items);
+        setRankingDataStatus({
+          mode: "real",
+          updatedAt: overviewData.date || newsData.date || coinData.date || formatTimestamp(new Date()),
+          newsSourceStatus: "connected",
+          agentStatus: "ready",
+          message: "已连接后端风险排行榜，展示真实新闻标注结果",
+        });
       } catch (error) {
         console.error(error);
         if (!ignore) {
           setRankingError("排行数据暂未连接，当前展示本地演示数据。请确认 FastAPI 后端已启动。");
           setNewsRanking(fallbackNews);
           setCoinRanking(fallbackCoins);
+          setRankingDataStatus(demoRankingDataStatus);
         }
       } finally {
         if (!ignore) setRankingLoading(false);
@@ -566,6 +856,30 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       ignore = true;
     };
   }, [rankingRange]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (activeView !== "daily") return;
+
+    async function loadSavedDailyReport() {
+      setDailyReportFetching(true);
+      setDailyReportError("");
+      try {
+        const data = await fetchDailyRiskReport(rankingRange);
+        if (!ignore) setDailyReport(data);
+      } catch (error) {
+        console.error(error);
+        if (!ignore) setDailyReportError("已保存的资产日报读取失败，仍可重新生成。");
+      } finally {
+        if (!ignore) setDailyReportFetching(false);
+      }
+    }
+
+    void loadSavedDailyReport();
+    return () => {
+      ignore = true;
+    };
+  }, [activeView, authUser?.id, rankingRange]);
 
   useEffect(() => {
     function handlePopState() {
@@ -647,6 +961,66 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }, [authUser]);
 
   useEffect(() => {
+    let ignore = false;
+    if (!authUser) {
+      reportSyncUserRef.current = "";
+      return;
+    }
+    const currentUser = authUser;
+
+    async function syncReports() {
+      try {
+        const remoteItems = await fetchAnalysisReports();
+        if (ignore) return;
+        const localRecords = readStoredAnalysisRecords().map(normalizeAnalysisRecord);
+        const remoteRecords = remoteItems.map(mapRemoteAnalysisReport);
+        const merged = mergeAnalysisRecords(localRecords, remoteRecords);
+        setAnalysisRecords(merged);
+        writeStoredAnalysisRecords(merged);
+        reportSyncUserRef.current = currentUser.id;
+
+        const remoteIds = new Set(remoteRecords.map((record) => record.id));
+        await Promise.all(localRecords.filter((record) => !remoteIds.has(record.id)).map(persistRemoteAnalysisReport));
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    void syncReports();
+    return () => {
+      ignore = true;
+    };
+  }, [authUser]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadAccountAssets(showLoading = true) {
+      if (showLoading) setAccountAssetsLoading(true);
+      try {
+        const items = await fetchUserAssets();
+        if (!ignore) setAccountAssets(items);
+      } catch (error) {
+        console.error(error);
+        if (!ignore) setAccountAssets([]);
+      } finally {
+        if (!ignore) setAccountAssetsLoading(false);
+      }
+    }
+
+    function handleUserAssetsUpdated() {
+      void loadAccountAssets(false);
+    }
+
+    void loadAccountAssets();
+    window.addEventListener(userAssetsUpdatedEventName, handleUserAssetsUpdated);
+    return () => {
+      ignore = true;
+      window.removeEventListener(userAssetsUpdatedEventName, handleUserAssetsUpdated);
+    };
+  }, [authUser?.id]);
+
+  useEffect(() => {
     if (pathname !== "/reports" || !recordIdFromUrl) return;
     window.localStorage.setItem(selectedRecordStorageKey, recordIdFromUrl);
   }, [pathname, recordIdFromUrl]);
@@ -706,6 +1080,15 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const selectedRecordId = recordIdFromUrl || storedSelectedRecordId;
   const selectedRecord = reportRecords.find((record) => record.id === selectedRecordId)
     || (!selectedRecordId ? reportRecords[0] || null : null);
+  const selectedVaultTab = parseMyVaultTab(new URLSearchParams(currentSearch).get("tab"));
+  const accountStats: AccountCenterStats = {
+    favoriteNews: favoriteNews.length,
+    favoriteReports: favoriteReports.length,
+    highRiskAssets: accountAssets.filter((item) => item.risk_score >= 80 || ["high", "critical"].includes(item.risk_level)).length,
+    loadingAssets: accountAssetsLoading,
+    pendingAlerts: accountAssets.filter((item) => item.risk_score >= item.alert_threshold || ["high", "critical"].includes(item.risk_level)).length,
+    watchedAssets: accountAssets.length,
+  };
 
   const pageMeta = getPageMeta(activeView);
 
@@ -744,6 +1127,26 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     syncRankingUrl(activeView === "coin" ? "coin" : "news", { range });
   }
 
+  function handleDailyRangeChange(range: RankingRange) {
+    setDailyReport(null);
+    setDailyReportError("");
+    handleChangeRankingRange(range);
+  }
+
+  async function handleGenerateDailyReport() {
+    setDailyReportLoading(true);
+    setDailyReportError("");
+    try {
+      const data = await generateDailyRiskReport(rankingRange);
+      setDailyReport(data);
+    } catch (error) {
+      console.error(error);
+      setDailyReportError("资产日报生成失败，请稍后重试或检查后端 Agent 服务。");
+    } finally {
+      setDailyReportLoading(false);
+    }
+  }
+
   async function refreshRankingsAfterUpdate(silent = false) {
     if (!silent) setRankingLoading(true);
     setRankingError("");
@@ -757,6 +1160,13 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       setOverview(overviewData);
       setNewsRanking(newsData.items);
       setCoinRanking(coinData.items);
+      setRankingDataStatus({
+        mode: "real",
+        updatedAt: overviewData.date || newsData.date || coinData.date || formatTimestamp(new Date()),
+        newsSourceStatus: "connected",
+        agentStatus: "ready",
+        message: "新闻更新后排行榜已刷新",
+      });
     } catch (error) {
       console.error(error);
       setRankingError("新闻已更新，但排行榜刷新失败，请稍后重新打开排行榜。");
@@ -1051,6 +1461,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }
 
   function handleDeleteRecord(id: string) {
+    void deleteAnalysisReport(id).catch(() => undefined);
     setAnalysisRecords((items) => {
       const nextRecords = items.filter((item) => item.id !== id);
       if (nextRecords.length) {
@@ -1073,12 +1484,33 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }
 
   function handleDeleteAllRecords() {
+    analysisRecords.forEach((record) => {
+      void deleteAnalysisReport(record.id).catch(() => undefined);
+    });
     setAnalysisRecords([]);
     setStoredSelectedRecordId("");
     setLatestReport(null);
     window.localStorage.removeItem(analysisRecordsStorageKey);
     window.localStorage.removeItem(selectedRecordStorageKey);
     if (activeView === "reports") navigateTo("/reports", "replace");
+  }
+
+  function handleChangeRecordDisposition(recordId: string, disposition: AnalysisDisposition, note = "") {
+    setAnalysisRecords((items) => {
+      const nextRecords = items.map((record) => {
+        if (record.id !== recordId) return record;
+        const nextRecord = normalizeAnalysisRecord({
+          ...record,
+          disposition,
+          dispositionNote: note,
+        });
+        void updateAnalysisReportDisposition(recordId, disposition, note)
+          .catch(() => persistRemoteAnalysisReport(nextRecord));
+        return nextRecord;
+      });
+      writeStoredAnalysisRecords(nextRecords);
+      return nextRecords;
+    });
   }
 
   return (
@@ -1090,11 +1522,13 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
           <TopBar
             authLoading={authLoading}
             authUser={authUser}
+            stats={accountStats}
             onLoginClick={() => {
               setAuthError("");
               setAuthModalOpen(true);
             }}
             onLogout={handleLogout}
+            onNavigate={navigateTo}
             title={pageMeta.title}
             subtitle={pageMeta.subtitle}
           />
@@ -1103,8 +1537,11 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
           <div className="px-3 py-4 sm:px-6 sm:py-5 2xl:px-8">
             <div className="min-w-0 space-y-5">
               {rankingError && <Notice tone="amber" text={rankingError} />}
+              {["home", "news", "coin"].includes(activeView) && (
+                <RankingDataStatusBar status={rankingDataStatus} />
+              )}
 
-              {activeView !== "chat" && activeView !== "portfolio" && activeView !== "sim" && activeView !== "reports" && activeView !== "favoriteNews" && activeView !== "favoriteReports" && activeView !== "my" && activeView !== "settings" && (
+              {activeView !== "chat" && activeView !== "portfolio" && activeView !== "sim" && activeView !== "daily" && activeView !== "reports" && activeView !== "favoriteNews" && activeView !== "favoriteReports" && activeView !== "my" && activeView !== "settings" && (
                 <MetricGrid
                   activeView={activeView}
                   coinItems={displayCoins}
@@ -1162,11 +1599,22 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   onChangeRange={handleChangeRankingRange}
                 />
               )}
+              {activeView === "daily" && (
+                <DailyReportView
+                  agentReport={dailyReport}
+                  error={dailyReportError}
+                  fetching={dailyReportFetching}
+                  loading={dailyReportLoading}
+                  onChangeRange={handleDailyRangeChange}
+                  onGenerate={handleGenerateDailyReport}
+                  range={rankingRange}
+                />
+              )}
               {activeView === "portfolio" && (
                 <PortfolioRiskRadar />
               )}
               {activeView === "sim" && (
-                <SimTradingPanel embedded />
+                <SimTradingPanel key={authUser?.id || "guest"} embedded />
               )}
               {activeView === "reports" && (
                 <ReportsView
@@ -1179,6 +1627,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   favoriteActionLoadingId={favoriteActionLoadingId}
                   onToggleCollapsed={() => setReportSidebarCollapsed((value) => !value)}
                   onToggleFavorite={handleToggleReportFavorite}
+                  onChangeDisposition={handleChangeRecordDisposition}
                   onReanalyze={handleReanalyze}
                   records={reportRecords}
                   selectedRecord={selectedRecord}
@@ -1216,6 +1665,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                     setAuthError("");
                     setAuthModalOpen(true);
                   }}
+                  selectedTab={selectedVaultTab}
                   user={authUser}
                 />
               )}
@@ -1264,11 +1714,10 @@ function Sidebar({
   const navItems: NavItem[] = [
     { key: "home", label: "首页总览", icon: <HomeIcon /> },
     { key: "chat", label: "事件风险分析", icon: <ChatIcon /> },
-    { key: "portfolio", label: "我的风险资产", icon: <PortfolioIcon /> },
-    { key: "sim", label: "模拟交易盘", icon: <TradeIcon /> },
     { key: "reports", label: "分析报告", icon: <FileIcon /> },
-    { key: "my", label: "我的", icon: <UserIcon /> },
-    { key: "settings", label: "系统设置", icon: <GearIcon /> },
+    { key: "portfolio", label: "我的风险资产", icon: <PortfolioIcon /> },
+    { key: "daily", label: "资产日报", icon: <BotIcon /> },
+    { key: "sim", label: "模拟交易盘", icon: <TradeIcon /> },
   ];
 
   return (
@@ -1284,7 +1733,7 @@ function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-2 px-4 py-6">
-        {navItems.slice(0, 4).map((item) => (
+        {navItems.slice(0, 5).map((item) => (
           <SidebarButton
             key={item.key}
             active={isSidebarItemActive(activeView, item.key)}
@@ -1324,7 +1773,7 @@ function Sidebar({
           )}
         </div>
 
-        {navItems.slice(4).map((item) => (
+        {navItems.slice(5).map((item) => (
           <SidebarButton
             key={item.key}
             active={isSidebarItemActive(activeView, item.key)}
@@ -1413,6 +1862,8 @@ function TopBar({
   authUser,
   onLoginClick,
   onLogout,
+  onNavigate,
+  stats,
   title,
   subtitle,
 }: {
@@ -1420,9 +1871,40 @@ function TopBar({
   authUser: AuthUser | null;
   onLoginClick: () => void;
   onLogout: () => void;
+  onNavigate: (path: string, mode?: "push" | "replace") => void;
+  stats: AccountCenterStats;
   title: string;
   subtitle: string;
 }) {
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (target && accountRef.current?.contains(target)) return;
+      setAccountOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setAccountOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [accountOpen]);
+
+  function handleNavigate(path: string) {
+    setAccountOpen(false);
+    onNavigate(path);
+  }
+
   return (
     <header className="risk-topbar sticky top-0 z-20 border-b border-blue-100 backdrop-blur-xl">
       <div className="flex min-h-[76px] items-center gap-4 px-4 sm:min-h-[92px] sm:px-6 2xl:px-8">
@@ -1430,22 +1912,36 @@ function TopBar({
           <p className="truncate text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">{title}</p>
           <p className="mt-1 line-clamp-2 text-sm text-slate-500">{subtitle}</p>
         </div>
-        <div className="shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           {authUser ? (
-            <div className="flex items-center gap-2">
-              <div className="hidden min-w-0 text-right sm:block">
-                <p className="truncate text-sm font-bold text-slate-900">{authUser.display_name || authUser.username}</p>
-                <p className="text-xs font-semibold text-emerald-600">已登录</p>
-              </div>
+            <div className="relative" ref={accountRef}>
               <button
                 type="button"
-                onClick={onLogout}
+                onClick={() => setAccountOpen((value) => !value)}
                 disabled={authLoading}
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm transition-colors duration-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+                aria-expanded={accountOpen}
+                aria-haspopup="dialog"
+                className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-lg border border-blue-100 bg-white px-2 text-sm font-bold text-slate-700 shadow-sm transition-colors duration-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3"
               >
-                <UsersIcon />
-                <span className="hidden sm:inline">退出</span>
+                <AccountAvatar user={authUser} />
+                <span className="hidden min-w-0 text-right sm:block">
+                  <span className="block max-w-[120px] truncate text-sm font-bold text-slate-900">{authUser.display_name || authUser.username}</span>
+                  <span className="block text-xs font-semibold text-emerald-600">已登录</span>
+                </span>
+                <ChevronDownIcon />
               </button>
+              {accountOpen && (
+                <AccountCenterPopover
+                  authLoading={authLoading}
+                  onLogout={() => {
+                    setAccountOpen(false);
+                    onLogout();
+                  }}
+                  onNavigate={handleNavigate}
+                  stats={stats}
+                  user={authUser}
+                />
+              )}
             </div>
           ) : (
             <button
@@ -1461,6 +1957,117 @@ function TopBar({
         </div>
       </div>
     </header>
+  );
+}
+
+function AccountAvatar({ large = false, user }: { large?: boolean; user: AuthUser }) {
+  const name = user.display_name || user.username || "U";
+  const initial = name.trim().slice(0, 1).toUpperCase() || "U";
+  return (
+    <span className={`flex shrink-0 items-center justify-center rounded-full bg-blue-600 font-bold text-white shadow-sm shadow-blue-200 ${large ? "h-14 w-14 text-lg" : "h-8 w-8 text-sm"}`}>
+      {initial}
+    </span>
+  );
+}
+
+function AccountCenterPopover({
+  authLoading,
+  onLogout,
+  onNavigate,
+  stats,
+  user,
+}: {
+  authLoading: boolean;
+  onLogout: () => void;
+  onNavigate: (path: string) => void;
+  stats: AccountCenterStats;
+  user: AuthUser;
+}) {
+  const userName = user.display_name || user.username;
+  const email = user.email || "邮箱未绑定";
+  const statsItems = [
+    ["关注资产", stats.loadingAssets ? "--" : String(stats.watchedAssets), "text-blue-700"],
+    ["高风险", stats.loadingAssets ? "--" : String(stats.highRiskAssets), "text-red-600"],
+    ["未处理预警", stats.loadingAssets ? "--" : String(stats.pendingAlerts), "text-orange-600"],
+    ["收藏报告", String(stats.favoriteReports), "text-violet-700"],
+  ] as const;
+  const shortcuts = [
+    { badge: stats.loadingAssets ? "--" : String(stats.watchedAssets), icon: <PortfolioIcon />, label: "设置关注资产", path: "/my?tab=assets" },
+    { badge: String(stats.favoriteNews), icon: <ChartIcon />, label: "收藏新闻", path: "/favorites/news" },
+    { badge: String(stats.favoriteReports), icon: <FileIcon />, label: "收藏报告", path: "/favorites/reports" },
+  ];
+
+  return (
+    <div
+      className="absolute right-0 top-14 z-50 w-[min(92vw,360px)] overflow-hidden rounded-lg border border-blue-100 bg-white shadow-2xl shadow-slate-900/15"
+      role="dialog"
+      aria-label="我的风控中心"
+    >
+      <div className="border-b border-blue-100 bg-blue-50/70 px-4 py-4">
+        <div className="flex items-center gap-3">
+          <AccountAvatar large user={user} />
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">我的风控中心</p>
+            <p className="mt-1 truncate text-base font-bold text-slate-950">{userName}</p>
+            <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">{email}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="grid grid-cols-2 gap-2">
+          {statsItems.map(([label, value, tone]) => (
+            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5" key={label}>
+              <p className="text-xs font-bold text-slate-500">{label}</p>
+              <p className={`mt-1 text-xl font-bold tabular-nums ${tone}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-1">
+          {shortcuts.map((item) => (
+            <button
+              className="flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left text-sm font-bold text-slate-700 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-700"
+              key={item.label}
+              onClick={() => onNavigate(item.path)}
+              type="button"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-700">{item.icon}</span>
+              <span className="flex-1">{item.label}</span>
+              {"badge" in item && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">{item.badge}</span>}
+              <ChevronRightIcon />
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-2">
+          <button
+            className="h-10 cursor-pointer rounded-lg bg-blue-600 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700"
+            onClick={() => onNavigate("/my")}
+            type="button"
+          >
+            查看完整档案库
+          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              className="h-10 cursor-pointer rounded-lg border border-blue-100 bg-white text-sm font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-50"
+              onClick={() => onNavigate("/settings")}
+              type="button"
+            >
+              系统设置
+            </button>
+            <button
+              className="h-10 cursor-pointer rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition-colors duration-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={authLoading}
+              onClick={onLogout}
+              type="button"
+            >
+              退出登录
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1669,13 +2276,12 @@ function MobileNav({
   const items: Array<[ActiveView, string]> = [
     ["home", "总览"],
     ["chat", "对话"],
+    ["reports", "报告"],
+    ["portfolio", "资产"],
+    ["daily", "日报"],
     ["news", "新闻榜"],
     ["coin", "币种榜"],
-    ["portfolio", "资产"],
     ["sim", "模拟盘"],
-    ["reports", "报告"],
-    ["my", "我的"],
-    ["settings", "设置"],
   ];
 
   return (
@@ -1718,7 +2324,7 @@ function MetricGrid({
   const metrics = getMetrics(activeView, overview, topNews, topCoin, loading, newsItems, coinItems);
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-onboarding-id="home-metrics">
       {metrics.map((metric) => (
         <MetricCard key={metric.label} {...metric} />
       ))}
@@ -1777,6 +2383,41 @@ function MetricCard({
   );
 }
 
+function RankingDataStatusBar({ status }: { status: RankingDataStatus }) {
+  const isDemo = status.mode === "demo";
+  const tone = isDemo
+    ? "border-amber-200 bg-amber-50 text-amber-800"
+    : "border-emerald-200 bg-emerald-50 text-emerald-800";
+  const agentLabel = {
+    ready: "Agent 标注正常",
+    fallback: "Agent 兜底/离线",
+    unknown: "Agent 状态检测中",
+  }[status.agentStatus];
+  const sourceLabel = {
+    connected: "新闻源已连接",
+    fallback: "新闻源未连接",
+    unknown: "新闻源检测中",
+  }[status.newsSourceStatus];
+
+  return (
+    <section className={`rounded-lg border px-4 py-3 ${tone}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${isDemo ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+            {isDemo ? "演示数据" : "真实数据"}
+          </span>
+          <span className="text-sm font-bold">{status.message}</span>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs font-bold">
+          <span className="rounded-md bg-white/70 px-2.5 py-1">更新时间：{status.updatedAt || "--"}</span>
+          <span className="rounded-md bg-white/70 px-2.5 py-1">{sourceLabel}</span>
+          <span className="rounded-md bg-white/70 px-2.5 py-1">{agentLabel}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DashboardHome({
   coinItems,
   favoriteActionLoadingId,
@@ -1796,10 +2437,12 @@ function DashboardHome({
 }) {
   const topCoin = coinItems[0] || emptyCoinItem;
   const topNews = newsItems[0] || emptyNewsItem;
+  const priorities = buildHomePriorities(newsItems, coinItems);
 
   return (
     <>
       <CommandHero topCoin={topCoin} topNews={topNews} onStart={() => onChangeView("chat")} />
+      <TodayPriorityPanel priorities={priorities} onChangeView={onChangeView} />
       <div className="grid gap-5 xl:grid-cols-2">
         <RankingCard title="新闻风险排行榜 Top 10" action="查看全部" onAction={() => onChangeView("news")}>
           <NewsTable
@@ -1829,7 +2472,7 @@ function CommandHero({
   topNews: NewsRankingItem;
 }) {
   return (
-    <section className="risk-card grid gap-5 rounded-lg p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)]">
+    <section className="risk-card grid gap-5 rounded-lg p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)]" data-onboarding-id="home-command">
       <div className="relative z-10">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full border border-emerald-700/20 bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-800">
@@ -1863,7 +2506,49 @@ function CommandHero({
 
       <div className="relative z-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
         <HeroSignal label="最高风险新闻" value={topNews.title} score={topNews.risk_score} tone="red" />
-        <HeroSignal label="最高风险币种" value={`${topCoin.symbol} / ${topCoin.main_risk_type}`} score={topCoin.final_score} tone="orange" />
+        <HeroSignal label="最高风险币种" value={`${topCoin.symbol} / ${formatScoreReasonText(topCoin.main_risk_type)}`} score={topCoin.final_score} tone="orange" />
+      </div>
+    </section>
+  );
+}
+
+function TodayPriorityPanel({
+  onChangeView,
+  priorities,
+}: {
+  onChangeView: (view: ActiveView) => void;
+  priorities: Array<{ title: string; detail: string; action: string; view: ActiveView; tone: "red" | "orange" | "blue" }>;
+}) {
+  return (
+    <section className="risk-card rounded-lg p-5" data-onboarding-id="home-priorities">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PanelTitle icon={<AlertIcon />} title="今天我应该先看什么" />
+        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">优先级队列</span>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {priorities.map((item, index) => {
+          const toneStyle = {
+            red: "border-rose-200 bg-rose-50 text-rose-800",
+            orange: "border-amber-200 bg-amber-50 text-amber-800",
+            blue: "border-blue-200 bg-blue-50 text-blue-800",
+          }[item.tone];
+          return (
+            <button
+              key={`${item.title}-${index}`}
+              type="button"
+              onClick={() => onChangeView(item.view)}
+              className={`min-h-[132px] rounded-lg border p-4 text-left transition-colors duration-200 hover:bg-white ${toneStyle}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="rounded-md bg-white px-2 py-1 text-xs font-bold">P{index + 1}</span>
+                <ChevronRightIcon />
+              </div>
+              <p className="mt-3 text-sm font-bold leading-6 text-slate-950">{item.title}</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">{item.detail}</p>
+              <p className="mt-3 text-xs font-bold">{item.action}</p>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
@@ -1919,94 +2604,144 @@ function ChatView({
   records: AnalysisRecord[];
 }) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const messageLength = message.trim().length;
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [chatMessages, chatLoading]);
 
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [message]);
+
   return (
     <section className="grid min-h-[calc(100vh-168px)] gap-4 sm:gap-5 xl:h-[calc(100vh-170px)] xl:grid-cols-[minmax(0,4fr)_minmax(230px,1fr)]">
-      <div className="risk-card flex min-h-[calc(100vh-168px)] flex-col rounded-lg xl:h-full xl:min-h-0">
-        <div className="risk-scroll min-h-0 flex-1 overflow-y-auto px-3 py-5 sm:px-8 sm:py-6 lg:px-10">
-          <div className="mx-auto max-w-5xl space-y-5">
-            {chatMessages.map((item) => (
-              <div key={item.id} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
-                {item.role === "assistant" && (
-                  <div className="mr-3 mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
-                    <ShieldIcon />
-                  </div>
-                )}
-                <div
-                  className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm sm:max-w-[78%] sm:px-5 sm:py-4 ${
-                    item.role === "user"
-                      ? "bg-blue-600 text-white"
-                      : "border border-blue-100 bg-slate-50 text-slate-700"
-                  }`}
-                >
-                  {item.role === "assistant" && !item.content ? <LoadingDots label="正在生成简要分析" /> : item.content}
+      <div className="risk-card flex min-h-[calc(100vh-168px)] overflow-hidden rounded-lg xl:h-full xl:min-h-0">
+        <div className="flex min-w-0 flex-1 flex-col bg-white">
+          <div className="border-b border-blue-100 bg-gradient-to-r from-white via-blue-50 to-emerald-50 px-4 py-4 sm:px-7">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm shadow-blue-200">
+                  <ChatIcon />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-base font-bold text-slate-950">事件研判对话</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">粘贴新闻正文、公告或链上异常，生成风险分析报告</p>
                 </div>
               </div>
-            ))}
-            {chatLoading && (
-              <div className="flex justify-start">
-                <div className="w-full max-w-[640px]">
-                  <AgentProgress
-                    icon={<ShieldIcon />}
-                    title="Chat Agent 正在研判"
-                    activeStage={chatProgressStage}
-                    steps={["输入标准化", "风险信号扫描", "提取证据", "生成报告"]}
-                  />
-                </div>
+              <div className="rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700 shadow-sm">
+                Agent 待命
               </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-        </div>
-
-        <div className="border-t border-blue-100 bg-white/95 px-3 py-3 backdrop-blur sm:px-8 sm:py-4">
-          <div className="mx-auto max-w-4xl">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="risk-scroll flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
-                {examplePrompts.slice(0, 3).map((item, index) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => onExampleClick(item)}
-                    className="shrink-0 rounded-full border border-blue-100 bg-white px-4 py-2 text-xs font-semibold text-blue-700 shadow-sm transition-colors duration-200 hover:bg-blue-50"
-                  >
-                    示例 {index + 1}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={onClearChatHistory}
-                disabled={chatLoading}
-                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700 transition-colors duration-200 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <TrashIcon />
-                清除聊天
-              </button>
             </div>
+          </div>
 
-            <form onSubmit={onSubmit} className="flex min-h-14 items-end gap-2 rounded-xl border border-blue-100 bg-white px-3 py-3 shadow-xl shadow-blue-100/70 sm:gap-3 sm:rounded-2xl sm:px-4">
-              <textarea
-                value={message}
-                onChange={(event) => onMessageChange(event.target.value)}
-                className="max-h-32 min-h-8 flex-1 resize-none bg-transparent text-sm leading-7 text-slate-700 outline-none placeholder:text-slate-400"
-                placeholder="输入新闻、公告、链上事件或交易所异常..."
-                rows={1}
-              />
-              <button
-                type="submit"
-                disabled={chatLoading || !message.trim()}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="发送分析事件"
-              >
-                <SendIcon />
-              </button>
-            </form>
-            {chatError && <div className="mt-3"><Notice tone="red" text={chatError} /></div>}
+          <div className="risk-scroll min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(37,99,235,0.035)_1px,transparent_1px)] bg-[size:40px_40px] px-3 py-5 sm:px-8 sm:py-6 lg:px-10">
+            <div className="mx-auto max-w-5xl space-y-5">
+              {chatMessages.map((item) => (
+                <div key={item.id} className={`flex items-end gap-3 ${item.role === "user" ? "justify-end" : "justify-start"}`}>
+                  {item.role === "assistant" && (
+                    <div className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
+                      <ShieldIcon />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm sm:max-w-[76%] sm:px-5 sm:py-4 ${
+                      item.role === "user"
+                        ? "rounded-br-md bg-emerald-700 text-white shadow-emerald-100"
+                        : "rounded-bl-md border border-blue-100 bg-white/95 text-slate-700 shadow-blue-100/70"
+                    }`}
+                  >
+                    {item.role === "assistant" && !item.content ? <LoadingDots label="正在生成简要分析" /> : item.content}
+                  </div>
+                  {item.role === "user" && (
+                    <div className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white shadow-sm">
+                      <UserIcon />
+                    </div>
+                  )}
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="w-full max-w-3xl">
+                    <AgentProgress
+                      activeStage={chatProgressStage}
+                      icon={<ShieldIcon />}
+                      title={`Agent 正在执行：${chatProgressLabels[chatProgressStage]}`}
+                      steps={chatProgressSteps}
+                    />
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+          </div>
+
+          <div className="border-t border-blue-100 bg-white/95 px-3 py-3 backdrop-blur sm:px-8 sm:py-4">
+            <div className="mx-auto max-w-4xl">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="risk-scroll flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">
+                  {examplePrompts.slice(0, 3).map((item, index) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => onExampleClick(item)}
+                      className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-bold text-blue-700 shadow-sm transition-colors duration-200 hover:bg-blue-100"
+                    >
+                      示例 {index + 1}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={onClearChatHistory}
+                  disabled={chatLoading}
+                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700 transition-colors duration-200 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <TrashIcon />
+                  清除聊天
+                </button>
+              </div>
+
+              <form onSubmit={onSubmit} className="rounded-2xl border border-blue-100 bg-white p-3 shadow-xl shadow-blue-100/70" data-onboarding-id="chat-input">
+                <textarea
+                  ref={textareaRef}
+                  value={message}
+                  onChange={(event) => onMessageChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  className="max-h-40 min-h-24 w-full resize-none bg-transparent px-1 text-sm leading-7 text-slate-700 outline-none placeholder:text-slate-400"
+                  placeholder="粘贴新闻正文、公告、链上事件或交易所异常，开始风险分析..."
+                  rows={3}
+                />
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+                    <span>Enter 发送</span>
+                    <span className="h-1 w-1 rounded-full bg-slate-300" />
+                    <span>Shift + Enter 换行</span>
+                    <span className="h-1 w-1 rounded-full bg-slate-300" />
+                    <span>{messageLength} 字</span>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={chatLoading || !message.trim()}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white shadow-sm shadow-emerald-100 transition-colors duration-200 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="发送分析事件"
+                  >
+                    <SendIcon />
+                    开始分析
+                  </button>
+                </div>
+              </form>
+              {chatError && <div className="mt-3"><Notice tone="red" text={chatError} /></div>}
+            </div>
           </div>
         </div>
       </div>
@@ -2048,7 +2783,7 @@ function AnalysisCardsPanel({
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <RiskBadge level={record.report.risk_level} />
               </div>
-              <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600">{record.report.summary || record.input}</p>
+              <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600">{formatScoreReasonText(record.report.summary || record.input)}</p>
               <p className="mt-3 text-xs font-semibold text-blue-700">{record.createdAt}</p>
             </Link>
           ))
@@ -2169,6 +2904,297 @@ function CoinView({
         total={items.length}
       />
     </>
+  );
+}
+
+function DailyReportView({
+  agentReport,
+  error,
+  fetching,
+  loading,
+  onChangeRange,
+  onGenerate,
+  range,
+}: {
+  agentReport: DailyRiskReport | null;
+  error: string;
+  fetching: boolean;
+  loading: boolean;
+  onChangeRange: (range: RankingRange) => void;
+  onGenerate: () => void;
+  range: RankingRange;
+}) {
+  const report = useMemo(() => (agentReport ? buildDailyRiskReport(range, agentReport) : null), [agentReport, range]);
+  const sourceLabel = report?.source === "llm" ? "LangGraph Agent 生成" : report ? "LangGraph 规则兜底" : loading ? "Agent 生成中" : fetching ? "读取已保存日报" : "等待生成";
+  const busy = loading || fetching;
+
+  return (
+    <section className="space-y-5">
+      {error && <Notice tone="amber" text={error} />}
+      <div className="risk-card rounded-lg p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-4xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${riskLevelStyle(report?.alertLevel || "低风险")}`}>
+                {report?.alertLevel || "未生成"}
+              </span>
+              <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                {range === "24h" ? "近1天" : "近7天"}资产日报
+              </span>
+              <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                {sourceLabel}
+              </span>
+            </div>
+            <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+              {report?.headline || "生成你的今日资产日报"}
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+              {report?.summary || "点击按钮后，系统会调用 LangGraph Agent，自动聚合今日新闻中与你已添加资产相关的风险信号，并按资产生成 BTC、ETH 等分项分析。"}
+            </p>
+            <p className="mt-3 text-xs font-semibold text-slate-400">
+              {report
+                ? `生成日期：${report.createdAt || report.generationDate || "--"} · 数据基准：${report.generatedAt} · 关注资产 ${report.userAssetsCount} 个 · 命中资产 ${report.affectedAssets.length} 个 · 新闻样本 ${report.newsCount} 条`
+                : "只展示你在“我的风险资产”中添加的资产，不会混入全市场排行榜结果。"}
+            </p>
+            {report && (report.impactSummary || report.focusPoints.length > 0) && (
+              <div className="mt-4 rounded-lg border border-blue-100 bg-slate-50 p-3">
+                {report.impactSummary && (
+                  <p className="text-sm font-semibold leading-6 text-slate-700">{report.impactSummary}</p>
+                )}
+                {report.focusPoints.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {report.focusPoints.map((item) => (
+                      <span key={item} className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-blue-700 shadow-sm">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <RangeSegmentedControl range={range} onChangeRange={onChangeRange} />
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={busy}
+              className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm shadow-blue-200 transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+            >
+              <span className={loading ? "animate-spin" : ""}>{loading ? <RefreshIcon /> : <BotIcon />}</span>
+              生成今日资产日报
+            </button>
+          </div>
+        </div>
+
+        {report && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <DailyMetricCard label="个人风险分" value={String(report.personalScore)} tone="blue" icon={<TrendIcon />} />
+            <DailyMetricCard label="相关高风险事件" value={String(report.personalHighCount)} tone="red" icon={<AlertIcon />} />
+            <DailyMetricCard label="资产分项报告" value={String(report.assetReports.length)} tone="purple" icon={<FileIcon />} />
+            <DailyMetricCard label="关注/持仓资产" value={`${report.userAssetsCount}/${report.holdingAssetsCount}`} tone="green" icon={<CoinIcon />} />
+          </div>
+        )}
+      </div>
+
+      {!report && (
+        <section className="risk-card rounded-lg p-6">
+          {busy ? (
+            <AgentProgress
+              activeStage="report_generation"
+              icon={<BotIcon />}
+              title={loading ? "Agent 正在生成资产日报" : "正在读取已保存日报"}
+              steps={loading ? ["读取用户资产", "匹配今日新闻", "聚合分资产风险", "保存日报"] : ["定位用户日报库", "读取最近生成记录", "恢复页面展示"]}
+            />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.62fr)_minmax(280px,0.38fr)]">
+              <div>
+                <PanelTitle icon={<BotIcon />} title="按用户资产生成" />
+                <p className="mt-3 text-sm leading-7 text-slate-600">
+                  日报会先读取你的关注/持仓资产，再从已有新闻风险数据中筛选直接相关事件，最后由 Agent 生成聚合分析。没有添加到资产库的币种不会出现在这里。
+                </p>
+              </div>
+              <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-4">
+                <p className="text-sm font-bold text-slate-800">生成后将看到</p>
+                <div className="mt-3 space-y-2 text-sm font-semibold text-slate-600">
+                  <p>每个已添加资产的独立风险结论</p>
+                  <p>命中新闻的聚合风险驱动</p>
+                  <p>接下来 24 小时监控项与处置清单</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {report && (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.58fr)_minmax(320px,0.42fr)]">
+          <section className="risk-card rounded-lg p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <PanelTitle icon={<FileIcon />} title="资产分项报告" />
+              <span className="text-xs font-semibold text-slate-500">只包含你已添加的关注/持仓资产</span>
+            </div>
+            <div className="mt-4 space-y-4">
+              {report.assetReports.length ? report.assetReports.map((asset) => (
+                <DailyAssetReportCard key={asset.assetSymbol} asset={asset} />
+              )) : (
+                <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-6 text-center text-sm font-semibold text-slate-500">
+                  {report.userAssetsCount === 0 ? "你还没有添加关注资产。请先到“我的风险资产”添加币种后再生成日报。" : "本期未生成资产分项报告"}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <aside className="space-y-5">
+            <section className="risk-card rounded-lg p-5">
+              <PanelTitle icon={<ChartIcon />} title="跨资产聚合主题" />
+              <div className="mt-4 space-y-3">
+                {report.riskThemes.length ? report.riskThemes.map((theme) => (
+                  <div key={theme.themeId} className="rounded-lg border border-blue-100 bg-slate-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold leading-5 text-slate-800">{theme.title}</p>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-slate-500">{theme.summary}</p>
+                      </div>
+                      <p className={`shrink-0 text-lg font-bold ${riskScoreTextStyle(theme.maxPersonalScore, theme.riskLevel)}`}>{theme.maxPersonalScore}</p>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-blue-700">{theme.riskType}</span>
+                      <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-slate-500">{theme.eventCount} 个聚合信号</span>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="rounded-lg border border-dashed border-blue-100 bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">暂无跨资产聚合主题</p>
+                )}
+              </div>
+            </section>
+
+            <section className="risk-card rounded-lg p-5">
+              <PanelTitle icon={<AlertIcon />} title="风险类型热区" />
+              <div className="mt-4 space-y-3">
+                {report.riskTypes.length ? report.riskTypes.map((item) => (
+                  <div key={item.name} className="rounded-lg border border-blue-100 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-bold text-slate-800">{item.name}</span>
+                      <span className="font-bold text-blue-700">{item.count} 条</span>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-white">
+                      <div className="h-2 rounded-full bg-blue-600" style={{ width: `${item.weight}%` }} />
+                    </div>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">最高风险分 {item.maxScore} · 高风险 {item.highCount} 条</p>
+                  </div>
+                )) : (
+                  <p className="rounded-lg border border-dashed border-blue-100 bg-slate-50 px-3 py-6 text-center text-sm font-semibold text-slate-500">暂无风险类型数据</p>
+                )}
+              </div>
+            </section>
+
+            <section className="risk-card rounded-lg p-5">
+              <PanelTitle icon={<CheckIcon />} title="用户处置清单" />
+              <div className="mt-4 space-y-2">
+                {report.actions.map((action) => (
+                  <div key={action} className="flex gap-3 rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-sm font-semibold leading-6 text-slate-700">
+                    <span className="mt-0.5 text-emerald-600"><CheckIcon /></span>
+                    <span>{action}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DailyAssetReportCard({ asset }: { asset: DailyAssetReport }) {
+  const hasEvidence = asset.evidenceSummary.length > 0;
+  const holdingLabel = asset.isHolding ? "持仓" : "关注";
+  const priceTone = (asset.priceChange24h || 0) >= 0 ? "text-emerald-600" : "text-rose-600";
+
+  return (
+    <article className="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <CoinMark symbol={asset.assetName || asset.assetSymbol} />
+            <div>
+              <h2 className="text-base font-bold leading-6 text-slate-950">{asset.assetName || asset.assetSymbol}</h2>
+              <p className="text-xs font-semibold text-slate-500">{asset.assetSymbol} · {asset.exposureLabel || holdingLabel}</p>
+            </div>
+            <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{holdingLabel}</span>
+            <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-bold text-slate-500">命中 {asset.sourceEventCount} 个聚合信号</span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-600">{asset.summary}</p>
+          {asset.riskTypes.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {asset.riskTypes.slice(0, 5).map((item) => (
+                <span key={item} className="rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">{item}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="min-w-[112px] text-right">
+          <p className={`text-3xl font-bold ${riskScoreTextStyle(asset.personalRiskScore, asset.riskLevel)}`}>{asset.personalRiskScore}</p>
+          <p className="mb-1 text-xs font-semibold text-slate-400">资产风险分</p>
+          <RiskBadge level={asset.riskLevel} />
+          {asset.alertThreshold !== undefined && (
+            <p className="mt-2 text-xs font-semibold text-slate-400">阈值 {asset.alertThreshold}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <p className="text-xs font-bold text-slate-500">风险驱动</p>
+          <div className="mt-2 space-y-2">
+            {asset.keyDrivers.slice(0, 4).map((item, index) => (
+              <p key={`${item}-${index}`} className="text-xs font-semibold leading-5 text-slate-600">{item}</p>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <p className="text-xs font-bold text-slate-500">证据摘要</p>
+          <div className="mt-2 space-y-2">
+            {hasEvidence ? asset.evidenceSummary.slice(0, 4).map((item, index) => (
+              <p key={`${item}-${index}`} className="text-xs font-semibold leading-5 text-slate-600">{item}</p>
+            )) : (
+              <p className="text-xs font-semibold leading-5 text-slate-400">今日暂无直接命中证据，保持基础监控。</p>
+            )}
+          </div>
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <p className="text-xs font-bold text-slate-500">资产状态</p>
+          <div className="mt-2 space-y-1 text-xs font-semibold leading-5 text-slate-600">
+            <p>市值：{asset.marketValue ? formatCurrency(asset.marketValue) : "--"}</p>
+            <p className={priceTone}>24h：{asset.priceChange24h !== undefined ? formatVaultPercent(asset.priceChange24h) : "--"}</p>
+            <p>暴露：{asset.exposureMode || "bucket"} / {asset.exposureBucket || "none"}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+          <p className="text-xs font-bold text-blue-700">24 小时监控项</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {asset.monitoringItems.slice(0, 5).map((item) => (
+              <span key={item} className="rounded-md bg-white px-2 py-1 text-xs font-bold text-blue-700">{item}</span>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
+          <p className="text-xs font-bold text-emerald-700">处置建议</p>
+          <div className="mt-2 space-y-2">
+            {asset.actions.slice(0, 4).map((item, index) => (
+              <div key={`${item}-${index}`} className="flex gap-2 text-xs font-semibold leading-5 text-slate-700">
+                <span className="mt-0.5 text-emerald-600"><CheckIcon /></span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -2388,6 +3414,7 @@ function ReportsView({
   onDeleteAllRecords,
   onDeleteRecord,
   onChangeView,
+  onChangeDisposition,
   onReanalyze,
   onSelectRecord,
   onToggleFavorite,
@@ -2401,6 +3428,7 @@ function ReportsView({
   onDeleteAllRecords: () => void;
   onDeleteRecord: (id: string) => void;
   onChangeView: (view: ActiveView) => void;
+  onChangeDisposition: (recordId: string, disposition: AnalysisDisposition, note?: string) => void;
   onReanalyze: (input: string) => void;
   onSelectRecord: (id: string) => void;
   onToggleFavorite: (record: AnalysisRecord) => void;
@@ -2465,6 +3493,7 @@ function ReportsView({
                           <p className="min-w-0 truncate text-sm font-bold text-slate-900">{record.title}</p>
                           <div className="flex shrink-0 items-center gap-1">
                             {favoriteReportIds.has(record.id) && <StarIcon filled />}
+                            <DispositionBadge disposition={record.disposition || "pending"} />
                             <RiskBadge level={record.report.risk_level} />
                           </div>
                         </div>
@@ -2488,6 +3517,7 @@ function ReportsView({
           favoriteLoading={favoriteActionLoadingId === selectedRecord.id}
           isFavorite={favoriteReportIds.has(selectedRecord.id)}
           onDeleteRecord={onDeleteRecord}
+          onChangeDisposition={onChangeDisposition}
           onReanalyze={onReanalyze}
           onToggleFavorite={onToggleFavorite}
           record={selectedRecord}
@@ -2528,22 +3558,37 @@ function MyView({
   favoriteReports,
   onChangeView,
   onLoginClick,
+  selectedTab,
   user,
 }: {
   favoriteNews: FavoriteItem[];
   favoriteReports: FavoriteItem[];
   onChangeView: (view: ActiveView) => void;
   onLoginClick: () => void;
+  selectedTab: MyVaultTab;
   user: AuthUser | null;
 }) {
-  const [activeTab, setActiveTab] = useState<MyVaultTab>("overview");
+  const [activeTab, setActiveTab] = useState<MyVaultTab>(selectedTab);
   const [watchlist, setWatchlist] = useState<PortfolioWatchlistItem[]>([]);
+  const [coinLibrary, setCoinLibrary] = useState<CoinLibraryItem[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(true);
+  const [loadingCoinLibrary, setLoadingCoinLibrary] = useState(true);
+  const [assetForm, setAssetForm] = useState<UserAssetFormState>(defaultUserAssetForm);
+  const [assetSaving, setAssetSaving] = useState(false);
+  const [assetActionError, setAssetActionError] = useState("");
+  const [assetActionMessage, setAssetActionMessage] = useState("");
+  const [alertDrafts, setAlertDrafts] = useState<Record<string, string>>({});
+  const [alertSavingSymbol, setAlertSavingSymbol] = useState("");
+  const [alertActionError, setAlertActionError] = useState("");
+  const [alertActionMessage, setAlertActionMessage] = useState("");
   const highRiskAssets = watchlist.filter((item) => item.risk_score >= 80 || ["high", "critical"].includes(item.risk_level));
   const pendingAlerts = watchlist.filter((item) => item.risk_score >= item.alert_threshold || ["high", "critical"].includes(item.risk_level));
   const recentReports = favoriteReports.slice(0, 4);
   const recentNews = favoriteNews.slice(0, 4);
-  const lastUpdated = watchlist[0]?.updated_at || favoriteNews[0]?.created_at || favoriteReports[0]?.created_at || "--";
+  const latestAssetUpdated = watchlist.map((item) => item.updated_at).filter(Boolean).sort().pop();
+  const lastUpdated = latestAssetUpdated || favoriteNews[0]?.created_at || favoriteReports[0]?.created_at || "--";
+  const selectedSymbols = new Set(watchlist.map((item) => item.symbol));
+  const availableCoins = coinLibrary.filter((coin) => !selectedSymbols.has(coin.symbol) || coin.symbol === assetForm.symbol);
   const tabs: Array<[MyVaultTab, string]> = [
     ["overview", "总览"],
     ["assets", "关注资产"],
@@ -2554,34 +3599,153 @@ function MyView({
   ];
 
   useEffect(() => {
+    setActiveTab(selectedTab);
+  }, [selectedTab]);
+
+  function changeTab(tab: MyVaultTab) {
+    setActiveTab(tab);
+  }
+
+  useEffect(() => {
+    setAlertDrafts((drafts) => {
+      const symbols = new Set(watchlist.map((item) => item.symbol));
+      const next: Record<string, string> = {};
+      watchlist.forEach((item) => {
+        next[item.symbol] = drafts[item.symbol] ?? String(item.alert_threshold ?? 70);
+      });
+      Object.keys(drafts).forEach((symbol) => {
+        if (symbols.has(symbol)) next[symbol] = next[symbol] ?? drafts[symbol];
+      });
+      return next;
+    });
+  }, [watchlist]);
+
+  useEffect(() => {
     let ignore = false;
     async function loadWatchlist() {
       setLoadingAssets(true);
+      setLoadingCoinLibrary(true);
       try {
-        const items = await fetchPortfolioWatchlist();
-        if (!ignore) setWatchlist(items);
+        const [items, coins] = await Promise.all([
+          fetchUserAssets(),
+          fetchCoinLibrary(undefined, 200),
+        ]);
+        if (!ignore) {
+          setWatchlist(items);
+          setCoinLibrary(coins);
+        }
       } catch (error) {
         console.error(error);
-        if (!ignore) setWatchlist([]);
+        if (!ignore) {
+          setWatchlist([]);
+          setCoinLibrary([]);
+        }
       } finally {
-        if (!ignore) setLoadingAssets(false);
+        if (!ignore) {
+          setLoadingAssets(false);
+          setLoadingCoinLibrary(false);
+        }
       }
     }
     void loadWatchlist();
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [user?.id]);
+
+  async function handleAddUserAsset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const symbol = assetForm.symbol;
+    if (!symbol) {
+      setAssetActionError("请选择币种");
+      return;
+    }
+    setAssetSaving(true);
+    setAssetActionError("");
+    setAssetActionMessage("");
+    try {
+      await createUserAsset({
+        symbol,
+        is_watched: true,
+        is_holding: assetForm.isHolding,
+        exposure_mode: "bucket",
+        exposure_bucket: assetForm.isHolding ? "medium" : "none",
+        alert_threshold: parseVaultAlertThreshold(assetForm.alertThreshold),
+      });
+      const items = await fetchUserAssets();
+      setWatchlist(items);
+      setAssetForm(defaultUserAssetForm);
+      const coinName = coinLibrary.find((coin) => coin.symbol === symbol)?.name || symbol;
+      setAssetActionMessage(`${coinName} 已加入关注资产库，全站风险功能会使用同一份数据。`);
+      window.dispatchEvent(new CustomEvent(userAssetsUpdatedEventName, { detail: { symbol } }));
+    } catch (error) {
+      console.error(error);
+      setAssetActionError("添加关注资产失败，请检查代码后重试。");
+    } finally {
+      setAssetSaving(false);
+    }
+  }
+
+  async function handleSaveAlertThreshold(symbol: string) {
+    if (!symbol || alertSavingSymbol) return;
+    const threshold = parseVaultAlertThreshold(alertDrafts[symbol] ?? "70");
+    setAlertSavingSymbol(symbol);
+    setAlertActionError("");
+    setAlertActionMessage("");
+    try {
+      await updateUserAsset(symbol, { alert_threshold: threshold });
+      const items = await fetchUserAssets();
+      setWatchlist(items);
+      setAlertDrafts((drafts) => ({ ...drafts, [symbol]: String(threshold) }));
+      setAlertActionMessage(`${symbol} 预警线已更新为 ${threshold}`);
+      window.dispatchEvent(new CustomEvent(userAssetsUpdatedEventName, { detail: { symbol } }));
+    } catch (error) {
+      console.error(error);
+      setAlertActionError("预警线保存失败，请稍后重试。");
+    } finally {
+      setAlertSavingSymbol("");
+    }
+  }
+
+  if (selectedTab === "assets") {
+    return (
+      <section>
+        <VaultPanel title="我的关注资产">
+          <VaultAssetQuickAdd
+            coinOptions={availableCoins}
+            error={assetActionError}
+            form={assetForm}
+            loadingCoins={loadingCoinLibrary}
+            message={assetActionMessage}
+            onChange={setAssetForm}
+            onSubmit={handleAddUserAsset}
+            saving={assetSaving}
+          />
+          {!user && (
+            <button
+              type="button"
+              onClick={onLoginClick}
+              className="mb-3 inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white transition-colors duration-200 hover:bg-blue-700"
+            >
+              <UserIcon />
+              登录后同步
+            </button>
+          )}
+          <VaultAssetTable items={watchlist} loading={loadingAssets} />
+        </VaultPanel>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-5">
-      <div className="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/60 sm:p-6">
+      <div className="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/60 sm:p-6" data-onboarding-id="risk-vault">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">My Risk Vault</p>
             <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">我的风控档案库</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              沉淀关注资产、收藏新闻、分析报告、预警规则和复盘记录；账户资料继续放在系统设置里。
+              沉淀全站共享的关注资产库、收藏新闻、分析报告、预警规则和复盘记录；账户资料继续放在系统设置里。
             </p>
           </div>
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-right">
@@ -2592,7 +3756,7 @@ function MyView({
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <VaultStatusCard label="关注资产" value={loadingAssets ? "--" : String(watchlist.length)} helper="来自我的风险资产" tone="blue" />
+          <VaultStatusCard label="关注资产" value={loadingAssets ? "--" : String(watchlist.length)} helper="用户资产库" tone="blue" />
           <VaultStatusCard label="高风险资产" value={loadingAssets ? "--" : String(highRiskAssets.length)} helper="风险分 >= 80" tone="red" />
           <VaultStatusCard label="收藏新闻" value={String(favoriteNews.length)} helper="风险情报收藏" tone="green" />
           <VaultStatusCard label="收藏报告" value={String(favoriteReports.length)} helper="AI 分析档案" tone="purple" />
@@ -2611,45 +3775,13 @@ function MyView({
         )}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.62fr)_minmax(340px,0.38fr)]">
-        <VaultPanel
-          actionLabel="查看全部"
-          onAction={() => setActiveTab("assets")}
-          title="我的关注资产"
-        >
-          <VaultAssetTable compact items={watchlist.slice(0, 5)} loading={loadingAssets} />
-        </VaultPanel>
-
-        <VaultPanel title="近期预警与待处理事项">
-          <div className="space-y-2">
-            {pendingAlerts.length ? pendingAlerts.slice(0, 5).map((item) => (
-              <Link
-                className="block rounded-lg border border-orange-100 bg-orange-50/60 px-3 py-2 transition-colors duration-200 hover:bg-orange-100"
-                href={`/portfolio?asset=${encodeURIComponent(item.symbol)}&panel=decision`}
-                key={item.symbol}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-bold text-slate-950">{item.symbol}</span>
-                  <span className="text-sm font-bold text-orange-700">{item.risk_score}</span>
-                </div>
-                <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-600">
-                  AI 风险分已达到提醒线 {item.alert_threshold}，建议查看风险雷达。
-                </p>
-              </Link>
-            )) : (
-              <VaultEmpty text={loadingAssets ? "正在加载预警事项" : "暂无未处理预警"} />
-            )}
-          </div>
-        </VaultPanel>
-      </div>
-
       <section className="rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/60">
         <div className="risk-scroll flex gap-1 overflow-x-auto border-b border-blue-100 px-4 pt-3">
           {tabs.map(([key, label]) => (
             <button
               key={key}
               type="button"
-              onClick={() => setActiveTab(key)}
+              onClick={() => changeTab(key)}
               className={`relative h-11 shrink-0 px-3 text-sm font-bold transition-colors duration-200 ${
                 activeTab === key ? "text-blue-700" : "text-slate-500 hover:text-blue-700"
               }`}
@@ -2668,7 +3800,7 @@ function MyView({
                 actionLabel="去新闻收藏"
                 items={recentNews.map((item) => ({
                   href: `/news/${encodeURIComponent(item.item_id)}`,
-                  meta: `${favoriteString(item, "risk_type", "综合风险")} · ${favoriteString(item, "published_at", item.created_at)}`,
+                  meta: `${formatScoreReasonText(favoriteString(item, "risk_type", "综合风险"))} · ${favoriteString(item, "published_at", item.created_at)}`,
                   score: favoriteNumber(item, "risk_score"),
                   title: item.title,
                 }))}
@@ -2692,14 +3824,28 @@ function MyView({
             </div>
           )}
 
-          {activeTab === "assets" && <VaultAssetTable items={watchlist} loading={loadingAssets} />}
+          {activeTab === "assets" && (
+            <div className="space-y-4">
+              <VaultAssetQuickAdd
+                error={assetActionError}
+                coinOptions={availableCoins}
+                form={assetForm}
+                loadingCoins={loadingCoinLibrary}
+                message={assetActionMessage}
+                onChange={setAssetForm}
+                onSubmit={handleAddUserAsset}
+                saving={assetSaving}
+              />
+              <VaultAssetTable items={watchlist} loading={loadingAssets} />
+            </div>
+          )}
 
           {activeTab === "news" && (
             <VaultMiniList
               actionLabel="进入收藏新闻页"
               items={favoriteNews.map((item) => ({
                 href: `/news/${encodeURIComponent(item.item_id)}`,
-                meta: `${favoriteStringArray(item, "coins").join(", ") || "--"} · ${favoriteString(item, "risk_type", "综合风险")}`,
+                meta: `${favoriteStringArray(item, "coins").join(", ") || "--"} · ${formatScoreReasonText(favoriteString(item, "risk_type", "综合风险"))}`,
                 score: favoriteNumber(item, "risk_score"),
                 title: item.title,
               }))}
@@ -2726,7 +3872,20 @@ function MyView({
           )}
 
           {activeTab === "alerts" && (
-            <VaultAlertRules items={watchlist} loading={loadingAssets} />
+            <VaultAlertRules
+              drafts={alertDrafts}
+              error={alertActionError}
+              items={watchlist}
+              loading={loadingAssets}
+              message={alertActionMessage}
+              onChangeThreshold={(symbol, value) => {
+                setAlertActionError("");
+                setAlertActionMessage("");
+                setAlertDrafts((drafts) => ({ ...drafts, [symbol]: value }));
+              }}
+              onSaveThreshold={handleSaveAlertThreshold}
+              savingSymbol={alertSavingSymbol}
+            />
           )}
 
           {activeTab === "reviews" && (
@@ -2795,6 +3954,89 @@ function VaultPanel({
   );
 }
 
+function VaultAssetQuickAdd({
+  coinOptions,
+  compact = false,
+  error,
+  form,
+  loadingCoins,
+  message,
+  onChange,
+  onSubmit,
+  saving,
+}: {
+  coinOptions: CoinLibraryItem[];
+  compact?: boolean;
+  error: string;
+  form: UserAssetFormState;
+  loadingCoins: boolean;
+  message: string;
+  onChange: (form: UserAssetFormState) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  saving: boolean;
+}) {
+  const selectDisabled = loadingCoins || !coinOptions.length || saving;
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      className={`mb-4 rounded-lg border border-blue-100 bg-blue-50/50 p-3 ${compact ? "" : "sm:p-4"}`}
+    >
+      <div className="grid gap-3 md:grid-cols-[minmax(160px,1fr)_120px_auto_auto]">
+        <label className="min-w-0">
+          <span className="text-xs font-bold text-slate-500">选择币种</span>
+          <select
+            value={form.symbol}
+            onChange={(event) => onChange({ ...form, symbol: event.target.value })}
+            disabled={selectDisabled}
+            className="mt-1 h-10 w-full cursor-pointer rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-slate-950 outline-none transition-colors duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+          >
+            <option value="">{loadingCoins ? "正在加载币种库" : coinOptions.length ? "从币种库选择" : "暂无可添加币种"}</option>
+            {coinOptions.map((coin) => (
+              <option key={coin.symbol} value={coin.symbol}>
+                {coin.name} · {coin.symbol} · {coin.category}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="text-xs font-bold text-slate-500">预警线</span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={form.alertThreshold}
+            onChange={(event) => onChange({ ...form, alertThreshold: event.target.value })}
+            className="mt-1 h-10 w-full rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-slate-950 outline-none transition-colors duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+        <label className="flex h-10 items-center gap-2 self-end rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-slate-600">
+          <input
+            type="checkbox"
+            checked={form.isHolding}
+            onChange={(event) => onChange({ ...form, isHolding: event.target.checked })}
+            className="h-4 w-4 rounded border-blue-200 text-blue-600"
+          />
+          持仓
+        </label>
+        <button
+          type="submit"
+          disabled={saving || !form.symbol}
+          className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 self-end rounded-lg bg-blue-600 px-4 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+        >
+          {saving ? <RefreshIcon /> : <PlusIcon />}
+          添加关注资产
+        </button>
+      </div>
+      {(error || message) && (
+        <p className={`mt-2 text-xs font-semibold ${error ? "text-red-600" : "text-emerald-700"}`}>
+          {error || message}
+        </p>
+      )}
+    </form>
+  );
+}
+
 function VaultAssetTable({
   compact = false,
   items,
@@ -2805,7 +4047,7 @@ function VaultAssetTable({
   loading: boolean;
 }) {
   if (loading) return <VaultEmpty text="正在加载关注资产" />;
-  if (!items.length) return <VaultEmpty text="暂无关注资产，可先到我的风险资产添加币种" />;
+  if (!items.length) return <VaultEmpty text="暂无关注资产，可在上方添加币种" />;
   return (
     <div className="risk-scroll overflow-x-auto rounded-lg border border-blue-100">
       <table className={`w-full text-left text-sm ${compact ? "min-w-[720px]" : "min-w-[980px]"}`}>
@@ -2893,27 +4135,72 @@ function VaultMiniList({
   );
 }
 
-function VaultAlertRules({ items, loading }: { items: PortfolioWatchlistItem[]; loading: boolean }) {
+function VaultAlertRules({
+  drafts,
+  error,
+  items,
+  loading,
+  message,
+  onChangeThreshold,
+  onSaveThreshold,
+  savingSymbol,
+}: {
+  drafts: Record<string, string>;
+  error: string;
+  items: PortfolioWatchlistItem[];
+  loading: boolean;
+  message: string;
+  onChangeThreshold: (symbol: string, value: string) => void;
+  onSaveThreshold: (symbol: string) => void;
+  savingSymbol: string;
+}) {
   if (loading) return <VaultEmpty text="正在加载预警规则" />;
   if (!items.length) return <VaultEmpty text="暂无预警规则，添加关注资产后会生成默认风险分提醒线" />;
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {items.map((item) => (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-white px-4 py-3" key={item.symbol}>
+        <form
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-white px-4 py-3"
+          key={item.symbol}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSaveThreshold(item.symbol);
+          }}
+        >
           <div>
             <p className="font-bold text-slate-950">{item.symbol}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">AI 风险分 &gt;= {item.alert_threshold} 时提醒</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">当前 AI 风险分 {clampScore(item.risk_score)}，达到设置阈值时提醒</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex h-9 items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/50 px-3 text-xs font-bold text-slate-600">
+              预警线
+              <input
+                className="h-7 w-16 rounded-md border border-blue-100 bg-white px-2 text-sm font-bold text-slate-950 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                max={100}
+                min={0}
+                onChange={(event) => onChangeThreshold(item.symbol, event.target.value)}
+                type="number"
+                value={drafts[item.symbol] ?? String(item.alert_threshold ?? 70)}
+              />
+            </label>
             <span className={`rounded-lg px-2 py-1 text-xs font-bold ${item.risk_score >= item.alert_threshold ? "bg-orange-50 text-orange-700" : "bg-emerald-50 text-emerald-700"}`}>
               {item.risk_score >= item.alert_threshold ? "已触发" : "监控中"}
             </span>
-            <Link className="h-8 rounded-lg border border-blue-100 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50" href={`/portfolio?asset=${encodeURIComponent(item.symbol)}&panel=alert`}>
-              设置
-            </Link>
+            <button
+              className="h-9 rounded-lg border border-blue-100 bg-white px-3 text-xs font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={savingSymbol === item.symbol}
+              type="submit"
+            >
+              {savingSymbol === item.symbol ? "保存中" : "保存"}
+            </button>
           </div>
-        </div>
+        </form>
       ))}
+      {(error || message) && (
+        <p className={`text-xs font-semibold ${error ? "text-red-600" : "text-emerald-700"}`}>
+          {error || message}
+        </p>
+      )}
     </div>
   );
 }
@@ -2951,6 +4238,12 @@ function VaultReviewList({ reports, watchlist }: { reports: FavoriteItem[]; watc
 
 function VaultEmpty({ text }: { text: string }) {
   return <div className="rounded-lg border border-dashed border-blue-100 bg-blue-50/50 px-4 py-8 text-center text-sm font-semibold text-slate-500">{text}</div>;
+}
+
+function parseVaultAlertThreshold(value: string) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 70;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
 }
 
 function formatPortfolioVaultRiskLevel(level: string) {
@@ -3103,7 +4396,7 @@ function FavoriteReportsView({
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Agent Report</p>
                   <h3 className="mt-3 break-words text-xl font-bold leading-8 text-slate-950">{favorite.title}</h3>
-                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">{typeof report?.summary === "string" ? report.summary : input}</p>
+                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">{formatScoreReasonText(typeof report?.summary === "string" ? report.summary : input)}</p>
                   <p className="mt-3 text-xs font-semibold text-slate-500">收藏时间：{favorite.created_at}</p>
                 </div>
                 <div className="flex items-end lg:justify-end">
@@ -3498,7 +4791,6 @@ function AssistantPanel({
   topNews,
 }: {
   activeView: ActiveView;
-  chatLoading: boolean;
   latestReport: RiskReport | null;
   topCoin: CoinRankingItem;
   topNews: NewsRankingItem;
@@ -3509,6 +4801,7 @@ function AssistantPanel({
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState("");
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [eventReference, setEventReference] = useState<AssistantEventReference | null>(null);
   const assistantEndRef = useRef<HTMLDivElement | null>(null);
   const [assistantMessages, setAssistantMessages] = useState<ChatMessage[]>([
     {
@@ -3519,13 +4812,57 @@ function AssistantPanel({
   ]);
 
   useEffect(() => {
+    function handleOpenAssistant(event: Event) {
+      const detail = (event as CustomEvent).detail || {};
+      const selectedText = String(detail.selectedText || detail.news?.content || detail.news?.summary || "").trim();
+      const sourceInput = String(detail.sourceInput || selectedText).trim();
+      if (detail.mode !== "deep_analysis" || !sourceInput) return;
+      setEventReference({
+        selectedText: selectedText || sourceInput,
+        sourceInput,
+        title: String(detail.news?.title || "").trim() || compactReportSummary(sourceInput),
+        newsId: detail.news?.news_id ? String(detail.news.news_id) : "",
+      });
+      setAssistantOpen(true);
+      setAssistantError("");
+    }
+
+    window.addEventListener("cryptorisk:open-risk-assistant", handleOpenAssistant);
+    return () => window.removeEventListener("cryptorisk:open-risk-assistant", handleOpenAssistant);
+  }, []);
+
+  useEffect(() => {
     assistantEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [assistantMessages, assistantLoading]);
+
+  async function ensureReferencedEventReport(reference: AssistantEventReference) {
+    const input = reference.sourceInput.trim();
+    const existing = readStoredAnalysisRecords().find((record) => record.input.trim() === input);
+    if (existing) return existing;
+
+    const runningTask = getActiveAnalysisTaskSnapshot();
+    if (runningTask?.status === "running") {
+      const runningRecord = await waitForAnalysisTaskCompletion(runningTask.id);
+      if (runningTask.input.trim() === input) return runningRecord;
+    }
+
+    const task = startAnalysisTask(input);
+    if (!task) {
+      const fallbackRecord = readStoredAnalysisRecords().find((record) => record.input.trim() === input);
+      if (fallbackRecord) return fallbackRecord;
+      throw new Error("无法启动事件分析。");
+    }
+    return waitForAnalysisTaskCompletion(task.id);
+  }
 
   const askAssistant = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || assistantLoading) return;
 
+    let eventRecord: AnalysisRecord | null = null;
+    let eventContext: Record<string, unknown> = {};
+    const reference = eventReference;
+    const shouldAnalyzeReference = Boolean(reference?.sourceInput);
     const shouldUsePageContext = shouldAttachAssistantPageContext(trimmed, {
       activeView,
       latestReport,
@@ -3559,13 +4896,37 @@ function AssistantPanel({
     ]);
 
     try {
-      await streamRiskAssistant(trimmed, context, (chunk) => {
+      if (shouldAnalyzeReference && reference) {
+        setAssistantMessages((items) =>
+          items.map((item) =>
+            item.id === replyId ? { ...item, content: "正在先完成事件风险分析，稍后基于完整报告回答你的问题..." } : item
+          )
+        );
+        eventRecord = await ensureReferencedEventReport(reference);
+        eventContext = {
+          assistant_memory: {
+            event_analysis: {
+              news_title: reference.title || eventRecord.title,
+              news_text: reference.selectedText || reference.sourceInput,
+              analysis_input: reference.sourceInput,
+              report_id: eventRecord.id,
+              report_title: eventRecord.title,
+              report_created_at: eventRecord.createdAt,
+              report: eventRecord.report,
+            },
+          },
+        };
+        setAssistantMessages((items) =>
+          items.map((item) => (item.id === replyId ? { ...item, content: "" } : item))
+        );
+      }
+      await streamRiskAssistant(trimmed, { ...context, ...eventContext }, (chunk) => {
         setAssistantMessages((items) =>
           items.map((item) =>
             item.id === replyId ? { ...item, content: item.content + chunk } : item
           )
         );
-      });
+      }, { selectedText: reference?.selectedText, userQuestion: trimmed });
     } catch (error) {
       console.error(error);
       setAssistantMessages((items) => items.filter((item) => item.id !== replyId));
@@ -3632,6 +4993,27 @@ function AssistantPanel({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-5 p-5">
+          {eventReference && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-blue-700">已引用待分析事件</p>
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">
+                    {eventReference.selectedText || eventReference.sourceInput}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEventReference(null)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors duration-200 hover:bg-white hover:text-slate-700"
+                  aria-label="取消引用事件"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="risk-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {assistantMessages.map((message) => (
               <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -3655,17 +5037,12 @@ function AssistantPanel({
 
           {assistantError && <Notice tone="red" text={assistantError} />}
 
-          <div className="flex gap-3 text-slate-500">
-            <ThumbIcon />
-            <ThumbIcon down />
-          </div>
-
           <form onSubmit={handleAssistantSubmit} className="flex h-12 items-center gap-3 rounded-lg border border-blue-100 bg-slate-50 px-3 text-sm">
             <input
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none placeholder:text-slate-400"
-              placeholder="问金融、币种、风险或当前页面..."
+              placeholder={eventReference ? "输入你要追问的问题..." : "问金融、币种、风险或当前页面..."}
             />
             <button
               type="submit"
@@ -3904,7 +5281,7 @@ function NewsTable({
               <td className="px-3 py-3 font-semibold text-slate-800">
                 <span className="line-clamp-1 text-blue-700">{item.title}</span>
               </td>
-              <td className="px-3 py-3 text-slate-600">{item.risk_type || "综合风险"}</td>
+              <td className="px-3 py-3 text-slate-600">{formatScoreReasonText(item.risk_type || "综合风险")}</td>
               <td className="px-3 py-3 text-slate-600">{item.coins?.length ? item.coins.join(", ") : "--"}</td>
               <td className={`px-3 py-3 text-center font-bold tabular-nums ${riskScoreTextStyle(item.risk_score, item.risk_level)}`}>
                 {clampScore(item.risk_score)}
@@ -3989,7 +5366,7 @@ function CoinTable({ compact = false, items }: { compact?: boolean; items: CoinR
                   <span className="font-bold text-slate-900">{item.symbol}</span>
                 </div>
               </td>
-              <td className="px-3 py-3 text-slate-600">{item.main_risk_type || "综合风险"}</td>
+              <td className="px-3 py-3 text-slate-600">{formatScoreReasonText(item.main_risk_type || "综合风险")}</td>
               {!compact && (
                 <>
                   <td className="px-3 py-3">
@@ -4053,6 +5430,7 @@ function BulletList({ items }: { items: string[] }) {
 function ReportDocument({
   favoriteLoading,
   isFavorite,
+  onChangeDisposition,
   onDeleteRecord,
   onReanalyze,
   onToggleFavorite,
@@ -4060,6 +5438,7 @@ function ReportDocument({
 }: {
   favoriteLoading: boolean;
   isFavorite: boolean;
+  onChangeDisposition: (recordId: string, disposition: AnalysisDisposition, note?: string) => void;
   onDeleteRecord: (id: string) => void;
   onReanalyze: (input: string) => void;
   onToggleFavorite: (record: AnalysisRecord) => void;
@@ -4085,6 +5464,29 @@ function ReportDocument({
   const finalContextMeta = report.final_context_agents || {};
   const isWeakRisk = detectWeakRisk(chatAgentResult, finalContextMeta, impactAnalysis, adviceGeneration);
   const summary = compactReportSummary(report.summary) || "事件已完成结构化风险研判。";
+  const normalizedRecord = normalizeAnalysisRecord(record);
+
+  function copySummary() {
+    void copyTextToClipboard(buildReportSummaryText(record));
+  }
+
+  function copyEvidence() {
+    void copyTextToClipboard(buildEvidenceText(evidenceItems));
+  }
+
+  function copyShareLink() {
+    if (typeof window === "undefined") return;
+    const url = `${window.location.origin}/reports?record=${encodeURIComponent(record.id)}`;
+    void copyTextToClipboard(url);
+  }
+
+  function downloadMarkdown() {
+    downloadTextFile(`${sanitizeFilename(record.title)}.md`, buildReportMarkdown(record));
+  }
+
+  function printPdf() {
+    if (typeof window !== "undefined") window.print();
+  }
 
   return (
     <article
@@ -4100,7 +5502,7 @@ function ReportDocument({
     >
       <div className="border-b border-blue-100 px-4 py-5 sm:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1" data-onboarding-id="page-title">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">CryptoRisk Report</p>
             <h2 className="mt-2 break-words text-xl font-bold text-slate-950 sm:text-2xl">{record.title}</h2>
             <p className="mt-2 text-sm text-slate-500">{record.createdAt}</p>
@@ -4118,6 +5520,46 @@ function ReportDocument({
             >
               <StarIcon filled={isFavorite} />
               {favoriteLoading ? "处理中..." : isFavorite ? "取消收藏" : "收藏报告"}
+            </button>
+            <button
+              type="button"
+              onClick={copySummary}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
+            >
+              <CopyIcon />
+              复制摘要
+            </button>
+            <button
+              type="button"
+              onClick={copyEvidence}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
+            >
+              <ShieldIcon />
+              复制证据
+            </button>
+            <button
+              type="button"
+              onClick={downloadMarkdown}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
+            >
+              <DownloadIcon />
+              导出 Markdown
+            </button>
+            <button
+              type="button"
+              onClick={printPdf}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
+            >
+              <FileIcon />
+              导出 PDF
+            </button>
+            <button
+              type="button"
+              onClick={copyShareLink}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
+            >
+              <LinkIcon />
+              复制分享链接
             </button>
             <button
               type="button"
@@ -4140,11 +5582,19 @@ function ReportDocument({
       </div>
 
       <div className="space-y-5 p-4 sm:p-8">
-        <ReportSection title="原始输入" icon={<ChatIcon />}>
-          <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{record.input}</p>
+        <ReportSection title="处置闭环" icon={<CheckIcon />}>
+          <DispositionPanel
+            disposition={normalizedRecord.disposition || "pending"}
+            note={normalizedRecord.dispositionNote || ""}
+            onChange={(disposition, note) => onChangeDisposition(record.id, disposition, note)}
+          />
         </ReportSection>
 
-        <section className="grid gap-4 rounded-lg border border-blue-100 bg-slate-50 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[180px_minmax(0,1fr)_220px]">
+        <ReportSection title="原始输入" icon={<ChatIcon />}>
+          <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{formatReportOriginalInput(record.input)}</p>
+        </ReportSection>
+
+        <section className="grid gap-4 rounded-lg border border-blue-100 bg-slate-50 p-4 sm:gap-5 sm:p-5 lg:grid-cols-[180px_minmax(0,1fr)_220px]" data-onboarding-id="report-score">
           <div className="rounded-lg bg-white p-5 text-center shadow-sm">
             <p className="text-sm font-semibold text-slate-500">风险评分</p>
             <p className={`mt-3 text-5xl font-bold ${riskScoreTextStyle(score, report.risk_level || "")}`}>
@@ -4164,7 +5614,7 @@ function ReportDocument({
             </div>
             <p className="mt-4 text-base font-bold leading-8 text-slate-950">{summary}</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {(report.risk_signals || []).map(compactReportSummary).filter(Boolean).slice(0, 4).map((item, index) => (
+              {(report.risk_signals || []).map((item) => formatRiskSignalLabel(String(item))).filter(Boolean).slice(0, 4).map((item, index) => (
                 <span key={`${item}-${index}`} className="rounded-md border border-blue-100 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
                   {formatRiskSignalLabel(item)}
                 </span>
@@ -4178,21 +5628,25 @@ function ReportDocument({
           </div>
         </section>
 
-        <ReportSection title="风险类别与证据" icon={<FileIcon />}>
-          <RiskCategoryEvidence
-            branches={riskBranches}
-            categories={categories}
-            evidenceItems={evidenceItems}
-            stats={report.risk_type_stats || chatAgentResult.risk_type_stats || []}
-          />
-        </ReportSection>
+        <div className="space-y-5" data-onboarding-id="report-actions">
+          <ReportSection title="评分拆解" icon={<ChartIcon />} variant="main">
+            <ScoreBreakdownPanel report={report} />
+          </ReportSection>
 
-        <div className="grid gap-5 xl:grid-cols-2">
-          <ReportSection title="影响对象" icon={<UsersIcon />}>
+          <ReportSection title="风险类别与证据" icon={<FileIcon />} variant="main">
+            <RiskCategoryEvidence
+              branches={riskBranches}
+              categories={categories}
+              evidenceItems={evidenceItems}
+              stats={report.risk_type_stats || chatAgentResult.risk_type_stats || []}
+            />
+          </ReportSection>
+
+          <ReportSection title="影响对象" icon={<UsersIcon />} variant="main">
             <ImpactObjectsPanel analysis={impactAnalysis} fallback={report.impact || []} isWeakRisk={isWeakRisk} />
           </ReportSection>
 
-          <ReportSection title="处置建议" icon={<BulbIcon />}>
+          <ReportSection title="处置建议" icon={<BulbIcon />} variant="main">
             <AdvicePanel advice={adviceGeneration} fallback={report.advice || []} isWeakRisk={isWeakRisk} />
           </ReportSection>
         </div>
@@ -4202,6 +5656,96 @@ function ReportDocument({
 }
 
 type ReportEvidenceItem = RiskReport["evidence"][number];
+
+const dispositionOptions: Array<{ value: AnalysisDisposition; label: string; description: string }> = [
+  { value: "pending", label: "待处理", description: "风险已识别，等待核验或处置" },
+  { value: "verified", label: "已核验", description: "证据已确认，进入正式风险记录" },
+  { value: "monitoring", label: "持续观察", description: "风险未完全落地，需要继续跟踪" },
+  { value: "ignored", label: "已忽略", description: "误报、弱相关或无需继续处理" },
+  { value: "reviewed", label: "已复盘", description: "事件已完成后续复盘归档" },
+];
+
+function DispositionPanel({
+  disposition,
+  note,
+  onChange,
+}: {
+  disposition: AnalysisDisposition;
+  note: string;
+  onChange: (disposition: AnalysisDisposition, note?: string) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        {dispositionOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value, note)}
+            className={`min-h-[88px] rounded-lg border p-3 text-left transition-colors duration-200 ${
+              disposition === option.value
+                ? "border-blue-300 bg-blue-50 text-blue-800 shadow-sm"
+                : "border-blue-100 bg-white text-slate-600 hover:bg-blue-50"
+            }`}
+          >
+            <span className="text-sm font-bold">{option.label}</span>
+            <span className="mt-1 block text-xs font-semibold leading-5">{option.description}</span>
+          </button>
+        ))}
+      </div>
+      <label className="block">
+        <span className="text-xs font-bold text-slate-500">处置备注</span>
+        <textarea
+          value={note}
+          onChange={(event) => onChange(disposition, event.target.value)}
+          className="mt-2 min-h-20 w-full resize-y rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm font-semibold leading-6 text-slate-700 outline-none transition-colors duration-200 focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
+          placeholder="记录核验来源、处理动作、后续观察点..."
+        />
+      </label>
+    </div>
+  );
+}
+
+function DispositionBadge({ disposition }: { disposition: AnalysisDisposition }) {
+  const label = dispositionOptions.find((item) => item.value === disposition)?.label || "待处理";
+  const style = {
+    pending: "bg-slate-100 text-slate-600",
+    verified: "bg-emerald-50 text-emerald-700",
+    ignored: "bg-slate-100 text-slate-500",
+    monitoring: "bg-amber-50 text-amber-700",
+    reviewed: "bg-violet-50 text-violet-700",
+  }[disposition];
+  return <span className={`rounded-md px-2 py-1 text-xs font-bold ${style}`}>{label}</span>;
+}
+
+function ScoreBreakdownPanel({ report }: { report: RiskReport }) {
+  const dimensions = [
+    ["severity", "严重性", report.score_breakdown?.severity ?? report.severity_score ?? report.risk_score],
+    ["evidence_strength", "证据强度", report.score_breakdown?.evidence_strength ?? report.confidence_score ?? 0],
+    ["impact_scope", "影响范围", report.score_breakdown?.impact_scope ?? report.contagion_score ?? 0],
+    ["urgency", "紧急度", report.score_breakdown?.urgency ?? report.urgency_score ?? 0],
+    ["reversibility", "可逆性", report.score_breakdown?.reversibility ?? 0],
+  ] as const;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {dimensions.map(([, label, rawScore]) => {
+        const score = clampScore(Number(rawScore) || 0);
+        return (
+          <div key={label} className="rounded-lg border border-blue-100 bg-slate-50 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-500">{label}</span>
+              <span className={`text-lg font-bold ${riskScoreTextStyle(score, "")}`}>{score}</span>
+            </div>
+            <div className="mt-3 h-2 rounded-full bg-white">
+              <div className="h-2 rounded-full bg-blue-600" style={{ width: `${score}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function RiskCategoryEvidence({
   branches,
@@ -4224,6 +5768,8 @@ function RiskCategoryEvidence({
         const score = branch?.branch_score ?? stat?.score_100;
         const strength = branch?.evidence_strength;
         const missingEvidence = asStringList(branch?.missing_evidence).slice(0, 2);
+        const established = branch?.established === true;
+        const statusLabel = established ? "风险成立" : branch ? "证据不足" : "待核验";
 
         return (
           <div key={group.category} className="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
@@ -4231,8 +5777,8 @@ function RiskCategoryEvidence({
               <span className="rounded-md bg-white px-2.5 py-1 text-xs font-bold text-blue-700 shadow-sm">
                 {formatEvidenceCategory(group.category)}
               </span>
-              <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${branch?.established === false ? "border border-amber-200 bg-amber-50 text-amber-700" : "border border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
-                {branch?.established === false ? "证据不足" : "风险成立"}
+              <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${established ? "border border-emerald-200 bg-emerald-50 text-emerald-700" : "border border-amber-200 bg-amber-50 text-amber-700"}`}>
+                {statusLabel}
               </span>
               {typeof score === "number" && (
                 <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
@@ -4246,7 +5792,7 @@ function RiskCategoryEvidence({
               )}
             </div>
 
-            {branch?.reasoning && <p className="mt-3 text-sm font-semibold leading-6 text-slate-700">{branch.reasoning}</p>}
+            {branch?.reasoning && <p className="mt-3 text-sm font-semibold leading-6 text-slate-700">{formatScoreReasonText(branch.reasoning)}</p>}
 
             <div className="mt-3 grid gap-2">
               {group.items.map((item, index) => (
@@ -4261,7 +5807,7 @@ function RiskCategoryEvidence({
                       </span>
                     )}
                   </div>
-                  <p className="mt-2 text-sm leading-7 text-slate-800">{item.evidence_text}</p>
+                  <p className="mt-2 text-sm leading-7 text-slate-800">{formatScoreReasonText(item.evidence_text)}</p>
                 </div>
               ))}
             </div>
@@ -4270,7 +5816,7 @@ function RiskCategoryEvidence({
               <div className="mt-3 flex flex-wrap gap-2">
                 {missingEvidence.map((item) => (
                   <span key={item} className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                    待核验：{item}
+                    待核验：{formatScoreReasonText(item)}
                   </span>
                 ))}
               </div>
@@ -4437,7 +5983,7 @@ function EngineTrace({
     {
       title: "风险类型分支审核",
       value: primaryBranch || "综合风险",
-      detail: "按命中 risk_type 独立审核证据强度、严重性与成立状态",
+      detail: "按命中的风险类别独立审核证据强度、严重性与成立状态",
     },
     {
       title: "分支评分合并",
@@ -4611,6 +6157,21 @@ function formatRiskSignalLabel(value: string) {
     return `${formatRiskTypeCode(highRiskFloor[1])}：强信号保底 ${highRiskFloor[2]}`;
   }
 
+  const highRiskRoute = normalized.match(/^high_risk_route:(score_[a-z_]+)$/);
+  if (highRiskRoute) {
+    return `高风险路径：${formatRiskTypeCode(highRiskRoute[1])}`;
+  }
+
+  const lowRiskGateAdded = normalized.match(/^low_risk_gate_added:(score_[a-z_]+)$/);
+  if (lowRiskGateAdded) {
+    return `低风险复核补充：${formatRiskTypeCode(lowRiskGateAdded[1])}`;
+  }
+
+  const validatorScore = normalized.match(/^validator:(\d+)$/);
+  if (validatorScore) {
+    return `二次校验阈值 ${validatorScore[1]}`;
+  }
+
   const labels: Record<string, string> = {
     risk_type_branch_merge: "风险类型分支合并",
     secondary_risk_bonus: "次要风险加权",
@@ -4619,6 +6180,10 @@ function formatRiskSignalLabel(value: string) {
     high_risk_floor_signal: "触发高风险保底",
     weak_rule_signal: "弱风险规则信号",
     fast_exit: "快速低风险路径",
+    no_high_risk_scenario_detected: "未发现高风险场景",
+    candidate_scenarios_detected: "发现候选风险场景",
+    initial_high_risk_signal: "初筛发现高风险信号",
+    initial_rule_evidence_conflict: "规则信号与证据存在冲突",
     low_risk_gate_escalated: "低风险门控已升级",
     validator_cap_score: "二次校验压低评分",
     validator_raise_floor: "二次校验抬高评分",
@@ -4634,7 +6199,85 @@ function formatRiskSignalLabel(value: string) {
     ordinary_team_change: "普通团队变动",
   };
 
-  return labels[normalized] || formatEvidenceSignal(normalized);
+  return labels[normalized] || formatScoreReasonText(formatEvidenceSignal(normalized)) || "风险信号";
+}
+
+function formatScoreReasonText(value?: string) {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  const normalized = raw
+    .replace(/high_risk_route:(score_[a-z_]+)/g, (_, riskType: string) => `高风险路径：${formatRiskTypeCode(riskType)}`)
+    .replace(/low_risk_gate_added:(score_[a-z_]+)/g, (_, riskType: string) => `低风险复核补充：${formatRiskTypeCode(riskType)}`)
+    .replace(/primary_risk_type:(score_[a-z_]+)/g, (_, riskType: string) => `主风险：${formatRiskTypeCode(riskType)}`)
+    .replace(/high_risk_floor:(score_[a-z_]+):(\d+)/g, (_, riskType: string, score: string) => `${formatRiskTypeCode(riskType)}：强信号保底 ${score}`)
+    .replace(/(score_[a-z_]+),branch_score=(\d+)/g, (_, riskType: string, score: string) => `${formatRiskTypeCode(riskType)}：分支评分 ${score}`)
+    .replace(/validator:(\d+)/g, "二次校验阈值 $1")
+    .replace(/no_established_risk_type_branch/g, "未形成明确风险分支")
+    .replace(/risk_type_branch_merge/g, "风险类型分支合并")
+    .replace(/secondary_risk_bonus/g, "次要风险加权")
+    .replace(/primary_branch_evidence_weak/g, "主风险证据偏弱")
+    .replace(/high_risk_floor_signal/g, "触发高风险保底")
+    .replace(/weak_rule_signal/g, "弱风险规则信号")
+    .replace(/fast_exit/g, "快速低风险路径")
+    .replace(/no_high_risk_scenario_detected/g, "未发现高风险场景")
+    .replace(/candidate_scenarios_detected/g, "发现候选风险场景")
+    .replace(/initial_high_risk_signal/g, "初筛发现高风险信号")
+    .replace(/initial_rule_evidence_conflict/g, "规则信号与证据存在冲突")
+    .replace(/low_risk_gate_escalated/g, "低风险门控已升级")
+    .replace(/validator_cap_score/g, "二次校验压低评分")
+    .replace(/validator_raise_floor/g, "二次校验抬高评分")
+    .replace(/branch_score/g, "分支评分")
+    .replace(/rule_score/g, "规则评分")
+    .replace(/risk_type/g, "风险类型")
+    .replace(/risk_name/g, "风险名称")
+    .replace(/score_reason/g, "评分原因")
+    .replace(/score_hack/g, "链上漏洞/攻击风险")
+    .replace(/score_fraud/g, "诈骗/Rug Pull 风险")
+    .replace(/score_regulatory/g, "监管与法律风险")
+    .replace(/score_outage/g, "交易所与系统运维风险")
+    .replace(/score_stablecoin/g, "稳定币异常风险")
+    .replace(/score_liquidation/g, "爆仓/清算风险")
+    .replace(/score_whale/g, "大额转账/巨鲸行为风险")
+    .replace(/score_volatility/g, "异常行情波动风险")
+    .replace(/score_team/g, "项目治理/团队异常风险")
+    .replace(/score_solvency/g, "偿付能力/储备/流动性风险")
+    .replace(/score_infra/g, "基础设施/协议层异常风险")
+    .replace(/score_macro/g, "宏观/政策冲击风险")
+    .replace(/Request timed out\./gi, "请求超时。")
+    .replace(/request timed out/gi, "请求超时")
+    .replace(/timed out/gi, "请求超时")
+    .replace(/_/g, " ");
+  return normalized.replace(/\s+/g, " ").trim();
+}
+
+function formatReportOriginalInput(input: string) {
+  const cleaned = extractNewsBodyFromAnalysisInput(input);
+  return cleaned || input;
+}
+
+function extractNewsBodyFromAnalysisInput(input: string) {
+  const raw = (input || "").trim();
+  if (!raw) return "";
+  const lines = raw.split(/\r?\n/);
+  const newsLineIndex = lines.findIndex((line) => line.trim().startsWith("新闻正文："));
+  if (newsLineIndex >= 0) {
+    const firstLine = lines[newsLineIndex].replace(/^新闻正文：/, "").trim();
+    const bodyLines = [firstLine];
+    for (let index = newsLineIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (/^(用户选中片段|已有摘要|已有证据|用户补充要求|新闻标题|发布时间|原始风险类别|原始风险分|关联币种|引用内容)：/.test(line.trim())) {
+        break;
+      }
+      bodyLines.push(line);
+    }
+    return bodyLines.join("\n").trim();
+  }
+
+  const quoteLineIndex = lines.findIndex((line) => line.trim().startsWith("引用内容："));
+  if (quoteLineIndex >= 0) {
+    return lines[quoteLineIndex].replace(/^引用内容：/, "").trim();
+  }
+  return raw;
 }
 
 function formatRiskStatus(value?: string) {
@@ -4733,13 +6376,13 @@ function formatUnknownValue(value: unknown) {
   if (typeof value === "boolean") return value ? "是" : "否";
   if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
   if (value === null || value === undefined || value === "") return "无";
-  if (Array.isArray(value)) return value.join("、");
-  return String(value);
+  if (Array.isArray(value)) return value.map((item) => formatScoreReasonText(String(item))).join("、");
+  return formatScoreReasonText(String(value));
 }
 
 function EventConclusion({ categories, report }: { categories: string[]; report: RiskReport }) {
   const summary = compactReportSummary(report.summary);
-  const signals = (report.risk_signals || []).map(compactReportSummary).filter(Boolean).slice(0, 3);
+  const signals = (report.risk_signals || []).map((signal) => formatRiskSignalLabel(String(signal))).filter(Boolean).slice(0, 3);
 
   return (
     <div className="space-y-4">
@@ -4769,10 +6412,26 @@ function EventConclusion({ categories, report }: { categories: string[]; report:
   );
 }
 
-function ReportSection({ children, icon, title }: { children: ReactNode; icon: ReactNode; title: string }) {
+function ReportSection({
+  children,
+  icon,
+  title,
+  variant = "default",
+}: {
+  children: ReactNode;
+  icon: ReactNode;
+  title: string;
+  variant?: "default" | "main" | "side";
+}) {
+  const sectionStyle = {
+    default: "risk-panel rounded-lg p-5",
+    main: "rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50",
+    side: "rounded-lg border border-blue-100 bg-white p-4 shadow-sm shadow-blue-100/50",
+  }[variant];
+
   return (
-    <section className="risk-panel rounded-lg p-5">
-      <div className="mb-4 flex items-center gap-2">
+    <section className={sectionStyle}>
+      <div className={`${variant === "side" ? "mb-3" : "mb-4"} flex items-center gap-2`}>
         <span className="text-blue-600">{icon}</span>
         <h3 className="text-base font-bold text-slate-950">{title}</h3>
       </div>
@@ -4856,7 +6515,7 @@ function NewsRiskOverviewCard({ items }: { items: NewsRankingItem[] }) {
             {redAlerts.length ? redAlerts.map((item) => (
               <div className="rounded-md bg-white px-3 py-2" key={item.news_id}>
                 <p className="line-clamp-1 text-sm font-bold text-slate-950">{item.title}</p>
-                <p className="mt-1 text-xs font-semibold text-red-600">风险分 {clampScore(item.risk_score)} · {item.risk_type || "综合风险"}</p>
+                <p className="mt-1 text-xs font-semibold text-red-600">风险分 {clampScore(item.risk_score)} · {formatScoreReasonText(item.risk_type || "综合风险")}</p>
               </div>
             )) : (
               <p className="rounded-md bg-white px-3 py-6 text-center text-sm font-semibold text-slate-500">当前没有红色预警新闻</p>
@@ -4965,6 +6624,36 @@ function PanelTitle({ icon, title }: { icon: ReactNode; title: string }) {
     <div className="flex items-center gap-2">
       <span className="text-blue-600">{icon}</span>
       <h2 className="font-bold text-slate-950">{title}</h2>
+    </div>
+  );
+}
+
+function DailyMetricCard({
+  icon,
+  label,
+  tone,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  tone: MetricTone;
+  value: string;
+}) {
+  const toneClass = {
+    blue: "border-blue-100 bg-blue-50 text-blue-700",
+    red: "border-rose-100 bg-rose-50 text-rose-700",
+    orange: "border-orange-100 bg-orange-50 text-orange-700",
+    green: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    purple: "border-violet-100 bg-violet-50 text-violet-700",
+  }[tone];
+
+  return (
+    <div className={`rounded-lg border p-4 ${toneClass}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span>{icon}</span>
+        <span className="text-2xl font-bold">{value}</span>
+      </div>
+      <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] opacity-80">{label}</p>
     </div>
   );
 }
@@ -5225,12 +6914,13 @@ function getPageMeta(view: ActiveView) {
     chat: ["事件风险分析", "面向新闻 / 公告 / 链上事件的多智能体风险研判"],
     news: ["新闻风险榜", "基于新闻文本与风险规则的实时风险排行"],
     coin: ["币种风险榜", "基于新闻、公告与链上事件聚合的币种风险排行"],
+    daily: ["资产日报", "自动聚合并分析与你关注资产相关的今日风险"],
     portfolio: ["我的风险资产", "Portfolio Risk Radar 个性化资产风险监控"],
     sim: ["模拟交易盘", "基于最近 7 天 15 分钟 K 线的现货模拟回放"],
     reports: ["分析报告", "查看、管理与导出风险分析结果报告"],
     favoriteNews: ["收藏新闻", "个人风险情报收藏库"],
     favoriteReports: ["收藏报告", "已收藏的 Agent 风控研判档案"],
-    my: ["我的", "用户中心与收藏入口"],
+    my: ["我的风控档案库", "关注资产与近期预警待处理事项"],
     settings: ["系统设置", "Agent 运行状态与新闻更新"],
   } satisfies Record<ActiveView, [string, string]>;
 
@@ -5285,6 +6975,41 @@ function buildReportTitle(input: string, report: RiskReport): string {
     .slice(0, 2)
     .join("");
   return `${compact || source || "事件"}风险分析报告`;
+}
+
+function buildHomePriorities(newsItems: NewsRankingItem[], coinItems: CoinRankingItem[]) {
+  const topNews = newsItems[0];
+  const topCoin = coinItems[0];
+  const highRiskCount = newsItems.filter((item) => isHighRiskNews(item)).length;
+  return [
+    {
+      title: topNews ? `先核验：${topNews.title}` : "先生成今日新闻风险榜",
+      detail: topNews
+        ? `${formatScoreReasonText(topNews.risk_type || "综合风险")} · 风险分 ${clampScore(topNews.risk_score)}`
+        : "当前还没有真实排行榜数据，建议先在系统设置中更新新闻。",
+      action: "查看新闻证据",
+      view: "news" as ActiveView,
+      tone: "red" as const,
+    },
+    {
+      title: topCoin ? `关注 ${topCoin.symbol} 风险聚合` : "关注币种风险聚合",
+      detail: topCoin
+        ? `${formatScoreReasonText(topCoin.main_risk_type || "综合风险")} · 相关新闻 ${topCoin.news_count} 条`
+        : "币种风险需要新闻标注后才能形成聚合分数。",
+      action: "查看币种风险榜",
+      view: "coin" as ActiveView,
+      tone: "orange" as const,
+    },
+    {
+      title: highRiskCount ? `处理 ${highRiskCount} 条高风险事件` : "建立个人资产监控",
+      detail: highRiskCount
+        ? "优先把红色预警与高风险新闻转为报告并记录处置状态。"
+        : "添加关注资产后，日报和资产雷达会给出个性化命中。",
+      action: highRiskCount ? "进入事件分析" : "进入我的风险资产",
+      view: highRiskCount ? "chat" as ActiveView : "portfolio" as ActiveView,
+      tone: "blue" as const,
+    },
+  ];
 }
 
 function formatTimestamp(date: Date): string {
@@ -5446,7 +7171,7 @@ function getNewsCategoryOptions(items: NewsRankingItem[]) {
 }
 
 function normalizeRiskType(value: string) {
-  return (value || "综合风险").replace(/\s+/g, "").replace(/[｜|]/g, "/") || "综合风险";
+  return formatScoreReasonText(value || "综合风险").replace(/\s+/g, "").replace(/[｜|]/g, "/") || "综合风险";
 }
 
 function getCoinRiskSources(item: CoinRankingItem) {
@@ -5601,6 +7326,228 @@ function getNewsDistribution(items: NewsRankingItem[]) {
     mid,
     low,
   };
+}
+
+function buildDailyRiskReport(range: RankingRange, agentReport: DailyRiskReport) {
+  return {
+    alertLevel: agentReport.alert_level,
+    averageScore: clampScore(agentReport.average_score),
+    personalScore: clampScore(agentReport.personal_risk_score),
+    generatedAt: agentReport.generated_at || getDailyGeneratedAt([], range),
+    createdAt: agentReport.created_at || agentReport.saved_at || "",
+    generationDate: agentReport.generation_date || "",
+    headline: agentReport.headline || "资产日报",
+    highCount: agentReport.high_count || 0,
+    personalHighCount: agentReport.personal_high_count || 0,
+    riskThemes: mapAgentDailyThemes(agentReport.risk_themes || []),
+    assetReports: mapAgentDailyAssetReports(agentReport.asset_reports || []),
+    newsCount: agentReport.news_count || 0,
+    redCount: agentReport.red_count || 0,
+    personalRedCount: agentReport.personal_red_count || 0,
+    userAssetsCount: agentReport.user_assets_count || 0,
+    holdingAssetsCount: agentReport.holding_assets_count || 0,
+    affectedAssets: agentReport.affected_assets || [],
+    riskTypes: (agentReport.risk_types || []).map((item) => ({
+      name: item.name,
+      count: item.count,
+      highCount: item.high_count,
+      maxScore: item.max_score,
+      weight: item.weight,
+    })),
+    summary: agentReport.summary,
+    watchCoins: (agentReport.watch_coins || []).map((item) => ({
+      symbol: item.symbol,
+      name: item.name || item.symbol,
+      score: clampScore(item.score),
+      level: item.level,
+      newsCount: item.news_count,
+      riskType: item.risk_type,
+      isHolding: item.is_holding,
+      exposureMode: item.exposure_mode,
+      exposureBucket: item.exposure_bucket,
+      marketValue: item.market_value,
+      priceChange24h: item.price_change_24h,
+      alertThreshold: item.alert_threshold,
+    })),
+    actions: sanitizeAdvice(agentReport.actions || []),
+    focusPoints: agentReport.focus_points || [],
+    impactSummary: agentReport.impact_summary || "",
+    source: agentReport.source,
+  };
+}
+
+function mapAgentDailyThemes(themes: DailyRiskReport["risk_themes"]): DailyRiskTheme[] {
+  return themes.map((item) => ({
+    themeId: item.theme_id,
+    title: item.title,
+    riskType: item.risk_type,
+    affectedAssets: item.affected_assets || [],
+    eventCount: item.event_count,
+    maxPersonalScore: clampScore(item.max_personal_score),
+    riskLevel: item.risk_level,
+    summary: item.summary,
+    severityReason: item.severity_reason,
+    evidenceSummary: item.evidence_summary || [],
+    monitoringItems: item.monitoring_items || [],
+  }));
+}
+
+function mapAgentDailyAssetReports(items: DailyRiskReport["asset_reports"]): DailyAssetReport[] {
+  return items.map((item) => ({
+    assetSymbol: item.asset_symbol,
+    assetName: item.asset_name || item.asset_symbol,
+    isHolding: Boolean(item.is_holding),
+    exposureLabel: item.exposure_label || (item.is_holding ? "持仓资产" : "关注资产"),
+    exposureMode: item.exposure_mode,
+    exposureBucket: item.exposure_bucket,
+    marketValue: item.market_value,
+    priceChange24h: item.price_change_24h,
+    alertThreshold: item.alert_threshold,
+    personalRiskScore: clampScore(item.personal_risk_score),
+    riskLevel: item.risk_level,
+    summary: item.summary,
+    riskTypes: item.risk_types || [],
+    keyDrivers: item.key_drivers || [],
+    evidenceSummary: item.evidence_summary || [],
+    monitoringItems: item.monitoring_items || [],
+    actions: sanitizeAdvice(item.actions || []),
+    sourceEventCount: item.source_event_count || 0,
+  }));
+}
+
+function buildFallbackDailyRiskThemes(items: NewsRankingItem[], riskTypes: DailyRiskTypeStat[]): DailyRiskTheme[] {
+  const topType = riskTypes[0]?.name || "综合风险";
+  const maxScore = items.reduce((value, item) => Math.max(value, clampScore(item.risk_score)), 0);
+  if (!items.length) return [];
+  return [
+    {
+      themeId: "fallback-theme",
+      title: `${topType}聚合风险`,
+      riskType: topType,
+      affectedAssets: Array.from(new Set(items.flatMap((item) => item.coins || []))).slice(0, 5),
+      eventCount: items.length,
+      maxPersonalScore: maxScore,
+      riskLevel: maxScore >= 90 ? "红色预警" : maxScore >= 80 ? "高风险" : maxScore >= 40 ? "中风险" : "低风险",
+      summary: "当前展示本地规则聚合结果。Agent 日报可用后会进一步合并相关事件并生成个性化分析。",
+      evidenceSummary: items.map((item) => item.evidence || item.summary).filter(Boolean).slice(0, 3),
+      monitoringItems: ["官方公告", "交易所充提状态", "链上大额转账", "价格与成交量异常"],
+    },
+  ];
+}
+
+function mapAgentDailyNews(agentNews: DailyRiskReport["key_news"], fallbackNews: NewsRankingItem[]) {
+  const fallbackById = new Map(fallbackNews.map((item) => [String(item.news_id), item]));
+  return agentNews.map((item, index) => {
+    const fallback = fallbackById.get(String(item.news_id));
+    return {
+      rank: index + 1,
+      news_id: item.news_id,
+      title: item.title,
+      content: fallback?.content || item.summary || "",
+      date: fallback?.date || item.published_at.slice(0, 10),
+      risk_score: item.risk_score,
+      personal_score: item.personal_score,
+      risk_level: item.risk_level,
+      risk_type: item.risk_type,
+      published_at: item.published_at,
+      coins: item.coins || [],
+      matched_assets: item.matched_assets || [],
+      personal_relevance: item.personal_relevance,
+      matched_reason: item.matched_reason,
+      exposure_note: item.exposure_note,
+      coin_details: fallback?.coin_details || [],
+      summary: item.summary,
+      evidence: item.evidence,
+      source_url: fallback?.source_url,
+    };
+  });
+}
+
+function buildDailyRiskTypeStats(items: NewsRankingItem[]): DailyRiskTypeStat[] {
+  const stats = new Map<string, { count: number; highCount: number; maxScore: number }>();
+  items.forEach((item) => {
+    const name = normalizeRiskType(item.risk_type);
+    const current = stats.get(name) || { count: 0, highCount: 0, maxScore: 0 };
+    current.count += 1;
+    current.highCount += isHighRiskNews(item) ? 1 : 0;
+    current.maxScore = Math.max(current.maxScore, clampScore(item.risk_score));
+    stats.set(name, current);
+  });
+  const maxCount = Math.max(...Array.from(stats.values()).map((item) => item.count), 1);
+  return Array.from(stats.entries())
+    .map(([name, item]) => ({
+      name,
+      count: item.count,
+      highCount: item.highCount,
+      maxScore: item.maxScore,
+      weight: Math.max(8, Math.round((item.count / maxCount) * 100)),
+    }))
+    .sort((a, b) => b.maxScore - a.maxScore || b.count - a.count)
+    .slice(0, 5);
+}
+
+function buildDailyWatchCoins(newsItems: NewsRankingItem[], coinItems: CoinRankingItem[]): DailyWatchCoin[] {
+  if (coinItems.length) {
+    return coinItems.slice(0, 5).map((item) => ({
+      symbol: item.symbol,
+      name: item.name || item.symbol,
+      score: clampScore(item.final_score),
+      level: item.risk_level,
+      newsCount: item.news_count,
+      riskType: item.main_risk_type || "综合风险",
+    }));
+  }
+
+  const grouped = new Map<string, DailyWatchCoin>();
+  newsItems.forEach((item) => {
+    item.coins
+      .filter((coin) => coin && coin !== "--")
+      .forEach((symbol) => {
+        const current = grouped.get(symbol) || {
+          symbol,
+          name: symbol,
+          score: 0,
+          level: "低风险",
+          newsCount: 0,
+          riskType: normalizeRiskType(item.risk_type),
+        };
+        current.score = Math.max(current.score, clampScore(item.risk_score));
+        current.level = current.score >= 80 ? "高风险" : current.score >= 40 ? "中风险" : "低风险";
+        current.newsCount += 1;
+        current.riskType = normalizeRiskType(item.risk_type);
+        grouped.set(symbol, current);
+      });
+  });
+
+  return Array.from(grouped.values())
+    .sort((a, b) => b.score - a.score || b.newsCount - a.newsCount)
+    .slice(0, 5);
+}
+
+function buildDailyUserActions(alertLevel: string, redCount: number, highCount: number, watchCoins: DailyWatchCoin[]) {
+  const actions = [
+    "优先核验红色预警事件的官方公告、交易所状态页与链上地址证据。",
+    "对重点资产设置价格、提现、链上大额转账和社群舆情的连续监控。",
+    "避免依据单条未证实消息做方向性操作，等待多源证据交叉确认。",
+  ];
+  if (redCount > 0 || alertLevel.includes("红")) {
+    actions.unshift("短期内降低对红色预警相关资产的新增暴露，先确认资金可用性和平台提现状态。");
+  } else if (highCount > 0) {
+    actions.unshift("将高风险新闻加入观察清单，关注 24 小时内是否出现连续同类事件。");
+  }
+  if (watchCoins.length) {
+    actions.push(`重点复核 ${watchCoins.slice(0, 3).map((item) => item.symbol).join("、")} 的相关新闻和持仓暴露。`);
+  }
+  return sanitizeAdvice(actions);
+}
+
+function getDailyGeneratedAt(items: NewsRankingItem[], range: RankingRange) {
+  const latest = [...items]
+    .map((item) => item.published_at || item.date)
+    .filter(Boolean)
+    .sort()
+    .pop();
+  return latest || (range === "24h" ? "近1天新闻窗口" : "近7天新闻窗口");
 }
 
 function getCoinDistribution(items: CoinRankingItem[]) {
@@ -5877,14 +7824,14 @@ function compactReportSummary(value: string) {
 function buildBriefAnalysis(record: AnalysisRecord) {
   const report = record.report;
   const categories = report.risk_categories?.length ? report.risk_categories.join(" / ") : "综合风险";
-  const summary = compactReportSummary(report.summary) || "事件已完成结构化风险研判";
+  const summary = formatScoreReasonText(compactReportSummary(report.summary) || "事件已完成结构化风险研判");
   const isLowRiskPath = isLowRiskBriefReport(report);
   const signals = isLowRiskPath
     ? ""
     : report.risk_signals?.map((signal) => formatRiskSignalLabel(String(signal))).filter(Boolean).slice(0, 2).join("、");
   const lowRiskGate = (report.low_risk_gate || report.chat_agent_result?.low_risk_gate || {}) as Record<string, unknown>;
   const lowRiskGateText = formatLowRiskGateBrief(lowRiskGate);
-  const advice = sanitizeAdvice(report.advice || []).slice(0, 2).join("；");
+  const advice = formatScoreReasonText(sanitizeAdvice(report.advice || []).slice(0, 2).join("；"));
 
   return [
     `${summary}。`,
@@ -5893,6 +7840,86 @@ function buildBriefAnalysis(record: AnalysisRecord) {
     isLowRiskPath ? "" : (signals ? `关键信号：${signals}。` : `类别：${categories}。`),
     advice ? `建议：${advice}。` : "",
   ].filter(Boolean).join("\n");
+}
+
+function buildReportSummaryText(record: AnalysisRecord) {
+  const report = record.report;
+  return [
+    record.title,
+    `风险评分：${clampScore(report.risk_score)}/100（${report.risk_level || "待确认"}）`,
+    `置信度：${clampScore(report.confidence_score ?? 0)}/100（${report.confidence_level || "待确认"}）`,
+    `风险类别：${(report.risk_categories || []).join(" / ") || "综合风险"}`,
+    `摘要：${formatScoreReasonText(compactReportSummary(report.summary) || "暂无摘要")}`,
+    `处置状态：${dispositionOptions.find((item) => item.value === (record.disposition || "pending"))?.label || "待处理"}`,
+  ].join("\n");
+}
+
+function buildEvidenceText(evidenceItems: ReportEvidenceItem[]) {
+  return evidenceItems.length
+    ? evidenceItems.map((item, index) => `${index + 1}. [${item.risk_category}] ${formatScoreReasonText(item.evidence_text)}\n   说明：${formatScoreReasonText(item.explanation || "暂无")}`).join("\n")
+    : "暂无结构化证据。";
+}
+
+function buildReportMarkdown(record: AnalysisRecord) {
+  const report = record.report;
+  const advice = sanitizeAdvice(report.advice || []);
+  return [
+    `# ${record.title}`,
+    "",
+    `- 生成时间：${record.createdAt}`,
+    `- 风险评分：${clampScore(report.risk_score)}/100`,
+    `- 风险等级：${report.risk_level || "待确认"}`,
+    `- 置信度：${clampScore(report.confidence_score ?? 0)}/100`,
+    `- 处置状态：${dispositionOptions.find((item) => item.value === (record.disposition || "pending"))?.label || "待处理"}`,
+    "",
+    "## 原始输入",
+    "",
+    formatReportOriginalInput(record.input),
+    "",
+    "## 摘要",
+    "",
+    formatScoreReasonText(report.summary || "暂无摘要。"),
+    "",
+    "## 风险类别",
+    "",
+    (report.risk_categories || []).map((item) => `- ${item}`).join("\n") || "- 综合风险",
+    "",
+    "## 证据链",
+    "",
+    buildEvidenceText(report.evidence || []),
+    "",
+    "## 影响分析",
+    "",
+    (report.impact || []).map((item) => `- ${item}`).join("\n") || "- 暂无明确影响对象。",
+    "",
+    "## 处置建议",
+    "",
+    advice.map((item) => `- ${item}`).join("\n") || "- 暂无处置建议。",
+  ].join("\n");
+}
+
+function sanitizeFilename(value: string) {
+  return (value || "cryptorisk-report")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "-")
+    .slice(0, 80);
+}
+
+function downloadTextFile(filename: string, content: string) {
+  if (typeof window === "undefined") return;
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyTextToClipboard(text: string) {
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    await navigator.clipboard.writeText(text);
+  }
 }
 
 function isLowRiskBriefReport(report: RiskReport) {
@@ -5991,6 +8018,12 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value || 0)));
 }
 
+function extractEventAnalysisFollowUpQuestion(input: string) {
+  const normalized = input.trim();
+  const match = normalized.match(/(?:用户补充要求|补充要求|额外问题|补充问题|追问|问题)[:：]\s*([\s\S]+)$/i);
+  return match?.[1]?.trim() || "";
+}
+
 function sanitizeAdvice(items: string[]) {
   return items.filter((item) => !forbiddenAdviceTerms.some((term) => item.includes(term)));
 }
@@ -6051,3 +8084,6 @@ function StarIcon({ filled = false }: { filled?: boolean }) {
 }
 function TrashIcon() { return <IconSvg><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 14h10l1-14" /><path d="M9 7V4h6v3" /></IconSvg>; }
 function RefreshIcon() { return <IconSvg><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v6h-6" /></IconSvg>; }
+function CopyIcon() { return <IconSvg><rect x="8" y="8" width="11" height="13" rx="2" /><path d="M5 16V5a2 2 0 0 1 2-2h8" /></IconSvg>; }
+function DownloadIcon() { return <IconSvg><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></IconSvg>; }
+function LinkIcon() { return <IconSvg><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" /><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" /></IconSvg>; }

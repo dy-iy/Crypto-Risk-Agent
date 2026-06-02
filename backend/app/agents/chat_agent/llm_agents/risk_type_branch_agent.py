@@ -17,6 +17,9 @@ from app.agents.chat_agent.tools.risk_scanner import RISK_NAME_MAP, RISK_SCENARI
 from app.llm import call_llm_json
 
 
+MAX_PARALLEL_RISK_BRANCHES = 3
+
+
 class _BranchFieldEvidence(BaseModel):
     field: str
     value: Any = None
@@ -46,17 +49,52 @@ def _trim_text(value: object, max_chars: int = MAX_EVIDENCE_CHARS) -> str:
     return text[:max_chars]
 
 
+def _handoff_risk_types(signal_scan: SignalScanResult) -> list[str]:
+    handoff = signal_scan.debug.get("low_risk_gate_handoff", {})
+    raw_types = handoff.get("risk_types", []) if isinstance(handoff, dict) else []
+    if not isinstance(raw_types, list):
+        return []
+    selected: list[str] = []
+    for item in raw_types:
+        risk_type = str(item or "")
+        if risk_type in RISK_TYPE_ORDER and risk_type not in selected:
+            selected.append(risk_type)
+    return selected
+
+
 def _hit_risk_types(signal_scan: SignalScanResult) -> list[str]:
-    return [
+    high_risk_route = signal_scan.debug.get("high_risk_route", {})
+    triggered_types = set(high_risk_route.get("triggered_types", [])) if isinstance(high_risk_route, dict) else set()
+    handoff_types = _handoff_risk_types(signal_scan)
+    score_candidates = [
         risk_type
         for risk_type in RISK_TYPE_ORDER
         if float(signal_scan.raw_rule_scores.get(risk_type, 0.0)) > 0
     ]
+    ranked = sorted(
+        [
+            risk_type
+            for risk_type in score_candidates
+            if risk_type not in handoff_types
+        ],
+        key=lambda risk_type: (
+            risk_type in triggered_types,
+            float(signal_scan.raw_rule_scores.get(risk_type, 0.0)),
+            -RISK_TYPE_ORDER.index(risk_type),
+        ),
+        reverse=True,
+    )
+    return (handoff_types + ranked)[:MAX_PARALLEL_RISK_BRANCHES]
 
 
 def _fallback_branch(case_input: RiskCaseInput, signal_scan: SignalScanResult, risk_type: str, error: str) -> dict[str, object]:
     del case_input
     rule_score = int(round(float(signal_scan.raw_rule_scores.get(risk_type, 0.0)) * 100))
+    evidence_text = (
+        f"规则命中{RISK_NAME_MAP[risk_type]}，但 LLM 证据审核不可用"
+        if rule_score > 0
+        else f"{RISK_NAME_MAP[risk_type]}未命中明确规则信号，LLM 证据审核不可用"
+    )
     return {
         "risk_type": risk_type,
         "risk_name": RISK_NAME_MAP[risk_type],
@@ -67,7 +105,7 @@ def _fallback_branch(case_input: RiskCaseInput, signal_scan: SignalScanResult, r
         "evidence_strength": 25,
         "confidence": 0.35,
         "branch_score": min(rule_score, 35),
-        "evidence_summary": [_trim_text(f"规则命中{RISK_NAME_MAP[risk_type]}，但 LLM 证据审核不可用")],
+        "evidence_summary": [_trim_text(evidence_text)],
         "missing_evidence": ["LLM 分支证据审核未完成"],
         "reasoning": error,
         "field_evidence": [],
@@ -194,10 +232,19 @@ def analyze_risk_type_branches(
     if not risk_types:
         return signal_scan, EvidenceExtractionResult(extraction_mode="fast_exit"), []
 
-    with ThreadPoolExecutor(max_workers=max(1, min(8, len(risk_types)))) as executor:
+    with ThreadPoolExecutor(max_workers=max(1, min(MAX_PARALLEL_RISK_BRANCHES, len(risk_types)))) as executor:
         branches = list(executor.map(lambda risk_type: _run_branch(case_input, signal_scan, risk_type), risk_types))
 
     evidence = _branches_to_evidence(branches)
-    updated_debug = {**signal_scan.debug, "risk_type_branches": branches}
+    updated_debug = {
+        **signal_scan.debug,
+        "risk_type_branch_candidates": {
+            "available_risk_types": list(RISK_TYPE_ORDER),
+            "handoff_risk_types": _handoff_risk_types(signal_scan),
+            "selected_risk_types": risk_types,
+            "max_parallel_branches": MAX_PARALLEL_RISK_BRANCHES,
+        },
+        "risk_type_branches": branches,
+    }
     updated_scan = signal_scan.model_copy(update={"debug": updated_debug})
     return updated_scan, evidence, branches

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-
 from app.agents.chat_agent.llm_agents.context_builder import build_final_context
 from app.agents.chat_agent.llm_agents.impact_object_agent import analyze_impact_objects
 from app.agents.chat_agent.llm_agents.risk_advice_agent import generate_risk_advice
@@ -14,11 +12,9 @@ def run_final_context_agents(
     decision: DecisionResult,
 ) -> dict[str, object]:
     context = build_final_context(case_input, signal_scan, decision)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        impact_future = executor.submit(analyze_impact_objects, context)
-        advice_future = executor.submit(generate_risk_advice, context)
-        impact = impact_future.result()
-        advice = advice_future.result()
+    impact = analyze_impact_objects(context)
+    advice_context = {**context, "impact_analysis": impact}
+    advice = generate_risk_advice(advice_context)
     return {
         "impact_analysis": impact,
         "advice_generation": advice,

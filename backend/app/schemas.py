@@ -104,6 +104,9 @@ class RiskReport(BaseModel):
     missing_information: list[str] = Field(default_factory=list)
     overclaiming_risks: list[str] = Field(default_factory=list)
     advice: list[str] = Field(default_factory=list)
+    impact_analysis: dict[str, object] = Field(default_factory=dict)
+    advice_generation: dict[str, object] = Field(default_factory=dict)
+    final_context_agents: dict[str, object] = Field(default_factory=dict)
     priority: str = ""
     action_type: str = ""
     has_conflict: bool = False

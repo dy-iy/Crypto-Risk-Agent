@@ -7,6 +7,7 @@ import {
   fetchCurrentUser,
   NewsRankingItem,
   RiskReport,
+  saveAnalysisReport,
   streamChatMessage,
   streamRiskAssistant,
 } from "@/lib/api";
@@ -52,13 +53,6 @@ type AssistantSession = {
   messages: ChatMessage[];
   memory: AssistantMemory;
 };
-
-const quickQuestions = [
-  "解释这段话是什么意思",
-  "这段内容反映了什么风险？",
-  "这可能影响哪些币种？",
-  "普通用户需要注意什么？",
-];
 
 const welcomeMessage: ChatMessage = {
   id: "global-assistant-welcome",
@@ -364,12 +358,15 @@ export default function AskAIOnSelection() {
 
     try {
       const response = await streamChatMessage(analysisInput, () => undefined);
-      const record = createAnalysisRecord(analysisInput, response.data);
+      const record = createAnalysisRecord(getReportOriginalInput(quote, analysisInput), response.data);
       storeAnalysisRecord(record);
       const answer = buildBriefAnalysis(record);
+      const assistantContext = buildReportAssistantContext(quote, activeSession, analysisInput, answer, record);
       updateMessage(replyId, (message) => ({
         ...message,
-        content: `${answer}\n\n事件分析已完成，可以继续追问，我会基于这条新闻正文和本次分析结论回答。`,
+        content: supplement
+          ? `${answer}\n\n**风控助手追问回答**\n`
+          : `${answer}\n\n完整事件分析链路已完成，报告已生成并保存。`,
         reportRecordId: record.id,
         reportTitle: record.title,
       }));
@@ -386,6 +383,28 @@ export default function AskAIOnSelection() {
           report: response.data,
         },
       }));
+      if (supplement) {
+        try {
+          await waitForNextPaint();
+          await streamRiskAssistant(
+            supplement,
+            assistantContext,
+            (chunk) => {
+              updateMessage(replyId, (message) => ({ ...message, content: message.content + chunk }));
+            },
+            {
+              selectedText: quote.selectedText,
+              userQuestion: supplement,
+            }
+          );
+        } catch (assistantError) {
+          console.error(assistantError);
+          updateMessage(replyId, (message) => ({
+            ...message,
+            content: `${answer}\n\n完整事件分析链路已完成，报告已生成并保存。助手追问回答暂时失败，请稍后再试。`,
+          }));
+        }
+      }
     } catch (analysisError) {
       console.error(analysisError);
       removeMessage(replyId);
@@ -468,7 +487,7 @@ export default function AskAIOnSelection() {
               </div>
               <div>
                 <p className="font-bold text-slate-950">AI风控助手</p>
-                <p className="text-xs text-slate-500">引用页面内容继续追问</p>
+                <p className="text-xs text-slate-500">基于事件报告回答追问</p>
               </div>
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
             </div>
@@ -549,7 +568,7 @@ export default function AskAIOnSelection() {
                               className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white transition-colors duration-200 hover:bg-blue-700"
                             >
                               <FileIcon />
-                              一键生成报告
+                              查看完整报告
                             </button>
                           )}
                         </>
@@ -588,18 +607,6 @@ export default function AskAIOnSelection() {
                   <p className="mt-2 max-h-20 overflow-hidden text-sm leading-6 text-slate-700">
                     {compactText(quote.selectedText, 220)}
                   </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(quote.mode === "deep_analysis" ? ["重点看风险类别", "结合新闻正文分析", "补充影响范围", "核验证据充分性"] : quickQuestions).map((item) => (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => setQuestion(item)}
-                        className="rounded-md border border-blue-100 bg-white px-2.5 py-1 text-xs font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-600 hover:text-white"
-                      >
-                        {item}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
 
@@ -608,7 +615,7 @@ export default function AskAIOnSelection() {
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}
                   className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none placeholder:text-slate-400"
-                  placeholder={quote ? "继续输入你的问题，也可直接发送..." : "问金融、币种、风险或当前页面..."}
+                  placeholder={quote?.mode === "deep_analysis" ? "输入问题，发送后先完成事件分析再回答..." : quote ? "继续输入你的问题，也可直接发送..." : "问金融、币种、风险或当前页面..."}
                 />
                 <button
                   type="submit"
@@ -684,6 +691,41 @@ function buildAssistantContext(quote: SelectionQuote | null, session: AssistantS
     quoted_selection_available: true,
     selected_text_preview: compactText(quote.selectedText, 500),
     selection_context: quote.context,
+  };
+}
+
+function buildReportAssistantContext(
+  quote: SelectionQuote,
+  session: AssistantSession,
+  analysisInput: string,
+  answer: string,
+  record: AnalysisRecord,
+): Record<string, unknown> {
+  const news = quote.news || getNewsFromContext(quote.context) || session.memory.news;
+  return {
+    active_view: "global_page_assistant",
+    page_title: typeof document === "undefined" ? "" : document.title,
+    page_path: typeof window === "undefined" ? "" : window.location.pathname,
+    page_search: typeof window === "undefined" ? "" : window.location.search,
+    quoted_selection_available: true,
+    selected_text_preview: compactText(quote.selectedText, 500),
+    selection_context: quote.context,
+    assistant_memory: {
+      news,
+      quoted_text: compactText(quote.selectedText, 800),
+      event_analysis: {
+        record_id: record.id,
+        title: record.title,
+        created_at: record.createdAt,
+        input: compactText(analysisInput, 1200),
+        answer,
+        report: record.report,
+      },
+      recent_messages: session.messages.slice(-8).map((message) => ({
+        role: message.role,
+        content: compactText(message.content, 500),
+      })),
+    },
   };
 }
 
@@ -783,12 +825,38 @@ function buildEventAnalysisInput(
   return sections.filter(Boolean).join("\n");
 }
 
+function getReportOriginalInput(quote: SelectionQuote, analysisInput: string) {
+  const newsBody = quote.news?.content?.trim() || quote.news?.summary?.trim() || "";
+  if (newsBody) return newsBody;
+  return extractNewsBodyFromAnalysisInput(analysisInput) || quote.selectedText.trim() || analysisInput;
+}
+
+function extractNewsBodyFromAnalysisInput(input: string) {
+  const lines = input.split(/\r?\n/);
+  const newsLineIndex = lines.findIndex((line) => line.trim().startsWith("新闻正文："));
+  if (newsLineIndex >= 0) {
+    const firstLine = lines[newsLineIndex].replace(/^新闻正文：/, "").trim();
+    const bodyLines = [firstLine];
+    for (let index = newsLineIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (/^(用户选中片段|已有摘要|已有证据|用户补充要求|新闻标题|发布时间|原始风险类别|原始风险分|关联币种|引用内容)：/.test(line.trim())) {
+        break;
+      }
+      bodyLines.push(line);
+    }
+    return bodyLines.join("\n").trim();
+  }
+  return "";
+}
+
 type AnalysisRecord = {
   id: string;
   title: string;
   createdAt: string;
   input: string;
   report: RiskReport;
+  disposition?: "pending" | "verified" | "ignored" | "monitoring" | "reviewed";
+  dispositionNote?: string;
 };
 
 function createAnalysisRecord(input: string, report: RiskReport): AnalysisRecord {
@@ -798,6 +866,8 @@ function createAnalysisRecord(input: string, report: RiskReport): AnalysisRecord
     createdAt: formatTimestamp(new Date()),
     input,
     report,
+    disposition: "pending",
+    dispositionNote: "",
   };
 }
 
@@ -812,6 +882,15 @@ function storeAnalysisRecord(record: AnalysisRecord) {
   }
   window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify([record, ...records]));
   window.localStorage.setItem(selectedRecordStorageKey, record.id);
+  void saveAnalysisReport({
+    id: record.id,
+    title: record.title,
+    created_at: record.createdAt,
+    input: record.input,
+    report: record.report,
+    disposition: record.disposition || "pending",
+    disposition_note: record.dispositionNote || "",
+  }).catch(() => undefined);
   window.dispatchEvent(new CustomEvent(reportCreatedEventName, { detail: { recordId: record.id } }));
 }
 
@@ -843,6 +922,16 @@ function compactText(value: string, limit: number) {
   const compact = value.replace(/\s+/g, " ").trim();
   if (compact.length <= limit) return compact;
   return `${compact.slice(0, limit).trim()}...`;
+}
+
+function waitForNextPaint() {
+  return new Promise<void>((resolve) => {
+    if (typeof window === "undefined") {
+      resolve();
+      return;
+    }
+    window.setTimeout(resolve, 0);
+  });
 }
 
 function MarkdownMessage({ content }: { content: string }) {

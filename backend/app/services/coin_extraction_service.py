@@ -1,6 +1,8 @@
 import re
 from typing import TypedDict
 
+from app.services.coin_library_service import COIN_LIBRARY
+
 
 class CoinMatch(TypedDict):
     symbol: str
@@ -8,35 +10,32 @@ class CoinMatch(TypedDict):
     matched_terms: list[str]
 
 
-COIN_DICTIONARY: dict[str, dict[str, list[str] | str]] = {
-    "BTC": {"name": "Bitcoin", "terms": ["BTC", "Bitcoin", "比特币"]},
-    "ETH": {"name": "Ethereum", "terms": ["ETH", "Ethereum", "以太坊"]},
-    "SOL": {"name": "Solana", "terms": ["SOL", "Solana"]},
-    "BNB": {"name": "BNB", "terms": ["BNB", "Binance Coin", "币安币"]},
-    "XRP": {"name": "XRP", "terms": ["XRP", "Ripple", "瑞波"]},
-    "DOGE": {"name": "Dogecoin", "terms": ["DOGE", "Dogecoin", "狗狗币"]},
-    "ADA": {"name": "Cardano", "terms": ["ADA", "Cardano"]},
-    "TRX": {"name": "Tron", "terms": ["TRX", "Tron", "波场"]},
-    "USDT": {"name": "Tether", "terms": ["USDT", "Tether", "泰达币"]},
-    "USDC": {"name": "Circle USD", "terms": ["USDC", "Circle USD", "USD Coin"]},
-    "TON": {"name": "Toncoin", "terms": ["TON", "Toncoin"]},
-    "AVAX": {"name": "Avalanche", "terms": ["AVAX", "Avalanche"]},
-    "LINK": {"name": "Chainlink", "terms": ["LINK", "Chainlink"]},
-    "MATIC": {"name": "Polygon", "terms": ["MATIC", "Polygon"]},
-    "POL": {"name": "Polygon Ecosystem Token", "terms": ["POL"]},
-    "DOT": {"name": "Polkadot", "terms": ["DOT", "Polkadot"]},
-    "LTC": {"name": "Litecoin", "terms": ["LTC", "Litecoin", "莱特币"]},
-    "BCH": {"name": "Bitcoin Cash", "terms": ["BCH", "Bitcoin Cash"]},
-    "SHIB": {"name": "Shiba Inu", "terms": ["SHIB", "Shiba Inu"]},
-    "PEPE": {"name": "Pepe", "terms": ["PEPE", "Pepe"]},
-    "AAVE": {"name": "Aave", "terms": ["AAVE", "Aave"]},
-    "UNI": {"name": "Uniswap", "terms": ["UNI", "Uniswap"]},
-    "CRV": {"name": "Curve", "terms": ["CRV", "Curve"]},
-    "OP": {"name": "Optimism", "terms": ["OP", "Optimism"]},
-    "ARB": {"name": "Arbitrum", "terms": ["ARB", "Arbitrum"]},
-    "SUI": {"name": "Sui", "terms": ["SUI"]},
-    "SEI": {"name": "Sei", "terms": ["SEI"]},
+_EXTRA_TERMS: dict[str, list[str]] = {
+    "BTC": ["比特币"],
+    "ETH": ["以太坊"],
+    "BNB": ["币安币"],
+    "XRP": ["瑞波"],
+    "DOGE": ["狗狗币"],
+    "TRX": ["波场"],
+    "USDT": ["泰达币"],
 }
+
+COIN_DICTIONARY: dict[str, dict[str, list[str] | str]] = {}
+for coin in COIN_LIBRARY:
+    base_asset = str(coin.get("base_asset") or "")
+    if not base_asset:
+        continue
+    terms = [
+        base_asset,
+        str(coin.get("symbol") or ""),
+        str(coin.get("name") or ""),
+        *[str(alias) for alias in coin.get("aliases", [])],
+        *_EXTRA_TERMS.get(base_asset, []),
+    ]
+    COIN_DICTIONARY[base_asset] = {
+        "name": str(coin.get("name") or base_asset),
+        "terms": list(dict.fromkeys(term for term in terms if term)),
+    }
 
 
 def _term_matches(text: str, term: str) -> bool:

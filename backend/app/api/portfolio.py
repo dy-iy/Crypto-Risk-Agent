@@ -4,12 +4,14 @@ import uuid
 from datetime import datetime, timezone
 from threading import Lock, Thread
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Cookie, HTTPException, Query
 
+from app.api.auth import SESSION_COOKIE_NAME
 from app.schemas_portfolio import (
     CoinRiskSnapshot,
     MarketCandle,
     PortfolioRefreshJob,
+    PortfolioImpactResponse,
     PortfolioNewsItem,
     PortfolioRefreshResponse,
     PortfolioWatchlistItem,
@@ -30,6 +32,8 @@ from app.services.portfolio_service import (
     refresh_portfolio,
     update_watchlist_item,
 )
+from app.services.portfolio_impact_service import get_portfolio_impact_for_user
+from app.services.auth_service import get_user_by_session
 
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio-risk-radar"])
@@ -95,35 +99,63 @@ def _handle_portfolio_error(exc: PortfolioError) -> HTTPException:
     return HTTPException(status_code=status_code, detail=message)
 
 
+def _resolve_user_id(
+    user_id: str | None,
+    cryptorisk_session: str | None,
+) -> str:
+    if user_id:
+        return user_id
+    user = get_user_by_session(cryptorisk_session)
+    return user.id if user else DEFAULT_USER_ID
+
+
 @router.get("/watchlist", response_model=list[PortfolioWatchlistItem])
-def portfolio_watchlist(user_id: str = Query(default=DEFAULT_USER_ID)):
-    return list_watchlist(user_id)
+def portfolio_watchlist(
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    return list_watchlist(_resolve_user_id(user_id, cryptorisk_session))
 
 
 @router.post("/watchlist", response_model=UserWatchlist)
-def create_portfolio_watchlist_item(payload: UserWatchlistCreate, user_id: str = Query(default=DEFAULT_USER_ID)):
+def create_portfolio_watchlist_item(
+    payload: UserWatchlistCreate,
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
     try:
-        item = add_watchlist_item(payload, user_id)
-        generate_risk_snapshot(item.symbol, user_id)
+        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
+        item = add_watchlist_item(payload, resolved_user_id)
+        generate_risk_snapshot(item.symbol, resolved_user_id)
         return item
     except PortfolioError as exc:
         raise _handle_portfolio_error(exc) from exc
 
 
 @router.patch("/watchlist/{symbol}", response_model=UserWatchlist)
-def patch_portfolio_watchlist_item(symbol: str, payload: UserWatchlistUpdate, user_id: str = Query(default=DEFAULT_USER_ID)):
+def patch_portfolio_watchlist_item(
+    symbol: str,
+    payload: UserWatchlistUpdate,
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
     try:
-        item = update_watchlist_item(symbol, payload, user_id)
-        generate_risk_snapshot(item.symbol, user_id)
+        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
+        item = update_watchlist_item(symbol, payload, resolved_user_id)
+        generate_risk_snapshot(item.symbol, resolved_user_id)
         return item
     except PortfolioError as exc:
         raise _handle_portfolio_error(exc) from exc
 
 
 @router.delete("/watchlist/{symbol}")
-def remove_portfolio_watchlist_item(symbol: str, user_id: str = Query(default=DEFAULT_USER_ID)):
+def remove_portfolio_watchlist_item(
+    symbol: str,
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
     try:
-        delete_watchlist_item(symbol, user_id)
+        delete_watchlist_item(symbol, _resolve_user_id(user_id, cryptorisk_session))
         return {"status": "success", "message": "watchlist item deleted"}
     except PortfolioError as exc:
         raise _handle_portfolio_error(exc) from exc
@@ -150,29 +182,56 @@ def portfolio_symbol_news(symbol: str, limit: int = Query(default=20, ge=1, le=1
 
 
 @router.get("/risk/{symbol}", response_model=CoinRiskSnapshot)
-def portfolio_symbol_risk(symbol: str, user_id: str = Query(default=DEFAULT_USER_ID)):
+def portfolio_symbol_risk(
+    symbol: str,
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
     try:
-        return get_risk_snapshot(symbol, user_id)
+        return get_risk_snapshot(symbol, _resolve_user_id(user_id, cryptorisk_session))
     except PortfolioError as exc:
         raise _handle_portfolio_error(exc) from exc
 
 
+@router.get("/impact", response_model=PortfolioImpactResponse)
+def portfolio_impact(
+    user_id: str | None = Query(default=None),
+    window_days: int = Query(default=30, ge=1, le=365),
+    top_n: int = Query(default=10, ge=1, le=50),
+    per_asset_limit: int = Query(default=200, ge=10, le=500),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    return get_portfolio_impact_for_user(
+        user_id=_resolve_user_id(user_id, cryptorisk_session),
+        window_days=window_days,
+        top_n=top_n,
+        per_asset_limit=per_asset_limit,
+    )
+
+
 @router.post("/refresh", response_model=PortfolioRefreshResponse)
-def refresh_portfolio_risk(user_id: str = Query(default=DEFAULT_USER_ID)):
+def refresh_portfolio_risk(
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
     try:
-        return refresh_portfolio(user_id)
+        return refresh_portfolio(_resolve_user_id(user_id, cryptorisk_session))
     except PortfolioError as exc:
         raise _handle_portfolio_error(exc) from exc
 
 
 @router.post("/refresh/jobs", response_model=PortfolioRefreshJob)
-def start_portfolio_refresh_job(user_id: str = Query(default=DEFAULT_USER_ID)):
-    existing = _active_refresh_job(user_id)
+def start_portfolio_refresh_job(
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
+    existing = _active_refresh_job(resolved_user_id)
     if existing:
         return existing
     job = PortfolioRefreshJob(
         job_id=f"portfolio-{uuid.uuid4().hex}",
-        user_id=user_id,
+        user_id=resolved_user_id,
         status="queued",
         stage="queued",
         message="刷新任务已创建",
@@ -180,13 +239,17 @@ def start_portfolio_refresh_job(user_id: str = Query(default=DEFAULT_USER_ID)):
         updated_at=_now_text(),
     )
     _store_refresh_job(job)
-    Thread(target=_run_refresh_job, args=(job.job_id, user_id), daemon=True).start()
+    Thread(target=_run_refresh_job, args=(job.job_id, resolved_user_id), daemon=True).start()
     return job
 
 
 @router.get("/refresh/jobs/current", response_model=PortfolioRefreshJob)
-def current_portfolio_refresh_job(user_id: str = Query(default=DEFAULT_USER_ID)):
-    job_id = _latest_job_by_user.get(user_id)
+def current_portfolio_refresh_job(
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
+    job_id = _latest_job_by_user.get(resolved_user_id)
     if not job_id or job_id not in _refresh_jobs:
         raise HTTPException(status_code=404, detail="No portfolio refresh job")
     return _refresh_jobs[job_id]

@@ -50,6 +50,8 @@ export type ImpactAnalysis = {
 
 export type AdviceGeneration = {
   priority?: "low" | "medium" | "high" | "urgent" | string;
+  score_breakdown?: ScoreBreakdown;
+  score_breakdown_reason?: string;
   recommended_actions?: string[];
   monitoring_items?: string[];
   verification_needed?: string[];
@@ -107,6 +109,9 @@ export type RiskReport = {
   risk_level: string;
   confidence_score?: number;
   confidence_level?: string;
+  severity_score?: number;
+  urgency_score?: number;
+  contagion_score?: number;
   score_dimension_note?: string;
   raw_rule_scores?: Record<string, number>;
   risk_type_stats?: RiskTypeStat[];
@@ -168,10 +173,15 @@ export type NewsRankingItem = {
   content: string;
   date?: string;
   risk_score: number;
+  personal_score?: number;
   risk_level: string;
   risk_type: string;
   published_at: string;
   coins: string[];
+  matched_assets?: string[];
+  personal_relevance?: number;
+  matched_reason?: string;
+  exposure_note?: string;
   coin_details?: Array<{
     symbol: string;
     name?: string;
@@ -210,6 +220,111 @@ export type RiskOverview = {
   top_coin: CoinRankingItem | null;
   top_news_preview: NewsRankingItem[];
   top_coin_preview: CoinRankingItem[];
+};
+
+export type DailyRiskReport = {
+  report_id?: string;
+  date: string;
+  range: "24h" | "7d";
+  generated_at: string;
+  created_at?: string;
+  generation_date?: string;
+  saved_at?: string;
+  source: "llm" | "rule_fallback" | string;
+  user_id: string;
+  user_profile: Record<string, unknown>;
+  user_assets_count: number;
+  holding_assets_count: number;
+  favorite_news_count: number;
+  affected_assets: string[];
+  personal_risk_score: number;
+  personal_high_count: number;
+  personal_red_count: number;
+  headline: string;
+  summary: string;
+  alert_level: string;
+  market_mood: "risk_off" | "neutral" | "risk_on" | string;
+  news_count: number;
+  average_score: number;
+  high_count: number;
+  red_count: number;
+  risk_themes: Array<{
+    theme_id: string;
+    title: string;
+    risk_type: string;
+    affected_assets: string[];
+    event_count: number;
+    max_personal_score: number;
+    risk_level: string;
+    summary: string;
+    severity_reason?: string;
+    evidence_summary: string[];
+    monitoring_items: string[];
+    source_event_count: number;
+    source_news_ids: string[];
+  }>;
+  key_news: Array<{
+    news_id: string;
+    title: string;
+    summary: string;
+    evidence: string;
+    risk_score: number;
+    personal_score?: number;
+    risk_level: string;
+    risk_type: string;
+    published_at: string;
+    coins: string[];
+    matched_assets?: string[];
+    personal_relevance?: number;
+    matched_reason?: string;
+    exposure_note?: string;
+  }>;
+  asset_reports: Array<{
+    asset_symbol: string;
+    asset_name: string;
+    is_holding: boolean;
+    exposure_label: string;
+    exposure_mode?: string;
+    exposure_bucket?: string;
+    market_value?: number;
+    price_change_24h?: number;
+    alert_threshold?: number;
+    personal_risk_score: number;
+    risk_level: string;
+    summary: string;
+    risk_types: string[];
+    key_drivers: string[];
+    evidence_summary: string[];
+    monitoring_items: string[];
+    actions: string[];
+    source_event_count: number;
+    source_news_ids?: string[];
+  }>;
+  risk_types: Array<{
+    name: string;
+    count: number;
+    high_count: number;
+    max_score: number;
+    weight: number;
+  }>;
+  watch_coins: Array<{
+    symbol: string;
+    name: string;
+    score: number;
+    level: string;
+    news_count: number;
+    risk_type: string;
+    is_holding?: boolean;
+    exposure_mode?: string;
+    exposure_bucket?: string;
+    market_value?: number;
+    price_change_24h?: number;
+    alert_threshold?: number;
+  }>;
+  focus_points: string[];
+  actions: string[];
+  impact_summary: string;
+  errors?: string[];
 };
 
 export type NewsRankingResponse = {
@@ -285,13 +400,20 @@ export type NewsUpdateJob = {
 };
 
 export type PortfolioRiskLevel = "low" | "medium" | "high" | "critical";
+export type PortfolioExposureMode = "bucket" | "exact" | "custom";
+export type PortfolioExposureBucket = "none" | "low" | "medium" | "high";
+export type PortfolioExposureSource = "custom" | "exact" | "bucket" | "unknown";
 
 export type PortfolioWatchlistRecord = {
   id: string;
   user_id: string;
   symbol: string;
   base_asset: string;
+  is_watched: boolean;
   is_holding: boolean;
+  exposure_mode: PortfolioExposureMode;
+  exposure_bucket: PortfolioExposureBucket;
+  custom_exposure_pct?: number | null;
   amount: number;
   avg_buy_price: number;
   alert_threshold: number;
@@ -312,10 +434,25 @@ export type PortfolioWatchlistItem = PortfolioWatchlistRecord & {
 
 export type PortfolioWatchlistPayload = {
   symbol: string;
+  is_watched?: boolean;
   is_holding?: boolean;
+  exposure_mode?: PortfolioExposureMode;
+  exposure_bucket?: PortfolioExposureBucket;
+  custom_exposure_pct?: number | null;
   amount?: number;
   avg_buy_price?: number;
   alert_threshold?: number;
+};
+
+export type CoinLibraryItem = {
+  symbol: string;
+  base_asset: string;
+  name: string;
+  display_name: string;
+  category: string;
+  quote_asset: string;
+  rank: number;
+  aliases: string[];
 };
 
 export type PortfolioMarketCandle = {
@@ -345,6 +482,44 @@ export type PortfolioNewsItem = {
   source_url: string;
   matched_reason: string;
   confidence: number;
+};
+
+export type PortfolioImpactEvent = {
+  eventId: string;
+  title: string;
+  summary: string;
+  publishedAt: string;
+  eventRiskScore: number;
+  assetRelationScore: number;
+  userExposurePct: number;
+  timeDecayFactor: number;
+  urgencyScore: number;
+  sourceTrustScore: number;
+  confidenceScore: number;
+  marketAnomalyFactor: number;
+  userRiskPreferenceFactor: number;
+  exposureSource: PortfolioExposureSource;
+  portfolioImpactScore: number;
+  direction: "positive" | "negative" | "neutral";
+  relationType: string;
+  riskType: string;
+  sourceUrl: string;
+  reasons: string[];
+};
+
+export type PortfolioImpactAsset = {
+  assetSymbol: string;
+  holdingPct: number;
+  exposureSource: PortfolioExposureSource;
+  marketValue: number;
+  topEvents: PortfolioImpactEvent[];
+};
+
+export type PortfolioImpactResponse = {
+  portfolioImpactScore: number;
+  assets: PortfolioImpactAsset[];
+  generatedAt: string;
+  windowDays: number;
 };
 
 export type CoinRiskSnapshot = {
@@ -392,6 +567,7 @@ export type AuthUser = {
   id: string;
   username: string;
   display_name: string;
+  email?: string;
   created_at: string;
 };
 
@@ -399,6 +575,25 @@ export type AuthResponse = {
   status: string;
   message: string;
   user: AuthUser;
+};
+
+export type AnalysisDisposition = "pending" | "verified" | "ignored" | "monitoring" | "reviewed";
+
+export type AnalysisReportPayload = {
+  id: string;
+  title: string;
+  created_at: string;
+  input: string;
+  report: RiskReport;
+  disposition?: AnalysisDisposition;
+  disposition_note?: string;
+};
+
+export type AnalysisReportItem = AnalysisReportPayload & {
+  user_id: string;
+  updated_at: string;
+  disposition: AnalysisDisposition;
+  disposition_note: string;
 };
 
 export type FavoriteType = "report" | "news";
@@ -422,9 +617,38 @@ export type FavoriteCreatePayload = {
 
 const legacyApiCachePrefix = "cryptorisk.api-cache:";
 const apiCachePrefix = "cryptorisk.api-cache:v2:";
+const simClientStorageKey = "cryptorisk.sim.client_id";
 const apiCacheTtlMs = 60 * 1000;
 const memoryCache = new Map<string, { expiresAt: number; data: unknown }>();
 const pendingRequests = new Map<string, Promise<unknown>>();
+let fallbackSimClientId = "";
+
+function createSimClientId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getSimClientId() {
+  if (typeof window === "undefined") return "";
+  try {
+    const existing = window.localStorage.getItem(simClientStorageKey);
+    if (existing) return existing;
+    const next = createSimClientId();
+    window.localStorage.setItem(simClientStorageKey, next);
+    return next;
+  } catch {
+    if (!fallbackSimClientId) fallbackSimClientId = createSimClientId();
+    return fallbackSimClientId;
+  }
+}
+
+function simClientHeaders(path: string): Record<string, string> {
+  if (!path.startsWith("/api/sim/")) return {};
+  const clientId = getSimClientId();
+  return clientId ? { "X-CryptoRisk-Sim-Client": clientId } : {};
+}
 
 function apiCacheKey(path: string) {
   return `${apiCachePrefix}${path}`;
@@ -495,6 +719,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...restInit,
     headers: {
       "Content-Type": "application/json",
+      ...simClientHeaders(path),
       ...(headers || {}),
     },
   });
@@ -561,6 +786,44 @@ export function logoutUser() {
   return requestJson<{ status: string; message: string }>("/api/auth/logout", {
     method: "POST",
   });
+}
+
+export function fetchAnalysisReports() {
+  return requestJson<AnalysisReportItem[]>("/api/analysis-reports");
+}
+
+export function saveAnalysisReport(payload: AnalysisReportPayload) {
+  return requestJson<AnalysisReportItem>(
+    `/api/analysis-reports/${encodeURIComponent(payload.id)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export function updateAnalysisReportDisposition(
+  reportId: string,
+  disposition: AnalysisDisposition,
+  dispositionNote = ""
+) {
+  return requestJson<AnalysisReportItem>(
+    `/api/analysis-reports/${encodeURIComponent(reportId)}/disposition`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        disposition,
+        disposition_note: dispositionNote,
+      }),
+    }
+  );
+}
+
+export function deleteAnalysisReport(reportId: string) {
+  return requestJson<{ status: string; message: string }>(
+    `/api/analysis-reports/${encodeURIComponent(reportId)}`,
+    { method: "DELETE" }
+  );
 }
 
 export function fetchFavorites(itemType?: FavoriteType) {
@@ -686,6 +949,48 @@ export function fetchPortfolioWatchlist() {
   return requestJson<PortfolioWatchlistItem[]>("/api/portfolio/watchlist");
 }
 
+export function fetchCoinLibrary(query?: string, limit?: number) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (limit) params.set("limit", String(limit));
+  const search = params.toString();
+  return requestJson<CoinLibraryItem[]>(`/api/coin-library${search ? `?${search}` : ""}`);
+}
+
+export function fetchUserAssets() {
+  return requestJson<PortfolioWatchlistItem[]>("/api/user-assets");
+}
+
+export async function createUserAsset(payload: PortfolioWatchlistPayload) {
+  const response = await requestJson<PortfolioWatchlistRecord>("/api/user-assets", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  clearApiCache();
+  return response;
+}
+
+export async function updateUserAsset(symbol: string, payload: Omit<PortfolioWatchlistPayload, "symbol">) {
+  const response = await requestJson<PortfolioWatchlistRecord>(
+    `/api/user-assets/${encodeURIComponent(symbol)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+  clearApiCache();
+  return response;
+}
+
+export async function deleteUserAsset(symbol: string) {
+  const response = await requestJson<{ status: string; message: string }>(
+    `/api/user-assets/${encodeURIComponent(symbol)}`,
+    { method: "DELETE" }
+  );
+  clearApiCache();
+  return response;
+}
+
 export async function createPortfolioWatchlistItem(payload: PortfolioWatchlistPayload) {
   const response = await requestJson<PortfolioWatchlistRecord>("/api/portfolio/watchlist", {
     method: "POST",
@@ -733,6 +1038,10 @@ export function fetchPortfolioRisk(symbol: string) {
   return requestJson<CoinRiskSnapshot>(
     `/api/portfolio/risk/${encodeURIComponent(symbol)}`
   );
+}
+
+export function fetchPortfolioImpact() {
+  return requestJson<PortfolioImpactResponse>("/api/portfolio/impact");
 }
 
 export async function refreshPortfolioRisk() {
@@ -832,6 +1141,23 @@ export function fetchRiskOverview(date?: string) {
 export function readCachedRiskOverview(date?: string) {
   const search = date ? `?date=${encodeURIComponent(date)}` : "";
   return readCachedJson<RiskOverview>(`/api/rankings/overview${search}`);
+}
+
+export function fetchDailyRiskReport(date?: string) {
+  const search = date ? `?date=${encodeURIComponent(date)}` : "";
+  return requestJson<DailyRiskReport | null>(`/api/daily-report${search}`);
+}
+
+export function generateDailyRiskReport(date?: string) {
+  return requestJson<DailyRiskReport>("/api/daily-report/generate", {
+    method: "POST",
+    body: JSON.stringify({ date: date || "24h" }),
+  });
+}
+
+export function readCachedDailyRiskReport(date?: string) {
+  void date;
+  return null;
 }
 
 export function fetchNewsRanking(limit = 10, date?: string) {

@@ -65,6 +65,17 @@ def _normalize_scores(raw_value: object, added_types: list[str]) -> dict[str, in
     return scores
 
 
+def _merge_risk_types(*groups: object) -> list[str]:
+    merged: list[str] = []
+    for group in groups:
+        values = group if isinstance(group, list) else [group]
+        for value in values:
+            risk_type = _normalize_risk_type(value)
+            if risk_type and risk_type not in merged:
+                merged.append(risk_type)
+    return merged
+
+
 def _rebuild_scenario_scores(raw_scores: dict[str, float]) -> dict[str, float]:
     scenario_scores: dict[str, float] = {}
     for risk_type, score in raw_scores.items():
@@ -117,6 +128,16 @@ def review_low_risk_route(
     reviewed_score = _clamp_score(raw_result.get("reviewed_risk_score"))
     if primary_type and reviewed_score > 0:
         corrected_scores[primary_type] = max(corrected_scores.get(primary_type, 0), reviewed_score)
+    handoff_types = _merge_risk_types(
+        confirmed_types,
+        added_types,
+        primary_type if primary_type and reviewed_score > 0 else "",
+        [
+            risk_type
+            for risk_type, score in corrected_scores.items()
+            if score > 0 and risk_type not in suppressed_types
+        ],
+    )
 
     escalate = bool(raw_result.get("escalate_to_high_risk"))
     for risk_type in confirmed_types:
@@ -188,11 +209,33 @@ def review_low_risk_route(
         "reviewed_risk_score": reviewed_score,
         "added_risk_types": added_types,
         "suppressed_risk_types": suppressed_types,
+        "handoff_risk_types": handoff_types,
         "corrected_scores": corrected_scores,
         "reason": str(raw_result.get("reason") or ""),
         "raw_llm_output": raw_result,
     }
-    updated_debug = {**signal_scan.debug, "low_risk_gate": gate}
+    high_risk_route = dict(signal_scan.debug.get("high_risk_route", {}))
+    if escalate and handoff_types:
+        existing_triggered = high_risk_route.get("triggered_types", [])
+        triggered_types = _merge_risk_types(existing_triggered if isinstance(existing_triggered, list) else [], handoff_types)
+        high_risk_route.update(
+            {
+                "triggered": True,
+                "triggered_types": triggered_types,
+                "low_risk_gate_hits": handoff_types,
+                "rule": f"{high_risk_route.get('rule') or 'rule_route'}+low_risk_gate_handoff",
+            }
+        )
+    updated_debug = {
+        **signal_scan.debug,
+        "high_risk_route": high_risk_route,
+        "low_risk_gate": gate,
+        "low_risk_gate_handoff": {
+            "risk_types": handoff_types if escalate else [],
+            "source": "low_risk_gate",
+            "reason": gate["reason"],
+        },
+    }
     updated_scan = signal_scan.model_copy(
         update={
             "positive_signals": positive_signals,
