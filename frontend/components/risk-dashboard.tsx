@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import PortfolioRiskRadar from "@/components/portfolio-risk-radar";
@@ -78,27 +78,6 @@ type CoinFilter = "all" | "top10" | "high" | "medium" | "low";
 type CoinSort = "score_desc" | "score_asc" | "news_desc" | "news_asc";
 type RankingRange = "24h" | "7d";
 type MetricTone = "blue" | "red" | "orange" | "green" | "purple";
-type DailyWatchCoin = {
-  symbol: string;
-  name: string;
-  score: number;
-  level: string;
-  newsCount: number;
-  riskType: string;
-  isHolding?: boolean;
-  exposureMode?: string;
-  exposureBucket?: string;
-  marketValue?: number;
-  priceChange24h?: number;
-  alertThreshold?: number;
-};
-type DailyRiskTypeStat = {
-  name: string;
-  count: number;
-  highCount: number;
-  maxScore: number;
-  weight: number;
-};
 type DailyRiskTheme = {
   themeId: string;
   title: string;
@@ -188,13 +167,6 @@ type AnalysisTaskSnapshot = {
   updatedAt: string;
   recordId?: string;
   error?: string;
-};
-
-type AssistantEventReference = {
-  selectedText: string;
-  sourceInput: string;
-  title?: string;
-  newsId?: string;
 };
 
 type NavItem = {
@@ -338,7 +310,7 @@ const emptyCoinItem: CoinRankingItem = {
 
 const viewRoutes: Record<ActiveView, string> = {
   home: "/",
-  chat: "/analysize",
+  chat: "/analysis",
   news: "/news",
   coin: "/coins",
   daily: "/daily",
@@ -579,36 +551,6 @@ function subscribeAnalysisTask(listener: (snapshot: AnalysisTaskSnapshot | null)
   };
 }
 
-function waitForAnalysisTaskCompletion(taskId: string) {
-  return new Promise<AnalysisRecord>((resolve, reject) => {
-    const finish = (task: AnalysisTaskSnapshot | null, cleanup: () => void) => {
-      if (!task || task.id !== taskId) return;
-      if (task.status === "success" && task.recordId) {
-        const record = readStoredAnalysisRecords().find((item) => item.id === task.recordId);
-        cleanup();
-        if (record) {
-          resolve(record);
-          return;
-        }
-        reject(new Error("事件分析已完成，但未找到报告记录。"));
-        return;
-      }
-      if (task.status === "error") {
-        cleanup();
-        reject(new Error(task.error || "事件分析失败。"));
-      }
-    };
-
-    const currentTask = getActiveAnalysisTaskSnapshot();
-    if (currentTask?.id === taskId && currentTask.status !== "running") {
-      finish(currentTask, () => {});
-      return;
-    }
-    let unsubscribe = () => {};
-    unsubscribe = subscribeAnalysisTask((task) => finish(task, unsubscribe));
-  });
-}
-
 function startAnalysisTask(input: string) {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -789,7 +731,6 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
   const [message, setMessage] = useState(examplePrompts[0]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => readStoredChatMessages());
-  const [latestReport, setLatestReport] = useState<RiskReport | null>(null);
   const [analysisRecords, setAnalysisRecords] = useState<AnalysisRecord[]>(() => readStoredAnalysisRecords());
   const [storedSelectedRecordId, setStoredSelectedRecordId] = useState(() => readStoredSelectedRecordId());
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -817,7 +758,11 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     let ignore = false;
 
     async function loadRankings() {
-      const hasCachedData = Boolean(readCachedRiskOverview(rankingRange) || newsRanking.length || coinRanking.length);
+      const hasCachedData = Boolean(
+        readCachedRiskOverview(rankingRange)
+          || readCachedNewsRanking(0, rankingRange)?.items.length
+          || readCachedCoinRanking(0, rankingRange)?.items.length
+      );
       if (!hasCachedData) setRankingLoading(true);
       setRankingError("");
       try {
@@ -898,7 +843,6 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       setAnalysisRecords(records);
       if (!recordId) return;
       setStoredSelectedRecordId(recordId);
-      setLatestReport(records.find((record) => record.id === recordId)?.report || records[0]?.report || null);
       if (pathname === "/reports") {
         setCurrentSearch(`?record=${encodeURIComponent(recordId)}`);
       }
@@ -1050,11 +994,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
       if (task?.recordId) {
         setStoredSelectedRecordId(task.recordId);
-        setLatestReport(records.find((record) => record.id === task.recordId)?.report || null);
         return;
       }
-
-      setLatestReport(records[0]?.report || null);
     });
   }, []);
 
@@ -1147,7 +1088,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     }
   }
 
-  async function refreshRankingsAfterUpdate(silent = false) {
+  const refreshRankingsAfterUpdate = useCallback(async (silent = false) => {
     if (!silent) setRankingLoading(true);
     setRankingError("");
     try {
@@ -1173,7 +1114,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     } finally {
       if (!silent) setRankingLoading(false);
     }
-  }
+  }, [rankingRange]);
 
   async function handleUpdateTodayNews() {
     if (newsUpdateLoading) return;
@@ -1196,7 +1137,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     }
   }
 
-  async function pollNewsUpdateJob(initialJob: NewsUpdateJob) {
+  const pollNewsUpdateJob = useCallback(async (initialJob: NewsUpdateJob) => {
     const generation = updatePollGenerationRef.current + 1;
     updatePollGenerationRef.current = generation;
     setNewsUpdateLoading(isActiveNewsUpdateJob(initialJob));
@@ -1226,7 +1167,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     if (job.result) setNewsUpdateResult(job.result);
     setNewsUpdateLoading(false);
     await refreshRankingsAfterUpdate();
-  }
+  }, [refreshRankingsAfterUpdate]);
 
   useEffect(() => {
     let ignore = false;
@@ -1274,7 +1215,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       ignore = true;
       updatePollGenerationRef.current += 1;
     };
-  }, []);
+  }, [pollNewsUpdateJob]);
 
   function runAnalysis(input: string) {
     const trimmed = input.trim();
@@ -1489,7 +1430,6 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     });
     setAnalysisRecords([]);
     setStoredSelectedRecordId("");
-    setLatestReport(null);
     window.localStorage.removeItem(analysisRecordsStorageKey);
     window.localStorage.removeItem(selectedRecordStorageKey);
     if (activeView === "reports") navigateTo("/reports", "replace");
@@ -1658,6 +1598,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
               )}
               {activeView === "my" && (
                 <MyView
+                  key={selectedVaultTab}
                   favoriteNews={favoriteNews}
                   favoriteReports={favoriteReports}
                   onChangeView={handleChangeView}
@@ -3598,27 +3539,9 @@ function MyView({
     ["reviews", "风险复盘"],
   ];
 
-  useEffect(() => {
-    setActiveTab(selectedTab);
-  }, [selectedTab]);
-
   function changeTab(tab: MyVaultTab) {
     setActiveTab(tab);
   }
-
-  useEffect(() => {
-    setAlertDrafts((drafts) => {
-      const symbols = new Set(watchlist.map((item) => item.symbol));
-      const next: Record<string, string> = {};
-      watchlist.forEach((item) => {
-        next[item.symbol] = drafts[item.symbol] ?? String(item.alert_threshold ?? 70);
-      });
-      Object.keys(drafts).forEach((symbol) => {
-        if (symbols.has(symbol)) next[symbol] = next[symbol] ?? drafts[symbol];
-      });
-      return next;
-    });
-  }, [watchlist]);
 
   useEffect(() => {
     let ignore = false;
@@ -3688,7 +3611,8 @@ function MyView({
 
   async function handleSaveAlertThreshold(symbol: string) {
     if (!symbol || alertSavingSymbol) return;
-    const threshold = parseVaultAlertThreshold(alertDrafts[symbol] ?? "70");
+    const item = watchlist.find((entry) => entry.symbol === symbol);
+    const threshold = parseVaultAlertThreshold(alertDrafts[symbol] ?? String(item?.alert_threshold ?? 70));
     setAlertSavingSymbol(symbol);
     setAlertActionError("");
     setAlertActionMessage("");
@@ -4484,56 +4408,6 @@ function FavoriteVaultShell({
   );
 }
 
-function FavoriteEntryCard({
-  action,
-  count,
-  description,
-  icon,
-  onClick,
-  title,
-  tone,
-}: {
-  action: string;
-  count: number;
-  description: string;
-  icon: ReactNode;
-  onClick: () => void;
-  title: string;
-  tone: "emerald" | "violet";
-}) {
-  const toneClass = tone === "emerald"
-    ? "border-emerald-100 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100/70"
-    : "border-violet-100 bg-violet-50 text-violet-700 hover:border-violet-300 hover:bg-violet-100/70";
-  return (
-    <button type="button" onClick={onClick} className={`rounded-lg border p-5 text-left shadow-sm transition-colors duration-200 ${toneClass}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm">{icon}</div>
-        <span className="text-3xl font-bold text-slate-950">{count}</span>
-      </div>
-      <h3 className="mt-5 text-xl font-bold text-slate-950">{title}</h3>
-      <p className="mt-2 min-h-12 text-sm leading-6 text-slate-600">{description}</p>
-      <span className="mt-5 inline-flex items-center gap-2 text-sm font-bold">
-        {action}
-        <ChevronRightIcon />
-      </span>
-    </button>
-  );
-}
-
-function VaultMetric({ label, tone, value }: { label: string; tone: "amber" | "emerald" | "violet"; value: string }) {
-  const toneClass = {
-    amber: "border-amber-100 bg-amber-50 text-amber-700",
-    emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
-    violet: "border-violet-100 bg-violet-50 text-violet-700",
-  }[tone];
-  return (
-    <div className={`rounded-lg border p-4 shadow-sm ${toneClass}`}>
-      <p className="text-xs font-bold uppercase tracking-[0.16em] opacity-80">{label}</p>
-      <p className="mt-2 truncate text-2xl font-bold text-slate-950">{value}</p>
-    </div>
-  );
-}
-
 function SettingsView({
   onUpdateTodayNews,
   updateError,
@@ -4782,395 +4656,6 @@ function UpdateProgressRow({ progress }: { progress: NewsUpdateProgress }) {
       </div>
     </div>
   );
-}
-
-function AssistantPanel({
-  activeView,
-  latestReport,
-  topCoin,
-  topNews,
-}: {
-  activeView: ActiveView;
-  latestReport: RiskReport | null;
-  topCoin: CoinRankingItem;
-  topNews: NewsRankingItem;
-}) {
-  const topic = activeView === "coin" ? topCoin.symbol : topNews.coins[0] || topCoin.symbol;
-  const score = latestReport?.risk_score ?? (activeView === "coin" ? topCoin.final_score : topNews.risk_score);
-  const [question, setQuestion] = useState("");
-  const [assistantLoading, setAssistantLoading] = useState(false);
-  const [assistantError, setAssistantError] = useState("");
-  const [assistantOpen, setAssistantOpen] = useState(false);
-  const [eventReference, setEventReference] = useState<AssistantEventReference | null>(null);
-  const assistantEndRef = useRef<HTMLDivElement | null>(null);
-  const [assistantMessages, setAssistantMessages] = useState<ChatMessage[]>([
-    {
-      id: "assistant-welcome",
-      role: "assistant",
-      content: "可以问我金融市场、加密资产、DeFi 风险、交易所事件、项目基本面、宏观影响和当前页面里的风险线索。",
-    },
-  ]);
-
-  useEffect(() => {
-    function handleOpenAssistant(event: Event) {
-      const detail = (event as CustomEvent).detail || {};
-      const selectedText = String(detail.selectedText || detail.news?.content || detail.news?.summary || "").trim();
-      const sourceInput = String(detail.sourceInput || selectedText).trim();
-      if (detail.mode !== "deep_analysis" || !sourceInput) return;
-      setEventReference({
-        selectedText: selectedText || sourceInput,
-        sourceInput,
-        title: String(detail.news?.title || "").trim() || compactReportSummary(sourceInput),
-        newsId: detail.news?.news_id ? String(detail.news.news_id) : "",
-      });
-      setAssistantOpen(true);
-      setAssistantError("");
-    }
-
-    window.addEventListener("cryptorisk:open-risk-assistant", handleOpenAssistant);
-    return () => window.removeEventListener("cryptorisk:open-risk-assistant", handleOpenAssistant);
-  }, []);
-
-  useEffect(() => {
-    assistantEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [assistantMessages, assistantLoading]);
-
-  async function ensureReferencedEventReport(reference: AssistantEventReference) {
-    const input = reference.sourceInput.trim();
-    const existing = readStoredAnalysisRecords().find((record) => record.input.trim() === input);
-    if (existing) return existing;
-
-    const runningTask = getActiveAnalysisTaskSnapshot();
-    if (runningTask?.status === "running") {
-      const runningRecord = await waitForAnalysisTaskCompletion(runningTask.id);
-      if (runningTask.input.trim() === input) return runningRecord;
-    }
-
-    const task = startAnalysisTask(input);
-    if (!task) {
-      const fallbackRecord = readStoredAnalysisRecords().find((record) => record.input.trim() === input);
-      if (fallbackRecord) return fallbackRecord;
-      throw new Error("无法启动事件分析。");
-    }
-    return waitForAnalysisTaskCompletion(task.id);
-  }
-
-  const askAssistant = async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || assistantLoading) return;
-
-    let eventRecord: AnalysisRecord | null = null;
-    let eventContext: Record<string, unknown> = {};
-    const reference = eventReference;
-    const shouldAnalyzeReference = Boolean(reference?.sourceInput);
-    const shouldUsePageContext = shouldAttachAssistantPageContext(trimmed, {
-      activeView,
-      latestReport,
-      topCoin,
-      topNews,
-    });
-    const context = shouldUsePageContext ? {
-      active_view: activeView,
-      topic,
-      risk_score: score,
-      latest_report: latestReport,
-      top_coin: topCoin,
-      top_news: topNews,
-    } : {
-      active_view: activeView,
-      page_context_available: true,
-      page_context_omitted: "用户问题未明确指向当前页面，避免用页面数据污染回答。",
-    };
-
-    setAssistantMessages((items) => [
-      ...items,
-      { id: `assistant-user-${Date.now()}`, role: "user", content: trimmed },
-    ]);
-    setQuestion("");
-    setAssistantError("");
-    setAssistantLoading(true);
-    const replyId = `assistant-reply-${Date.now()}`;
-    setAssistantMessages((items) => [
-      ...items,
-      { id: replyId, role: "assistant", content: "" },
-    ]);
-
-    try {
-      if (shouldAnalyzeReference && reference) {
-        setAssistantMessages((items) =>
-          items.map((item) =>
-            item.id === replyId ? { ...item, content: "正在先完成事件风险分析，稍后基于完整报告回答你的问题..." } : item
-          )
-        );
-        eventRecord = await ensureReferencedEventReport(reference);
-        eventContext = {
-          assistant_memory: {
-            event_analysis: {
-              news_title: reference.title || eventRecord.title,
-              news_text: reference.selectedText || reference.sourceInput,
-              analysis_input: reference.sourceInput,
-              report_id: eventRecord.id,
-              report_title: eventRecord.title,
-              report_created_at: eventRecord.createdAt,
-              report: eventRecord.report,
-            },
-          },
-        };
-        setAssistantMessages((items) =>
-          items.map((item) => (item.id === replyId ? { ...item, content: "" } : item))
-        );
-      }
-      await streamRiskAssistant(trimmed, { ...context, ...eventContext }, (chunk) => {
-        setAssistantMessages((items) =>
-          items.map((item) =>
-            item.id === replyId ? { ...item, content: item.content + chunk } : item
-          )
-        );
-      }, { selectedText: reference?.selectedText, userQuestion: trimmed });
-    } catch (error) {
-      console.error(error);
-      setAssistantMessages((items) => items.filter((item) => item.id !== replyId));
-      setAssistantError("助手暂时无法回答，请稍后重试。");
-    } finally {
-      setAssistantLoading(false);
-    }
-  };
-
-  const handleAssistantSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    askAssistant(question);
-  };
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setAssistantOpen(true)}
-        className={`fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xl shadow-blue-200 transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 ${
-          assistantOpen ? "pointer-events-none scale-95 opacity-0" : "opacity-100"
-        }`}
-        aria-label="打开 AI 风控助手"
-        aria-expanded={assistantOpen}
-      >
-        <BotIcon />
-      </button>
-
-      {assistantOpen && (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[1px] xl:hidden"
-          onClick={() => setAssistantOpen(false)}
-          aria-label="关闭 AI 风控助手遮罩"
-        />
-      )}
-
-      <aside
-        className={`fixed inset-y-0 right-0 z-50 w-full max-w-[420px] transform border-l border-blue-100 bg-white shadow-2xl shadow-slate-900/20 transition-transform duration-300 sm:right-4 sm:top-[108px] sm:bottom-6 sm:h-[calc(100vh-132px)] sm:rounded-lg sm:border ${
-          assistantOpen ? "translate-x-0" : "translate-x-full sm:translate-x-[calc(100%+2rem)]"
-        }`}
-        aria-hidden={!assistantOpen}
-      >
-      <section className="flex h-full flex-col">
-        <div className="flex items-center justify-between border-b border-blue-100 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-              <BotIcon />
-            </div>
-            <div>
-              <p className="font-bold text-slate-950">AI风控助手</p>
-              <p className="text-xs text-slate-500">金融与加密风险问答</p>
-            </div>
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          </div>
-          <button
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors duration-200 hover:bg-blue-50 hover:text-slate-900"
-            type="button"
-            onClick={() => setAssistantOpen(false)}
-            aria-label="关闭 AI 风控助手"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col gap-5 p-5">
-          {eventReference && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-blue-700">已引用待分析事件</p>
-                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">
-                    {eventReference.selectedText || eventReference.sourceInput}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEventReference(null)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors duration-200 hover:bg-white hover:text-slate-700"
-                  aria-label="取消引用事件"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="risk-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-            {assistantMessages.map((message) => (
-              <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[88%] whitespace-pre-wrap rounded-lg px-4 py-3 text-sm leading-7 ${
-                    message.role === "user"
-                      ? "bg-blue-600 font-semibold text-white"
-                      : "border border-blue-100 bg-slate-50 text-slate-700"
-                  }`}
-                >
-                  {message.role === "assistant" ? (
-                    message.content ? <MarkdownMessage content={message.content} /> : <LoadingDots label="正在整理回答" />
-                  ) : (
-                    message.content
-                  )}
-                </div>
-              </div>
-            ))}
-            <div ref={assistantEndRef} />
-          </div>
-
-          {assistantError && <Notice tone="red" text={assistantError} />}
-
-          <form onSubmit={handleAssistantSubmit} className="flex h-12 items-center gap-3 rounded-lg border border-blue-100 bg-slate-50 px-3 text-sm">
-            <input
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none placeholder:text-slate-400"
-              placeholder={eventReference ? "输入你要追问的问题..." : "问金融、币种、风险或当前页面..."}
-            />
-            <button
-              type="submit"
-              disabled={assistantLoading || !question.trim()}
-              className="ml-auto flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="发送问题"
-            >
-              <SendIcon />
-            </button>
-          </form>
-          <p className="text-xs text-slate-400">内容由 AI 生成，仅供参考</p>
-        </div>
-      </section>
-    </aside>
-    </>
-  );
-}
-
-function MarkdownMessage({ content }: { content: string }) {
-  const lines = content.split(/\r?\n/);
-  const elements: ReactNode[] = [];
-  let listItems: string[] = [];
-  let paragraph: string[] = [];
-
-  const flushParagraph = () => {
-    if (!paragraph.length) return;
-    const text = paragraph.join(" ");
-    elements.push(
-      <p key={`p-${elements.length}`} className="my-2 first:mt-0 last:mb-0">
-        {renderInlineMarkdown(text)}
-      </p>
-    );
-    paragraph = [];
-  };
-
-  const flushList = () => {
-    if (!listItems.length) return;
-    elements.push(
-      <ul key={`ul-${elements.length}`} className="my-2 list-disc space-y-1 pl-5">
-        {listItems.map((item, index) => (
-          <li key={`${index}-${item}`}>{renderInlineMarkdown(item)}</li>
-        ))}
-      </ul>
-    );
-    listItems = [];
-  };
-
-  lines.forEach((rawLine) => {
-    const line = rawLine.trim();
-
-    if (!line) {
-      flushParagraph();
-      flushList();
-      return;
-    }
-
-    const heading = line.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) {
-      flushParagraph();
-      flushList();
-      const level = heading[1].length;
-      const className = level === 1 ? "mt-1 text-base font-bold" : "mt-2 text-sm font-bold";
-      elements.push(
-        <p key={`h-${elements.length}`} className={className}>
-          {renderInlineMarkdown(heading[2])}
-        </p>
-      );
-      return;
-    }
-
-    const unordered = line.match(/^[-*]\s+(.+)$/);
-    if (unordered) {
-      flushParagraph();
-      listItems.push(unordered[1]);
-      return;
-    }
-
-    const ordered = line.match(/^\d+\.\s+(.+)$/);
-    if (ordered) {
-      flushParagraph();
-      listItems.push(ordered[1]);
-      return;
-    }
-
-    flushList();
-    paragraph.push(line);
-  });
-
-  flushParagraph();
-  flushList();
-
-  return <div className="break-words">{elements}</div>;
-}
-
-function renderInlineMarkdown(text: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*)/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-
-    const token = match[0];
-    if (token.startsWith("`")) {
-      nodes.push(
-        <code key={`code-${match.index}`} className="rounded bg-blue-50 px-1 py-0.5 text-[0.92em] text-blue-700">
-          {token.slice(1, -1)}
-        </code>
-      );
-    } else {
-      nodes.push(
-        <strong key={`strong-${match.index}`} className="font-bold text-slate-900">
-          {token.slice(2, -2)}
-        </strong>
-      );
-    }
-
-    lastIndex = match.index + token.length;
-  }
-
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-
-  return nodes;
 }
 
 function RankingCard({
@@ -5953,126 +5438,6 @@ function MetaTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EngineTrace({
-  report,
-  result,
-  validation,
-}: {
-  report: RiskReport;
-  result: ChatAgentResult;
-  validation: ChatAgentResult["validation"];
-}) {
-  const primaryBranch = String((result.branch_score_merge?.primary_risk_name as string | undefined) || report.primary_category || formatScenario(String(result.primary_scenario || "")) || "");
-  const extractionMode = formatExtractionMode(result.extraction_mode);
-  const llmCalls = result.llm_call_count ?? 0;
-  const fallbackCount = result.fallback_count ?? 0;
-  const validationAnswers = Object.entries(validation?.answered_questions || {}).slice(0, 6);
-  const impactAnalysis = report.impact_analysis || result.impact_analysis || {};
-  const adviceGeneration = report.advice_generation || result.advice_generation || {};
-  const finalContextMeta = report.final_context_agents || {};
-  const isWeakRisk = detectWeakRisk(result, finalContextMeta, impactAnalysis, adviceGeneration);
-  const finalContextSources = [impactAnalysis.source, adviceGeneration.source]
-    .map(formatAgentSource)
-    .filter((item, index, values) => item && item !== "待确认" && values.indexOf(item) === index);
-  const traceItems = [
-    {
-      title: "快速规则扫描",
-      value: `${report.risk_signals?.length || 0} 个信号`,
-      detail: "完成风险方向粗筛与缓和语义识别",
-    },
-    {
-      title: "风险类型分支审核",
-      value: primaryBranch || "综合风险",
-      detail: "按命中的风险类别独立审核证据强度、严重性与成立状态",
-    },
-    {
-      title: "分支评分合并",
-      value: `${extractionMode} · ${llmCalls} 次调用`,
-      detail: fallbackCount ? `分支兜底 ${fallbackCount} 次` : "最强成立分支决定主分，次要成立分支补充加权",
-    },
-    {
-      title: "二次校验",
-      value: `${clampScore(result.pre_cap_score ?? report.risk_score)} → ${clampScore(report.final_risk_score ?? report.risk_score)}`,
-      detail: validation ? formatValidationAction(validation.action) : "未触发二次校验调整",
-    },
-    {
-      title: "影响与建议 Agent",
-      value: finalContextSources.length ? finalContextSources.join(" / ") : "待确认",
-      detail: isWeakRisk ? "弱风险保护：只输出监测建议，不推断具体影响对象" : "影响对象 Agent 与处置建议 Agent 分别生成上下文结论",
-    },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {traceItems.map((item, index) => (
-          <div key={item.title} className="rounded-lg border border-blue-100 bg-slate-50 p-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-600 text-xs font-bold text-white">
-                {index + 1}
-              </span>
-              <p className="min-w-0 truncate text-xs font-bold text-slate-600">{item.title}</p>
-            </div>
-            <p className="mt-3 text-sm font-bold leading-6 text-slate-950">{item.value}</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
-          </div>
-        ))}
-      </div>
-
-      {validation && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-bold text-white">Validation</span>
-            <span className="rounded-md border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-800">
-              {formatValidationAction(validation.action)}
-            </span>
-          </div>
-          {validation.reason && <p className="mt-3 text-sm font-semibold leading-6 text-amber-950">{validation.reason}</p>}
-          {validationAnswers.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {validationAnswers.map(([key, value]) => (
-                <span key={key} className="rounded-md border border-amber-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
-                  {formatRiskSignalLabel(key)}：{formatUnknownValue(value)}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EvidenceSignalList({
-  empty,
-  items,
-}: {
-  empty: string;
-  items: Array<{ label: string; value: string; tone: "blue" | "green" | "amber" | "slate" }>;
-}) {
-  if (!items.length) {
-    return <p className="rounded-lg border border-dashed border-blue-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">{empty}</p>;
-  }
-
-  const toneStyle = {
-    blue: "border-blue-100 bg-blue-50 text-blue-800",
-    green: "border-emerald-100 bg-emerald-50 text-emerald-800",
-    amber: "border-amber-100 bg-amber-50 text-amber-800",
-    slate: "border-slate-200 bg-slate-50 text-slate-700",
-  };
-
-  return (
-    <div className="space-y-2">
-      {items.map((item, index) => (
-        <div key={`${item.label}-${item.value}-${index}`} className={`rounded-lg border px-3 py-2 ${toneStyle[item.tone]}`}>
-          <span className="text-xs font-bold">{item.label}</span>
-          <p className="mt-1 text-sm font-semibold leading-6">{item.value}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function formatEvidenceCategory(value: string) {
   const normalized = value.trim();
   const labels: Record<string, string> = {
@@ -6300,15 +5665,6 @@ function formatEnginePath(value?: string) {
   return labels[String(value || "")] || value || "待确认";
 }
 
-function formatExtractionMode(value?: string) {
-  const labels: Record<string, string> = {
-    llm: "分支 LLM 审核",
-    heuristic_fallback: "分支规则兜底",
-    fast_exit: "快速低风险",
-  };
-  return labels[String(value || "")] || value || "待确认";
-}
-
 function formatAgentSource(value?: string) {
   const labels: Record<string, string> = {
     llm: "LLM Agent",
@@ -6331,84 +5687,6 @@ function detectWeakRisk(
       || meta.is_weak_risk
       || sources.some((source) => source.includes("weak_risk"))
       || result.report_mode === "fast_exit",
-  );
-}
-
-function formatReportMode(value?: string) {
-  const labels: Record<string, string> = {
-    full_case: "完整报告",
-    fast_exit: "快速低风险报告",
-  };
-  return labels[String(value || "")] || value || "待确认";
-}
-
-function formatScenario(value: string) {
-  const labels: Record<string, string> = {
-    S0_GENERAL_UNKNOWN: "综合风险",
-    S1_ATTACK_EXPLOIT: "链上漏洞 / 攻击风险",
-    S2_EXCHANGE_ABNORMALITY: "交易所与系统运维风险",
-    S3_STABLECOIN_RESERVE: "稳定币异常风险",
-    S4_INFRASTRUCTURE_FAILURE: "基础设施 / 协议层异常风险",
-    S5_REGULATORY_ENFORCEMENT: "监管与法律风险",
-    S6_MARKET_LIQUIDATION: "爆仓 / 清算风险",
-    S7_FRAUD_GOVERNANCE: "诈骗 / 跑路 / Rug Pull 风险",
-    S8_WHALE_ONCHAIN_FLOW: "大额转账 / 巨鲸行为风险",
-  };
-  return labels[value] || value;
-}
-
-function formatCalibrationRule(value: string) {
-  const [scope, score] = value.split(":");
-  const scopeLabel = formatScenario(scope) || formatEvidenceSignal(scope);
-  return score ? `${scopeLabel} 校准阈值 ${score}` : formatEvidenceSignal(value);
-}
-
-function formatValidationAction(value?: string) {
-  const labels: Record<string, string> = {
-    cap_score: "二次校验：压低最高分",
-    raise_floor: "二次校验：抬高最低分",
-    no_change: "二次校验：无需调整",
-  };
-  return labels[String(value || "")] || value || "未触发校验";
-}
-
-function formatUnknownValue(value: unknown) {
-  if (typeof value === "boolean") return value ? "是" : "否";
-  if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
-  if (value === null || value === undefined || value === "") return "无";
-  if (Array.isArray(value)) return value.map((item) => formatScoreReasonText(String(item))).join("、");
-  return formatScoreReasonText(String(value));
-}
-
-function EventConclusion({ categories, report }: { categories: string[]; report: RiskReport }) {
-  const summary = compactReportSummary(report.summary);
-  const signals = (report.risk_signals || []).map((signal) => formatRiskSignalLabel(String(signal))).filter(Boolean).slice(0, 3);
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white">{report.risk_level || "待确认"}</span>
-          <span className="rounded-md border border-blue-200 bg-white px-2.5 py-1 text-xs font-bold text-blue-700">
-            风险 {clampScore(report.risk_score)}/100
-          </span>
-          <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
-            置信度 {clampScore(report.confidence_score ?? 0)}/100
-          </span>
-        </div>
-        <p className="mt-3 text-base font-bold leading-7 text-slate-950">{summary || "暂无事件结论。"}</p>
-        <p className="mt-2 text-sm font-semibold text-slate-500">{categories.join(" / ")}</p>
-      </div>
-      {signals.length > 0 && (
-        <div className="grid gap-2 md:grid-cols-3">
-          {signals.map((signal, index) => (
-            <div key={`${signal}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold leading-6 text-slate-700">
-              {signal}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -6531,14 +5809,9 @@ function CoinRiskTrendCard({ items, range }: { items: CoinRankingItem[]; range: 
   const rankedSymbols = useMemo(() => items.slice(0, 6).map((item) => item.symbol), [items]);
   const [symbolToAdd, setSymbolToAdd] = useState("");
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
-  useEffect(() => {
-    setSelectedSymbols((current) => {
-      const valid = current.filter((symbol) => rankedSymbols.includes(symbol)).slice(0, 3);
-      return valid.length ? valid : rankedSymbols.slice(0, 3);
-    });
-    setSymbolToAdd((current) => current || rankedSymbols[0] || "");
-  }, [rankedSymbols]);
-  const activeSymbols = selectedSymbols.filter((symbol) => rankedSymbols.includes(symbol)).slice(0, 3);
+  const effectiveSymbolToAdd = symbolToAdd || rankedSymbols[0] || "";
+  const selectedActiveSymbols = selectedSymbols.filter((symbol) => rankedSymbols.includes(symbol)).slice(0, 3);
+  const activeSymbols = selectedActiveSymbols.length ? selectedActiveSymbols : rankedSymbols.slice(0, 3);
   const palette = ["#2563eb", "#f97316", "#10b981", "#dc2626", "#7c3aed", "#0f766e"];
   const seriesSets = activeSymbols.map((symbol, index) => {
     const item = items.find((coin) => coin.symbol === symbol);
@@ -6550,10 +5823,10 @@ function CoinRiskTrendCard({ items, range }: { items: CoinRankingItem[]; range: 
   });
 
   function addSymbol() {
-    if (!symbolToAdd) return;
+    if (!effectiveSymbolToAdd) return;
     setSelectedSymbols((current) => {
-      if (current.includes(symbolToAdd)) return current;
-      return [...current, symbolToAdd].slice(-3);
+      if (current.includes(effectiveSymbolToAdd)) return current;
+      return [...current, effectiveSymbolToAdd].slice(-3);
     });
   }
 
@@ -6580,7 +5853,7 @@ function CoinRiskTrendCard({ items, range }: { items: CoinRankingItem[]; range: 
         <label className="font-bold text-slate-500" htmlFor="coin-trend-symbol">选择币种</label>
         <select
           id="coin-trend-symbol"
-          value={symbolToAdd}
+          value={effectiveSymbolToAdd}
           onChange={(event) => setSymbolToAdd(event.target.value)}
           className="h-9 rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-slate-700 outline-none transition-colors duration-200 hover:bg-blue-50 focus:border-blue-300"
         >
@@ -6591,7 +5864,7 @@ function CoinRiskTrendCard({ items, range }: { items: CoinRankingItem[]; range: 
         <button
           type="button"
           onClick={addSymbol}
-          disabled={!symbolToAdd || activeSymbols.includes(symbolToAdd)}
+          disabled={!effectiveSymbolToAdd || activeSymbols.includes(effectiveSymbolToAdd)}
           className="h-9 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           添加到图表
@@ -6737,87 +6010,6 @@ function SparklineChart({
       <polyline points={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       {latestPoint && <circle cx={latestPoint.x} cy={latestPoint.y} r="2.5" fill={color} />}
     </svg>
-  );
-}
-
-function AreaTrendChart({
-  className,
-  series,
-  threshold,
-  tone,
-}: {
-  className?: string;
-  series: TrendPoint[];
-  threshold?: number;
-  tone: MetricTone;
-}) {
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const width = 420;
-  const height = 180;
-  const padding = 18;
-  const normalized = normalizeTrendSeries(series);
-  const points = getChartPoints(normalized, width, height, padding, threshold);
-  const linePath = pointsToPath(points);
-  const areaPath = `${linePath} L ${width - padding},${height - padding} L ${padding},${height - padding} Z`;
-  const activeIndex = hoverIndex ?? normalized.length - 1;
-  const activePoint = points[activeIndex];
-  const activeData = normalized[activeIndex];
-  const color = getToneColor(tone);
-
-  function handleMouseMove(event: ReactMouseEvent<SVGSVGElement>) {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect || normalized.length <= 1) return;
-    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-    setHoverIndex(Math.round(ratio * (normalized.length - 1)));
-  }
-
-  return (
-    <div className={`relative rounded-lg bg-slate-50 p-3 ${className || ""}`}>
-      <svg
-        ref={svgRef}
-        className="h-full w-full"
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label="风险趋势图"
-        onMouseLeave={() => setHoverIndex(null)}
-        onMouseMove={handleMouseMove}
-      >
-        {[0.25, 0.5, 0.75].map((ratio) => (
-          <line key={ratio} x1={padding} x2={width - padding} y1={height * ratio} y2={height * ratio} stroke="#dbeafe" strokeDasharray="4 4" />
-        ))}
-        {threshold !== undefined && (
-          <line
-            x1={padding}
-            x2={width - padding}
-            y1={getThresholdY(normalized, height, padding, threshold)}
-            y2={getThresholdY(normalized, height, padding, threshold)}
-            stroke="#f97316"
-            strokeDasharray="5 5"
-          />
-        )}
-        <path d={areaPath} fill={color} opacity="0.12" />
-        <path d={linePath} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        {activePoint && (
-          <>
-            <line x1={activePoint.x} x2={activePoint.x} y1={padding} y2={height - padding} stroke="#bfdbfe" strokeDasharray="3 4" />
-            <circle cx={activePoint.x} cy={activePoint.y} r="4.5" fill={color} stroke="#fff" strokeWidth="2" />
-          </>
-        )}
-      </svg>
-      {activePoint && activeData && (
-        <div
-          className="pointer-events-none absolute top-4 rounded-lg border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-lg"
-          style={{ left: `${Math.min(78, Math.max(4, (activePoint.x / width) * 100))}%` }}
-        >
-          <p className="font-bold text-slate-900">{activeData.label}</p>
-          <p className="mt-1 text-blue-700">当前值 {activeData.value}</p>
-          {activeData.meta && Object.entries(activeData.meta).slice(0, 3).map(([key, value]) => (
-            <p key={key} className="mt-0.5">{key}: {value}</p>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -7270,12 +6462,6 @@ function pointsToPath(points: Array<{ x: number; y: number }>) {
   return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x},${point.y}`).join(" ");
 }
 
-function getThresholdY(series: TrendPoint[], height: number, padding: number, threshold: number) {
-  const domain = getValueDomain(series.map((point) => point.value), threshold);
-  const range = Math.max(1, domain.max - domain.min);
-  return height - padding - ((threshold - domain.min) / range) * (height - padding * 2);
-}
-
 function formatTrendLabel(timestamp: number, range: RankingRange) {
   const date = new Date(timestamp);
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -7413,132 +6599,6 @@ function mapAgentDailyAssetReports(items: DailyRiskReport["asset_reports"]): Dai
     actions: sanitizeAdvice(item.actions || []),
     sourceEventCount: item.source_event_count || 0,
   }));
-}
-
-function buildFallbackDailyRiskThemes(items: NewsRankingItem[], riskTypes: DailyRiskTypeStat[]): DailyRiskTheme[] {
-  const topType = riskTypes[0]?.name || "综合风险";
-  const maxScore = items.reduce((value, item) => Math.max(value, clampScore(item.risk_score)), 0);
-  if (!items.length) return [];
-  return [
-    {
-      themeId: "fallback-theme",
-      title: `${topType}聚合风险`,
-      riskType: topType,
-      affectedAssets: Array.from(new Set(items.flatMap((item) => item.coins || []))).slice(0, 5),
-      eventCount: items.length,
-      maxPersonalScore: maxScore,
-      riskLevel: maxScore >= 90 ? "红色预警" : maxScore >= 80 ? "高风险" : maxScore >= 40 ? "中风险" : "低风险",
-      summary: "当前展示本地规则聚合结果。Agent 日报可用后会进一步合并相关事件并生成个性化分析。",
-      evidenceSummary: items.map((item) => item.evidence || item.summary).filter(Boolean).slice(0, 3),
-      monitoringItems: ["官方公告", "交易所充提状态", "链上大额转账", "价格与成交量异常"],
-    },
-  ];
-}
-
-function mapAgentDailyNews(agentNews: DailyRiskReport["key_news"], fallbackNews: NewsRankingItem[]) {
-  const fallbackById = new Map(fallbackNews.map((item) => [String(item.news_id), item]));
-  return agentNews.map((item, index) => {
-    const fallback = fallbackById.get(String(item.news_id));
-    return {
-      rank: index + 1,
-      news_id: item.news_id,
-      title: item.title,
-      content: fallback?.content || item.summary || "",
-      date: fallback?.date || item.published_at.slice(0, 10),
-      risk_score: item.risk_score,
-      personal_score: item.personal_score,
-      risk_level: item.risk_level,
-      risk_type: item.risk_type,
-      published_at: item.published_at,
-      coins: item.coins || [],
-      matched_assets: item.matched_assets || [],
-      personal_relevance: item.personal_relevance,
-      matched_reason: item.matched_reason,
-      exposure_note: item.exposure_note,
-      coin_details: fallback?.coin_details || [],
-      summary: item.summary,
-      evidence: item.evidence,
-      source_url: fallback?.source_url,
-    };
-  });
-}
-
-function buildDailyRiskTypeStats(items: NewsRankingItem[]): DailyRiskTypeStat[] {
-  const stats = new Map<string, { count: number; highCount: number; maxScore: number }>();
-  items.forEach((item) => {
-    const name = normalizeRiskType(item.risk_type);
-    const current = stats.get(name) || { count: 0, highCount: 0, maxScore: 0 };
-    current.count += 1;
-    current.highCount += isHighRiskNews(item) ? 1 : 0;
-    current.maxScore = Math.max(current.maxScore, clampScore(item.risk_score));
-    stats.set(name, current);
-  });
-  const maxCount = Math.max(...Array.from(stats.values()).map((item) => item.count), 1);
-  return Array.from(stats.entries())
-    .map(([name, item]) => ({
-      name,
-      count: item.count,
-      highCount: item.highCount,
-      maxScore: item.maxScore,
-      weight: Math.max(8, Math.round((item.count / maxCount) * 100)),
-    }))
-    .sort((a, b) => b.maxScore - a.maxScore || b.count - a.count)
-    .slice(0, 5);
-}
-
-function buildDailyWatchCoins(newsItems: NewsRankingItem[], coinItems: CoinRankingItem[]): DailyWatchCoin[] {
-  if (coinItems.length) {
-    return coinItems.slice(0, 5).map((item) => ({
-      symbol: item.symbol,
-      name: item.name || item.symbol,
-      score: clampScore(item.final_score),
-      level: item.risk_level,
-      newsCount: item.news_count,
-      riskType: item.main_risk_type || "综合风险",
-    }));
-  }
-
-  const grouped = new Map<string, DailyWatchCoin>();
-  newsItems.forEach((item) => {
-    item.coins
-      .filter((coin) => coin && coin !== "--")
-      .forEach((symbol) => {
-        const current = grouped.get(symbol) || {
-          symbol,
-          name: symbol,
-          score: 0,
-          level: "低风险",
-          newsCount: 0,
-          riskType: normalizeRiskType(item.risk_type),
-        };
-        current.score = Math.max(current.score, clampScore(item.risk_score));
-        current.level = current.score >= 80 ? "高风险" : current.score >= 40 ? "中风险" : "低风险";
-        current.newsCount += 1;
-        current.riskType = normalizeRiskType(item.risk_type);
-        grouped.set(symbol, current);
-      });
-  });
-
-  return Array.from(grouped.values())
-    .sort((a, b) => b.score - a.score || b.newsCount - a.newsCount)
-    .slice(0, 5);
-}
-
-function buildDailyUserActions(alertLevel: string, redCount: number, highCount: number, watchCoins: DailyWatchCoin[]) {
-  const actions = [
-    "优先核验红色预警事件的官方公告、交易所状态页与链上地址证据。",
-    "对重点资产设置价格、提现、链上大额转账和社群舆情的连续监控。",
-    "避免依据单条未证实消息做方向性操作，等待多源证据交叉确认。",
-  ];
-  if (redCount > 0 || alertLevel.includes("红")) {
-    actions.unshift("短期内降低对红色预警相关资产的新增暴露，先确认资金可用性和平台提现状态。");
-  } else if (highCount > 0) {
-    actions.unshift("将高风险新闻加入观察清单，关注 24 小时内是否出现连续同类事件。");
-  }
-  if (watchCoins.length) {
-    actions.push(`重点复核 ${watchCoins.slice(0, 3).map((item) => item.symbol).join("、")} 的相关新闻和持仓暴露。`);
-  }
-  return sanitizeAdvice(actions);
 }
 
 function getDailyGeneratedAt(items: NewsRankingItem[], range: RankingRange) {
@@ -7751,50 +6811,6 @@ function newsTimeValue(item: NewsRankingItem) {
   const timeMatch = value.match(/(\d{1,2}):(\d{2})/);
   if (!timeMatch) return 0;
   return Number(timeMatch[1]) * 60 + Number(timeMatch[2]);
-}
-
-function shouldAttachAssistantPageContext(
-  question: string,
-  context: {
-    activeView: ActiveView;
-    latestReport: RiskReport | null;
-    topCoin: CoinRankingItem;
-    topNews: NewsRankingItem;
-  }
-) {
-  const normalized = question.toLowerCase();
-  const directPageTerms = [
-    "当前页面",
-    "这个页面",
-    "页面",
-    "这里",
-    "这个",
-    "这条",
-    "这篇",
-    "当前",
-    "上面",
-    "右侧",
-    "左侧",
-  ];
-  const pageDataTerms = [
-    "风险分",
-    "风险评分",
-    "排行榜",
-    "榜单",
-    "证据",
-    "报告",
-  ];
-  if (directPageTerms.some((term) => normalized.includes(term.toLowerCase()))) return true;
-
-  const symbols = [
-    context.topCoin.symbol,
-    context.topCoin.name,
-    ...(context.topNews.coins || []),
-  ]
-    .filter(Boolean)
-    .map((item) => String(item).toLowerCase());
-  const matchesCurrentAsset = symbols.some((symbol) => symbol && normalized.includes(symbol));
-  return matchesCurrentAsset && pageDataTerms.some((term) => normalized.includes(term.toLowerCase()));
 }
 
 function compactReportSummary(value: string) {
@@ -8065,7 +7081,6 @@ function SmileIcon() { return <IconSvg><circle cx="12" cy="12" r="9" /><path d="
 function TrendIcon() { return <IconSvg><path d="m4 16 5-5 4 4 7-8" /><path d="M14 7h6v6" /></IconSvg>; }
 function SendIcon() { return <IconSvg><path d="M22 2 11 13" /><path d="m22 2-7 20-4-9-9-4z" /></IconSvg>; }
 function BotIcon() { return <IconSvg><rect x="5" y="8" width="14" height="11" rx="4" /><path d="M12 4v4" /><path d="M9 13h.01" /><path d="M15 13h.01" /><path d="M10 17h4" /></IconSvg>; }
-function ThumbIcon({ down = false }: { down?: boolean }) { return <IconSvg><path d={down ? "M7 10v10H4V10z" : "M7 14V4H4v10z"} /><path d={down ? "M7 18h9l-1 4 5-6V7a2 2 0 0 0-2-2H9z" : "M7 6h9l-1-4 5 6v9a2 2 0 0 1-2 2H9z"} /></IconSvg>; }
 function UsersIcon() { return <IconSvg><path d="M16 21v-2a4 4 0 0 0-8 0v2" /><circle cx="12" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.8" /><path d="M16 3.1a4 4 0 0 1 0 7.8" /></IconSvg>; }
 function BulbIcon() { return <IconSvg><path d="M9 18h6" /><path d="M10 22h4" /><path d="M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 4H9c0-2 0-3-1-4Z" /></IconSvg>; }
 function PlusIcon() { return <IconSvg><path d="M12 5v14" /><path d="M5 12h14" /></IconSvg>; }

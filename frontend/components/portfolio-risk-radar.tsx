@@ -111,7 +111,6 @@ type PortfolioCoinCandidate = {
   score?: number;
   symbol: string;
 };
-type WatchlistSortMode = "risk" | "loss" | "value" | "volatility";
 
 type PortfolioRiskTone = {
   badge: string;
@@ -2214,23 +2213,23 @@ function RelatedNewsSection({
   selectedSymbol: string;
 }) {
   const [filter, setFilter] = useState<"all" | "high" | "holding" | "recent">("all");
+  const [recentCutoffMs] = useState(() => Date.now() - 86_400_000);
   const impactByEventId = useMemo(() => {
     const map = new Map<string, PortfolioImpactEvent>();
     impactAsset?.topEvents.forEach((event) => map.set(event.eventId, event));
     return map;
   }, [impactAsset]);
   const filteredItems = useMemo(() => {
-    const now = Date.now();
     return items.filter((item) => {
       if (filter === "high") return item.risk_score >= 70;
       if (filter === "holding") return item.matched_reason || item.title.includes(selectedSymbol.replace(/USDT$/, ""));
       if (filter === "recent") {
         const time = Date.parse(item.published_at || "");
-        return Number.isFinite(time) && now - time <= 86_400_000;
+        return Number.isFinite(time) && time >= recentCutoffMs;
       }
       return true;
     });
-  }, [filter, items, selectedSymbol]);
+  }, [filter, items, recentCutoffMs, selectedSymbol]);
   const sortedItems = useMemo(() => {
     return [...filteredItems].sort((a, b) => {
       const impactDelta = (impactByEventId.get(b.news_id)?.portfolioImpactScore || 0) - (impactByEventId.get(a.news_id)?.portfolioImpactScore || 0);
@@ -2505,16 +2504,6 @@ function ChartLayerButton({
   );
 }
 
-function PortfolioMetric({ helper, label, value }: { helper?: string; label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-blue-100 bg-white px-4 py-3">
-      <p className="text-xs font-bold text-slate-500">{label}</p>
-      <p className="mt-1 text-xl font-bold text-slate-950">{value}</p>
-      {helper ? <p className="mt-1 text-xs text-slate-400">{helper}</p> : null}
-    </div>
-  );
-}
-
 function TextBlock({ text, title }: { text: string; title: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
@@ -2560,17 +2549,6 @@ function CoinAvatar({ symbol }: { symbol: string }) {
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">
       {symbol.slice(0, 1)}
     </span>
-  );
-}
-
-function AssetSparkline({ item }: { item: PortfolioWatchlistItem }) {
-  const positive = item.price_change_24h >= 0;
-  const points = buildAssetSparklinePoints(item);
-  return (
-    <svg className="h-10 w-20 shrink-0" preserveAspectRatio="none" viewBox="0 0 80 40" aria-hidden="true">
-      <path d={points} fill="none" stroke={positive ? "#059669" : "#dc2626"} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-      <path d={`${points} L 80 40 L 0 40 Z`} fill={positive ? "#10b981" : "#ef4444"} opacity="0.08" />
-    </svg>
   );
 }
 
@@ -2641,17 +2619,6 @@ function buildChartDecisionText(
   const riskText = highEventCount ? `图中有 ${highEventCount} 个高影响风险事件` : "暂无密集高影响事件";
   const action = belowMa10 && highEventCount ? "建议降低仓位或等待企稳信号。" : "建议结合支撑位、止损线和新闻事件继续观察。";
   return `${symbol || "当前资产"} ${trendText}，${riskText}。${action}`;
-}
-
-function buildAssetSparklinePoints(item: PortfolioWatchlistItem) {
-  const direction = item.price_change_24h >= 0 ? -1 : 1;
-  const volatility = Math.min(14, Math.abs(item.price_change_24h) * 240);
-  return Array.from({ length: 7 }, (_, index) => {
-    const x = (index / 6) * 80;
-    const wave = Math.sin(index * 1.35 + item.risk_score / 20) * 4;
-    const y = 22 + direction * (index - 3) * (volatility / 6) + wave;
-    return `${index ? "L" : "M"} ${x.toFixed(1)} ${clampNumber(y, 8, 34).toFixed(1)}`;
-  }).join(" ");
 }
 
 function findNearestPortfolioCandleIndex(candles: PortfolioMarketCandle[], publishedAt: string, order: number, total: number) {
@@ -3093,4 +3060,3 @@ function IconSvg({ children }: { children: ReactNode }) {
 function PlusIcon() { return <IconSvg><path d="M12 5v14" /><path d="M5 12h14" /></IconSvg>; }
 function RefreshIcon() { return <IconSvg><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v6h-6" /></IconSvg>; }
 function RadarIcon() { return <IconSvg><circle cx="12" cy="12" r="9" /><path d="M12 7v5l4 2" /><path d="M12 12 6 9" /></IconSvg>; }
-function TrashIcon() { return <IconSvg><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /><path d="M10 11v5" /><path d="M14 11v5" /></IconSvg>; }

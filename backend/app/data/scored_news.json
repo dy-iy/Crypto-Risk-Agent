@@ -77191,7 +77191,7 @@
     "summary": "传统股票市场个股行情，无直接加密风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b370625918100b4a",
@@ -77207,7 +77207,7 @@
     "summary": "地缘政治紧张局势推升能源成本，加剧通胀与加息预期，对风险资产构成压力。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "43f62e44dee52cdc",
@@ -77223,7 +77223,7 @@
     "summary": "传统金融市场投资者变动，对加密货币市场影响极小。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ac2de5a32c1e3282",
@@ -77239,7 +77239,7 @@
     "summary": "常规投资消息，未发现直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5828d3790fa51ebd",
@@ -77255,7 +77255,7 @@
     "summary": "美联储10月加息预期大幅回升叠加地缘紧张，或引发加密市场剧烈波动。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a5777bb1cdf5ad5e",
@@ -77289,7 +77289,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "873c0c598c127f60",
@@ -77315,7 +77315,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "36d131c329cf43bb",
@@ -77331,7 +77331,7 @@
     "summary": "云计算服务股走强，对加密市场无影响",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "17a212211d714e5c",
@@ -77347,7 +77347,7 @@
     "summary": "巨鲸减少 HYPE 空头头寸，未实现亏损高达 1510 万美元，爆仓风险值得关注。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "db63dc30eb7f357a",
@@ -77363,7 +77363,7 @@
     "summary": "深度伪造技术被用于冒充公司高管实施金融诈骗，已有高额损失案例，对相关机构与资产构成严重欺诈风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "002d341c1eab09fd",
@@ -77379,7 +77379,7 @@
     "summary": "Binance调整Alpha积分计算规则，为常规运营变更，未发现明显风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e3fcc7ed9e4d3c09",
@@ -77395,7 +77395,7 @@
     "summary": "CFTC任命首席经济学家加强监管分析，对加密市场影响中性偏正面，无明显风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4baa79045f2b3358",
@@ -77430,7 +77430,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "818f8eeaa5829574",
@@ -77446,7 +77446,7 @@
     "summary": "英国通胀预期下降，宏观数据对加密市场短期冲击有限。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ac726462eb831155",
@@ -77462,7 +77462,7 @@
     "summary": "该新闻为传统科技公司业绩展望，对加密货币市场无风险影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "cc59f2325a6363b6",
@@ -77488,7 +77488,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6377a282f30aae08",
@@ -77504,7 +77504,7 @@
     "summary": "主要交易所期货市场出现大规模爆仓，1小时内爆仓1.13亿美元，短期波动风险显著",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ed6b36ff1d57bdac",
@@ -77520,7 +77520,7 @@
     "summary": "传统股票分析，无加密货币相关风险",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "85467e8ff3cbbe16",
@@ -77554,7 +77554,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ac42f9d5e757693a",
@@ -77580,7 +77580,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "070e41eed2e7eb75",
@@ -77606,7 +77606,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9bcc7324602b499f",
@@ -77640,7 +77640,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "adf6905cb0d583b8",
@@ -77666,7 +77666,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "79cd4e9bfd379447",
@@ -77682,7 +77682,7 @@
     "summary": "XDC Network 披露贸易融资基础设施开发计划，无风险迹象，评分低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1f1af4cf342c24a1",
@@ -77717,7 +77717,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ce579640c7cc42a5",
@@ -77733,7 +77733,7 @@
     "summary": "地缘政治紧张引发美元走强、油价飙升，可能对加密市场构成间接宏观情绪影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f856a5cc230e9b63",
@@ -77759,7 +77759,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3ad050464ed5c402",
@@ -77775,7 +77775,7 @@
     "summary": "欧洲央行加息预期被市场消化，或带来宏观不确定性。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4eec2d8c6dc89976",
@@ -77809,7 +77809,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ed3b8f030a4d0d5b",
@@ -77825,7 +77825,7 @@
     "summary": "原油价格上涨引发股市下跌，或传导致加密市场情绪。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "afe9f2ae123f6309",
@@ -77841,7 +77841,7 @@
     "summary": "加密市场独立低迷，与传统风险资产脱钩，存在走弱风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "14ec5b9b5ca5bf9c",
@@ -77867,7 +77867,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "16301979f6776154",
@@ -77883,7 +77883,7 @@
     "summary": "传统行业收购新闻，与加密货币市场无关",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6ed9f97972f624ce",
@@ -77909,7 +77909,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "8651a210859a6805",
@@ -77935,7 +77935,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e5c3a04f9672ee6e",
@@ -77951,7 +77951,7 @@
     "summary": "SOLAI 收购 AI 公司进行战略转型，未发现显著风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0659ded0ef0b4313",
@@ -77967,7 +77967,7 @@
     "summary": "伊朗恢复霍尔木兹海峡交通的积极表态缓解了地缘紧张，属于稳定市场的宏观信号。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "fcb2ce63ef1bf460",
@@ -77983,7 +77983,7 @@
     "summary": "Nebius市值上涨，无加密货币负面风险",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0c37897a52bba63f",
@@ -78009,7 +78009,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "47b8ee730d6ffcd6",
@@ -78025,7 +78025,7 @@
     "summary": "预测市场关注伊朗战争权力决议，市场预期不通过，直接风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "8c7f2ec1092e04ed",
@@ -78051,7 +78051,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9cd56c8000df021c",
@@ -78067,7 +78067,7 @@
     "summary": "美团外卖行业竞争情况，与加密货币无关，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3c9942cad801de6d",
@@ -78083,7 +78083,7 @@
     "summary": "传统股票市场看好AI公司，与加密货币市场无直接关联，风险几乎为零。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b8dea826bf16b3a4",
@@ -78109,7 +78109,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c0ea2a727592c448",
@@ -78125,7 +78125,7 @@
     "summary": "黄金市场行情与加密货币无关，无风险影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "65ec57fc2beadb93",
@@ -78141,7 +78141,7 @@
     "summary": "传统公司IPO，不影响加密市场。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "bbc7cf3294d426c1",
@@ -78157,7 +78157,7 @@
     "summary": "ARM股价因AI叙事盘前大涨，属于传统市场波动，加密市场无直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c48e4045946b698f",
@@ -78183,7 +78183,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1db53b11c0aaa39f",
@@ -78217,7 +78217,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4773aeba039bc1c9",
@@ -78233,7 +78233,7 @@
     "summary": "传统股票新闻，与加密货币完全无关，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0a09b34941b7d1e3",
@@ -78249,7 +78249,7 @@
     "summary": "金融科技公司Wise因大规模反洗钱调查面临重大法律与市场冲击",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "cfaad55e6e49d9ac",
@@ -78265,7 +78265,7 @@
     "summary": "OpenPayd纳斯达克上市属于传统金融事件，对加密货币市场无明显风险影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "55403e800f0986ca",
@@ -78281,7 +78281,7 @@
     "summary": "地缘政治僵局可能短期引发市场避险情绪，但对加密市场直接冲击有限。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6ac542dbe2ad8252",
@@ -78307,7 +78307,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "836482b816cd1328",
@@ -78341,7 +78341,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e7755a10c8810493",
@@ -78357,7 +78357,7 @@
     "summary": "华尔街警告科技股过热可能引发回调，或影响加密市场风险情绪",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3c9fcea663dd1a32",
@@ -78383,7 +78383,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6b719d535303cfe1",
@@ -78417,7 +78417,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "11b9ffc7f7d25ac1",
@@ -78443,7 +78443,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "caa8f0b1246efbe8",
@@ -78459,7 +78459,7 @@
     "summary": "IMF对巴西宏观经济建议，与加密市场无直接关联，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "71316e3ee9b7f8c0",
@@ -78475,7 +78475,7 @@
     "summary": "AI 公司融资新闻，与加密市场无直接关联，无风险迹象。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a4bc0d921afa20c5",
@@ -78491,7 +78491,7 @@
     "summary": "传统股票分析，无加密货币风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "062f1c1fd5a2c572",
@@ -78507,7 +78507,7 @@
     "summary": "机构投资配置建议偏向实物资产，未涉及加密货币风险事件，市场影响有限。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "fb520445abe984a6",
@@ -78523,7 +78523,7 @@
     "summary": "Nvidia与Unitree合作发布机器人平台，对加密市场无直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f30d2001e0f9c5c4",
@@ -78549,7 +78549,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7428c583518429eb",
@@ -78565,7 +78565,7 @@
     "summary": "霍尔木兹海峡通航正常概率骤降，地缘冲突升级可能引发全球市场避险情绪，加剧宏观冲击风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "2031a5d86bec8028",
@@ -78581,7 +78581,7 @@
     "summary": "预测市场胜率波动，非加密资产直接风险",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "377da796c9a09b43",
@@ -78597,7 +78597,7 @@
     "summary": "SpaceX IPO 内部安排，与加密市场无直接关联，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c32ba5de5f80a00e",
@@ -78613,7 +78613,7 @@
     "summary": "传统股票目标价上调，与加密市场无关，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0f022a2812086c8a",
@@ -78629,7 +78629,7 @@
     "summary": "Bitwise 机构大额买入并质押 HYPE，可能引发巨鲸行为关注。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9240a57166d1f84c",
@@ -78655,7 +78655,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b4996c47a55f0ff0",
@@ -78671,7 +78671,7 @@
     "summary": "停火协议适用范围扩大，地缘风险缓和，有利于市场稳定。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a4fc0e34f9e17e7e",
@@ -78697,7 +78697,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e4b3fa5537994383",
@@ -78713,7 +78713,7 @@
     "summary": "乐观的市场趋势预测，未发现风险事件",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a522588e2d58d360",
@@ -78729,7 +78729,7 @@
     "summary": "巴西通胀预期微调，对加密货币市场无直接影响，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "41570bc2e912a432",
@@ -78745,7 +78745,7 @@
     "summary": "高管因未支付加密赎金遇害，凸显数字资产持有者面临暴力犯罪风险上升。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "46d67fa23f431f93",
@@ -78761,7 +78761,7 @@
     "summary": "美股软件股上涨，对加密货币市场无实质风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b87d734686c2d178",
@@ -78777,7 +78777,7 @@
     "summary": "哈萨克斯坦央行进行外汇出售以对冲黄金购买，对加密货币市场无直接影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d0543feaa49b29ac",
@@ -78793,7 +78793,7 @@
     "summary": "巴西GDP超预期可能间接影响宏观情绪，但当前无直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "33251fbbadd5e0d3",
@@ -78809,7 +78809,7 @@
     "summary": "香港虚拟资产监管制度持续完善，强制发牌或提高合规门槛。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a21347da8af4424a",
@@ -78825,7 +78825,7 @@
     "summary": "Strategy维持优先股股息，与加密货币市场无关，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7c5c4c5a0b338eb5",
@@ -78851,7 +78851,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1011c8fc5040fca1",
@@ -78867,7 +78867,7 @@
     "summary": "AI漏洞发现工具引入可能间接增加加密协议被探测的风险，但当前新闻未显示直接威胁。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7214bf5d9c133ca0",
@@ -78893,7 +78893,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9fe17b582623b194",
@@ -78909,7 +78909,7 @@
     "summary": "Polymarket 单一事件市场胜率剧烈波动，对整体加密市场影响极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5c3858f3849b4fc9",
@@ -78935,7 +78935,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "605dac50c81c5c13",
@@ -78969,7 +78969,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4f0f260bad96013c",
@@ -78995,7 +78995,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "44638d6e0bfc58e3",
@@ -79029,7 +79029,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1b00b129d3860cb8",
@@ -79045,7 +79045,7 @@
     "summary": "该新闻为产品介绍，未发现对加密货币金融市场的风险事件。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f698dbea1eef2a6e",
@@ -79079,7 +79079,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "afc180a08c7eb75a",
@@ -79105,7 +79105,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "95b3fba72ea382ea",
@@ -79121,7 +79121,7 @@
     "summary": "智能资金大额买入Polymarket股份，属常规市场行为，无明显风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1d233bb1b0e625a9",
@@ -79147,7 +79147,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c15a506d774b3c2f",
@@ -79163,7 +79163,7 @@
     "summary": "传统股票巨鲸开仓行为，与加密市场无关，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "562e3ead0e2d5200",
@@ -79179,7 +79179,7 @@
     "summary": "霍尔木兹海峡局势紧张可能引发地缘政治危机，冲击全球金融市场并波及加密市场。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5fff6f9fbe85178d",
@@ -79205,7 +79205,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d1cc5866012db5db",
@@ -79231,7 +79231,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5119ae8556bb2c5f",
@@ -79247,7 +79247,7 @@
     "summary": "该新闻为体育赛事押注，不涉及加密货币风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b068af470553cc67",
@@ -79281,7 +79281,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "86d0f89cd5db3803",
@@ -79307,7 +79307,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d526f6b14dbcbb11",
@@ -79323,7 +79323,7 @@
     "summary": "股市乐观预期未直接涉及加密市场风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6868c3f3c6c299ad",
@@ -79389,7 +79389,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0d90b1769a5711fe",
@@ -79405,7 +79405,7 @@
     "summary": "非加密货币相关新闻，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "005b55429d8ee1f1",
@@ -79421,7 +79421,7 @@
     "summary": "Gnosis Pay 因延迟模块漏洞被黑客攻击，用户资金面临风险，项目方紧急建议提款。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "86a3082cd2876a6f",
@@ -79447,7 +79447,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "106d346e150e9645",
@@ -79463,7 +79463,7 @@
     "summary": "巴基斯坦通胀高企及潜在货币政策收紧可能传导全球宏观风险情绪，间接影响加密货币市场。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "017116fe708e0b0b",
@@ -79479,7 +79479,7 @@
     "summary": "新韩金融集团讨论韩元稳定币项目，需关注韩国监管政策动向。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ba13ef76f88c9a6d",
@@ -79495,7 +79495,7 @@
     "summary": "传统科技股股价波动，与加密货币市场无直接关联，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "18c873f6f87e749d",
@@ -79511,7 +79511,7 @@
     "summary": "HYPE、LAB和Humanity价格创新高，无直接风险事件",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "98b386d5a39e0e12",
@@ -79527,7 +79527,7 @@
     "summary": "日本政策利好推动稳定币及ETF，无直接风险信号。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "83daae55a3d4f669",
@@ -79543,7 +79543,7 @@
     "summary": "花旗预测稳定币驱动大量链上美债需求，整体风险较低，但长期可能带来宏观影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "387d063328e36451",
@@ -79559,7 +79559,7 @@
     "summary": "币安广场推出常规创作者激励活动，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c4063a3bf0962726",
@@ -79585,7 +79585,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "8864687b59364abb",
@@ -79601,7 +79601,7 @@
     "summary": "宏观数据短期走强但隐含供需紧张与政治不确定性，对加密市场情绪产生间接扰动。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "eea12043046672ab",
@@ -79617,7 +79617,7 @@
     "summary": "美股上涨对加密市场情绪可能有间接影响，但新闻本身不构成直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0dcc87476c335239",
@@ -79633,7 +79633,7 @@
     "summary": "LAB价格大幅上涨，但未出现直接风险事件。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0fad24230fe9e4c4",
@@ -79659,7 +79659,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1f2e48260f0978be",
@@ -79685,7 +79685,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d983560f00df0755",
@@ -79701,7 +79701,7 @@
     "summary": "传统软件股上涨，对加密货币市场无直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "cde1b47430912b7d",
@@ -79717,7 +79717,7 @@
     "summary": "新产品发布，无明确风险，评为低风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "cdffab6b16f39ed7",
@@ -79733,7 +79733,7 @@
     "summary": "无风险，该新闻为一般行业访谈。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6b183e97cc0c81a0",
@@ -79759,7 +79759,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ddc603c013b14ea5",
@@ -79775,7 +79775,7 @@
     "summary": "美股科技股上涨，对加密市场无明显风险",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ed26c3bc8c23ac08",
@@ -79801,7 +79801,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "67edd786db33fa1a",
@@ -79817,7 +79817,7 @@
     "summary": "Virtuals 发布 EconomyOS 属于正常项目发展动态，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "16478497626506e1",
@@ -79833,7 +79833,7 @@
     "summary": "恐慌指数低迷，市场情绪恐慌，可能引发潜在行情波动。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c8063dd08bbb429a",
@@ -79849,7 +79849,7 @@
     "summary": "德国制造业订单下滑引发宏观经济担忧，或传导至风险资产市场情绪。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e30613030fa9a8b0",
@@ -79865,7 +79865,7 @@
     "summary": "美伊地缘冲突升级，美国空袭被指违反停火协议，可能引发宏观市场动荡。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3429bdd6e68feba6",
@@ -79881,7 +79881,7 @@
     "summary": "德国制造业PMI超预期，宏观数据正面但冲击小。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5452dc30dcaed3b1",
@@ -79907,7 +79907,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b2e1c299dfa783bc",
@@ -79923,7 +79923,7 @@
     "summary": "法国经济增长乏力、供应链压力上升，但未直接涉及加密货币市场，对加密资产构成间接低风险宏观影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "97ad6220b3a0f226",
@@ -79949,7 +79949,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ebe9f3339704c3d3",
@@ -79965,7 +79965,7 @@
     "summary": "BSC 链上 AROS 项目遭攻击，损失约 29.5 万美元，属于链上安全事件。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4a41e37b111fb6fd",
@@ -79981,7 +79981,7 @@
     "summary": "瑞士宏观数据超预期，对加密市场直接影响微弱，属低风险事件。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0eaa7695772cead0",
@@ -80007,7 +80007,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ef50c0a2e8fe2efc",
@@ -80033,7 +80033,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "68c2d569e534188b",
@@ -80059,7 +80059,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "03e425bae9c9859d",
@@ -80075,7 +80075,7 @@
     "summary": "2023 年加密黑客损失高达 170 亿美元，超六成源于社会工程攻击，行业安全形势严峻。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "66b1c9044097b911",
@@ -80091,7 +80091,7 @@
     "summary": "传统银行内部盗窃案，与加密货币市场无关。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "72bf056206298444",
@@ -80107,7 +80107,7 @@
     "summary": "该新闻为成交量报告，无风险因素。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f798d416e04bf920",
@@ -80123,7 +80123,7 @@
     "summary": "市场前景积极预测，未发现直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "dbf207bed724d0f2",
@@ -80139,7 +80139,7 @@
     "summary": "HYPE 代币快速拉升至历史新高，存在异常行情波动及回调风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "13e99eaa9405f696",
@@ -80155,7 +80155,7 @@
     "summary": "美伊冲突及伊朗协议受阻可能引发地缘政治风险，冲击全球金融市场。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "18f8348ac0626ccc",
@@ -80181,7 +80181,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "34cb357c318d8148",
@@ -80207,7 +80207,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f00cc0bc0b4f0cdb",
@@ -80241,7 +80241,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1f85819171a834b8",
@@ -80257,7 +80257,7 @@
     "summary": "加密人物之间的个人对赌协议，未涉及实质性的项目安全、资金或市场异常，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a7c9c5a808e032dc",
@@ -80273,7 +80273,7 @@
     "summary": "英国房价下跌反映宏观政策收紧，但对加密市场无直接冲击。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "634fbd691b7a7d2a",
@@ -80299,7 +80299,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "02b742c8925c2417",
@@ -80315,7 +80315,7 @@
     "summary": "Ontology钱包升级为AI数据基础设施，属常规产品迭代，无明确风险信号。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7b665805a7cd507b",
@@ -80331,7 +80331,7 @@
     "summary": "Base主网提现延迟问题已修复，当前无持续风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b14b3c6574721a37",
@@ -80357,7 +80357,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0e291884479d59c6",
@@ -80373,7 +80373,7 @@
     "summary": "跨链桥攻击导致千万级损失，平台安全风险仍在。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "8f93d8963181b25f",
@@ -80399,7 +80399,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "dbbb12b2070acaf7",
@@ -80415,7 +80415,7 @@
     "summary": "NVIDIA发布机器人硬件，与加密货币无关，无直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "bc9ffe7f871f82b9",
@@ -80431,7 +80431,7 @@
     "summary": "英国房价指数下降，对加密货币市场无明显风险传导。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1314694179b6e398",
@@ -80447,7 +80447,7 @@
     "summary": "Tria 公布积极的业务里程碑和功能规划，未发现直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f7923bacbc2e9a81",
@@ -80463,7 +80463,7 @@
     "summary": "天涯社区重启发行数字徽章，可能构成变相融资，存在诈骗或项目失败风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d6b10d808a0a6b10",
@@ -80479,7 +80479,7 @@
     "summary": "科技硬件新闻，与加密货币无关",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e832174b1171c19a",
@@ -80495,7 +80495,7 @@
     "summary": "该言论与加密市场风险无关，无直接冲击",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "404238b0e9494b54",
@@ -80511,7 +80511,7 @@
     "summary": "特朗普关于伊朗想达成协议的表态属于宏观政治动向，对加密市场无直接重大风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "34c7c6a9084244f0",
@@ -80537,7 +80537,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7427b00d1deb0398",
@@ -80553,7 +80553,7 @@
     "summary": "加密KOL账号被盗用于发送钓鱼链接，导致多名KOL资金损失。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a33cc661a626930a",
@@ -80587,7 +80587,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7cdd923266ac80a4",
@@ -80603,7 +80603,7 @@
     "summary": "传统股票负面新闻，对加密货币市场无直接影响",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "06c956188185cde2",
@@ -80629,7 +80629,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3a34f570e97a6619",
@@ -80655,7 +80655,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "2bf20c64d4cd47a5",
@@ -80671,7 +80671,7 @@
     "summary": "英伟达CPU发布，与加密货币市场无直接关联，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "db2c8d0126339423",
@@ -80687,7 +80687,7 @@
     "summary": "该新闻为 AI 产业常规技术采用动态，无直接加密货币风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "386887d1340fa7d7",
@@ -80703,7 +80703,7 @@
     "summary": "宏观商品市场新闻，对加密市场影响极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b9a36cf06e7a3c4f",
@@ -80729,7 +80729,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b73bddb1c01b179a",
@@ -80745,7 +80745,7 @@
     "summary": "币安Alpha推出SLX交易竞赛，系正常营销，风险低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "bb0e36fd36133030",
@@ -80779,7 +80779,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5f90e51a5241addf",
@@ -80795,7 +80795,7 @@
     "summary": "伊朗打击美军基地，地缘冲突升级，或引发加密货币市场恐慌性抛售。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b857ef9c91730d9f",
@@ -80821,7 +80821,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a4c2a1140aac0a5c",
@@ -80847,7 +80847,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "77db7d54d03ee02b",
@@ -80863,7 +80863,7 @@
     "summary": "StandX发布新上市框架，属常规产品更新，无直接风险信号。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ef86016d0dbedc99",
@@ -80879,7 +80879,7 @@
     "summary": "美伊军事冲突新闻未直接涉及加密货币，但存在宏观不确定性影响情绪的可能。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "239f60d3a774237c",
@@ -80905,7 +80905,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "eca7bebdc61a95cb",
@@ -80921,7 +80921,7 @@
     "summary": "Stable 将解锁约 8.89 亿枚代币，可能引发短期抛售和行情波动风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f1069d03c558ee33",
@@ -80937,7 +80937,7 @@
     "summary": "传统科技公司产品发布，与加密货币无直接关联，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f64a19480c51c2b9",
@@ -80963,7 +80963,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ba6db93fba0560c3",
@@ -80989,7 +80989,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3b6be327e29ce9a4",
@@ -81023,7 +81023,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c2e97eb9846e3ee7",
@@ -81049,7 +81049,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "895b70d1b3e265c9",
@@ -81075,7 +81075,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "89fafb7337d037f5",
@@ -81091,7 +81091,7 @@
     "summary": "传统半导体行业新闻，对加密货币市场无直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "bd2d72df56b97c52",
@@ -81117,7 +81117,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7bb62dd2903fe39d",
@@ -81133,7 +81133,7 @@
     "summary": "Tempo 原生多签账户提案属协议升级，当前未发现直接风险，但需关注后续实施。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "996a08c2bd4ec512",
@@ -81149,7 +81149,7 @@
     "summary": "Polymarket 用户遭受钓鱼攻击损失超 200 万美元，平台紧急协同冻结并加强账户安全。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e15a5d341282c46c",
@@ -81165,7 +81165,7 @@
     "summary": "DeFi与CeFi板块小幅涨跌分化，整体风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3febb31b785952b2",
@@ -81181,7 +81181,7 @@
     "summary": "软银超越丰田市值，AI趋势利好日本股市，对加密货币无直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "48dba5845f324fde",
@@ -81207,7 +81207,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3ecbab3eb8474e18",
@@ -81223,7 +81223,7 @@
     "summary": "黄金饰品价格小幅上涨，对加密货币市场无影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c03fa77bc83afab3",
@@ -81239,7 +81239,7 @@
     "summary": "A股存储芯片概念活跃，与加密货币无关，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c05f0d2b63a47141",
@@ -81255,7 +81255,7 @@
     "summary": "高盛分析油价双向风险，未涉及加密资产，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "29309e24a2990eb7",
@@ -81271,7 +81271,7 @@
     "summary": "中国境外投资与技术出口新规加剧宏观监管不确定性，可能影响依赖中国技术、数据或团队的加密项目。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a3309d6631abb03c",
@@ -81287,7 +81287,7 @@
     "summary": "交易者Loracle的5倍空头头寸遭受2258万美元巨额浮动亏损，面临爆仓风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "159d5830aa7b743e",
@@ -81313,7 +81313,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "38e4592ab814a259",
@@ -81347,7 +81347,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a8f1b4a030ff83a1",
@@ -81363,7 +81363,7 @@
     "summary": "Fluid协议发现链下奖励分发漏洞并已控制，无用户资金风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "88357bc2412ab1f4",
@@ -81379,7 +81379,7 @@
     "summary": "中东停火提议缓解地缘紧张，短期对风险资产偏正面。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c5a51bfd23887ed1",
@@ -81413,7 +81413,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5ace150fee550e3a",
@@ -81439,7 +81439,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9068e2ef3adf7bbb",
@@ -81465,7 +81465,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7a91c37b6af0fc45",
@@ -81481,7 +81481,7 @@
     "summary": "宏观经济评论，不包含对加密货币市场的直接风险因素。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4ca347171b844cb5",
@@ -81515,7 +81515,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9b873225c856ac38",
@@ -81531,7 +81531,7 @@
     "summary": "俄罗斯加密账户预期增长至百万，反映当地监管明朗化与采用加速。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "105b8c2b4a88d68a",
@@ -81557,7 +81557,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "edbe90c334fc862e",
@@ -81583,7 +81583,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "657c64fdeccf045f",
@@ -81599,7 +81599,7 @@
     "summary": "港股汽车股上涨，与加密市场无关，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9bc63ea7b537d0f1",
@@ -81615,7 +81615,7 @@
     "summary": "Hyperliquid ETF上线短期买盘或不及预期，导致价格波动风险，但中长期仍利好。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f13701d3690c7d55",
@@ -81641,7 +81641,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "17cc5fe6acc4062b",
@@ -81667,7 +81667,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "adbf92933fa5da74",
@@ -81683,7 +81683,7 @@
     "summary": "印度加息预期引发的宏观冲击对加密货币仅有间接潜在影响，风险较低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0fdf2d3d86890760",
@@ -81709,7 +81709,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e9ce52421098a523",
@@ -81725,7 +81725,7 @@
     "summary": "传统港股市场日常波动，与加密资产无直接关联，风险影响极小。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "eda9f517d666e9fe",
@@ -81741,7 +81741,7 @@
     "summary": "特朗普呼吁核查诺克斯堡黄金储备，引发对美国官方黄金储备透明度的担忧，但对加密市场直接冲击有限。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "63dd489abbd3f07c",
@@ -81757,7 +81757,7 @@
     "summary": "美联储鸽派减弱、鹰派占优，或加剧加密市场宏观政策风险",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "21e0b4d2c1eeb1ef",
@@ -81783,7 +81783,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "378b10853bd9c1fa",
@@ -81809,7 +81809,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "359d1fc22ad465e8",
@@ -81825,7 +81825,7 @@
     "summary": "稳定币或被数字存款取代的预测带来市场不确定性",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d1d2f3346af64dab",
@@ -81841,7 +81841,7 @@
     "summary": "韩国散户高杠杆追涨股市，若股市大幅下跌可能引发流动性危机并对加密资产产生负面外溢效应。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a3b01f617ade1b63",
@@ -81867,7 +81867,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "78236662d5fac9a3",
@@ -81883,7 +81883,7 @@
     "summary": "市场情绪指标显示恐惧，无直接风险事件",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4e60bb75a2201bb1",
@@ -81899,7 +81899,7 @@
     "summary": "美联储与欧洲央行官员密集讲话及多项重要数据公布，或短期影响市场情绪，但属常规宏观事件，风险较低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c97d93372914edf2",
@@ -81915,7 +81915,7 @@
     "summary": "HYPE代币即将解锁超6.8亿美元，约占流通量2.54%，面临较强抛压风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1dd926ffc8e3d7a6",
@@ -81941,7 +81941,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "67712e697c94e878",
@@ -81967,7 +81967,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9e51cb69c1b0b2bc",
@@ -81993,7 +81993,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5e7a5ca9869257eb",
@@ -82009,7 +82009,7 @@
     "summary": "伊朗总统辞职传闻被否认，市场未受实质影响。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "825e971ccadcddc4",
@@ -82025,7 +82025,7 @@
     "summary": "传统股指创新高，对加密市场无明显风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "dd6ae0a732b440dc",
@@ -82051,7 +82051,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "dc685ec0c701aba3",
@@ -82067,7 +82067,7 @@
     "summary": "韩国出口数据强劲增强央行鹰派预期，可能对加密货币市场情绪产生轻微压力。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6dfa36e47389632b",
@@ -82083,7 +82083,7 @@
     "summary": "欧央行官员警告稳定币多重风险，并可能推动数字欧元替代方案，增加稳定币市场政策不确定性。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "bf4650e7242a1de8",
@@ -82099,7 +82099,7 @@
     "summary": "传统行业研究报告，未涉及加密货币领域，无相关风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "73abe036a6fe04f5",
@@ -82115,7 +82115,7 @@
     "summary": "巨鲸空头减仓且浮亏严重，解除质押的大量现货存在卖出风险，可能对市场造成冲击。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f1fa305a0623e3e9",
@@ -82131,7 +82131,7 @@
     "summary": "该新闻为政治外交事件，与加密货币领域无关，未发现市场风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "787bfa1762e285ff",
@@ -82157,7 +82157,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c50dc00bd15a5916",
@@ -82173,7 +82173,7 @@
     "summary": "韩国贸易数据超预期，宏观情绪轻微改善，但无直接加密市场风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "56ac75c0a8fca4a3",
@@ -82189,7 +82189,7 @@
     "summary": "大规模安卓木马攻击金融与加密应用，窃取用户凭据和支付信息，构成严重诈骗风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "536fb744dee3fe62",
@@ -82205,7 +82205,7 @@
     "summary": "美国AI芯片出口限制政策主要影响传统科技股，未涉及加密货币领域，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5f11a5df515bea86",
@@ -82231,7 +82231,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "fa21e3dbb89b7ce1",
@@ -82257,7 +82257,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "96e4e7b3160c20af",
@@ -82273,7 +82273,7 @@
     "summary": "美国代币化立法进程推进带来长期监管框架明朗化，短期不确定性有限，风险较低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d2e7ac6b12829a32",
@@ -82289,7 +82289,7 @@
     "summary": "美联储短期利率维持不变概率极高，宏观政策不确定性较低，对加密市场影响有限。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "84266d34c5826ef4",
@@ -82315,7 +82315,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6bc9f7bef6bd4c00",
@@ -82341,7 +82341,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "589684f7aded0583",
@@ -82367,7 +82367,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "33755cb8b9d28796",
@@ -82383,7 +82383,7 @@
     "summary": "传统企业采购新闻，无加密货币风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "708fb39869abca25",
@@ -82409,7 +82409,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "2eee61a0f85b5499",
@@ -82425,7 +82425,7 @@
     "summary": "该新闻与加密货币行业完全无关，无风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d694608660f598ac",
@@ -82441,7 +82441,7 @@
     "summary": "X平台澄清链接传言，无加密风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6825edd8bf87d5ec",
@@ -82457,7 +82457,7 @@
     "summary": "美伊协议修改传闻可能带来短期宏观不确定性，但对加密市场直接影响极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ad3d7b02b6def43d",
@@ -82473,7 +82473,7 @@
     "summary": "特朗普呼吁检查Fort Knox金库可能引发市场不确定性，但未直接涉及加密货币。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "68cc7c8dc5a28404",
@@ -82489,7 +82489,7 @@
     "summary": "加密公司大规模政治献金可能影响未来监管走向，属于潜在政策风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d77862d42b3c38b5",
@@ -82515,7 +82515,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "780ff9fa9da1544a",
@@ -82541,7 +82541,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1c490e5b3e8747f2",
@@ -82567,7 +82567,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "95a9dd4160d89ec1",
@@ -82593,7 +82593,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "5085ed358cd1399e",
@@ -82609,7 +82609,7 @@
     "summary": "英美政策制定者对稳定币前景存在分歧，或引发监管不确定性。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "be26b2233b777684",
@@ -82635,7 +82635,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a321a00247a5bd39",
@@ -82661,7 +82661,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d5b817e8ea87664c",
@@ -82677,7 +82677,7 @@
     "summary": "Meme币短时间内暴力拉升，市值创新高但流动性不足，存在异常波动风险",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1d8b1e0f87ce2154",
@@ -82703,7 +82703,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "18dbde5fdc20665f",
@@ -82719,7 +82719,7 @@
     "summary": "美国博彩协会与预测市场联盟就预测市场损失产生争议，暂无直接加密货币风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9b10f8ff6648430a",
@@ -82735,7 +82735,7 @@
     "summary": "谷歌工程师因内幕交易被美司法部指控，对 Polymarket 等预测市场构成监管与法律风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f6838f5845816365",
@@ -82769,7 +82769,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7e00cb9ea2bbc0a7",
@@ -82785,7 +82785,7 @@
     "summary": "宏观言论无直接加密风险",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "84fa24e1fec9469e",
@@ -82801,7 +82801,7 @@
     "summary": "该条新闻为人工智能公司招聘信息，与加密货币行业无直接关联，无加密市场风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7b09af5264f828da",
@@ -82835,7 +82835,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7b4ecd3c12fabf35",
@@ -82851,7 +82851,7 @@
     "summary": "欧洲央行官员鹰派言论强化近期加息预期，可能收紧流动性并引发加密货币市场短期抛压。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "84b8400fe2a10836",
@@ -82885,7 +82885,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ab965f1ff6d58f26",
@@ -82911,7 +82911,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7433c0091286da41",
@@ -82945,7 +82945,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "25a5eacead414115",
@@ -82971,7 +82971,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7973bbc941f656ae",
@@ -82997,7 +82997,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b98fd7f3a7e24437",
@@ -83013,7 +83013,7 @@
     "summary": "SoftBank AI数据中心投资，无直接加密货币风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "2d3255b1a64cc094",
@@ -83039,7 +83039,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7881064e37a06ad2",
@@ -83055,7 +83055,7 @@
     "summary": "软银在法国的AI基础设施投资与加密货币市场无直接关联，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4f8c0a10b6534ebc",
@@ -83081,7 +83081,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "83283ff834466369",
@@ -83097,7 +83097,7 @@
     "summary": "伊朗与美国谅解备忘录谈判持续，不确定性可能引发市场短期波动。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "bce5b1ac0c665689",
@@ -83113,7 +83113,7 @@
     "summary": "AIVIVE项目完成正常融资，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1bfe762b79c49d96",
@@ -83129,7 +83129,7 @@
     "summary": "传统企业IPO动态，无加密风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "6d93d514db78a834",
@@ -83163,7 +83163,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "3cc49ec2c72967bc",
@@ -83179,7 +83179,7 @@
     "summary": "阿根廷执法行动揭露大规模加密投资诈骗，查获5000万美元资产，凸显市场诈骗风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "e404720dfd15fb35",
@@ -83205,7 +83205,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4b285a747b137134",
@@ -83255,7 +83255,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "f933c75cd897590c",
@@ -83281,7 +83281,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "47baae6c4cec7fc7",
@@ -83297,7 +83297,7 @@
     "summary": "券商研报分析股市投资方向，无加密货币风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "297b5a9c340c87c0",
@@ -83313,7 +83313,7 @@
     "summary": "乌克兰袭击俄罗斯石油设施加剧地缘紧张，可能冲击全球市场引发加密资产剧烈波动。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "633aca71c0720315",
@@ -83339,7 +83339,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "df72f897bb822ef6",
@@ -83365,7 +83365,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "58441ea854d4c1ff",
@@ -83381,7 +83381,7 @@
     "summary": "伊朗政治表态未直接冲击加密市场，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "8239989dc5ca1520",
@@ -83397,7 +83397,7 @@
     "summary": "传统A股行情分析，不涉及加密货币市场风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "0225443dc0b1ec26",
@@ -83413,7 +83413,7 @@
     "summary": "AI交易代理可能改善散户亏损的结构性问题，对市场无直接负面冲击。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9ab321d253422dd2",
@@ -83439,7 +83439,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a18e99a5cfe5b564",
@@ -83465,7 +83465,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "9b0f59f92c45cbe8",
@@ -83491,7 +83491,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "16a82c4d7b27da77",
@@ -83507,7 +83507,7 @@
     "summary": "Phantom 钱包在 Hyperliquid 上创收表现良好，未识别出风险信号。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "af2b206793b99dd1",
@@ -83523,7 +83523,7 @@
     "summary": "传统航空业运营调整，对加密市场无直接影响",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "cb0137398acf16c0",
@@ -83557,7 +83557,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4faa0b51844377ae",
@@ -83573,7 +83573,7 @@
     "summary": "香港资管业务增长正面报道，对加密市场无直接风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "07814b9a2580913e",
@@ -83615,7 +83615,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "d60ae32a5cad314e",
@@ -83631,7 +83631,7 @@
     "summary": "市场恐慌情绪持续，或致短期行情波动。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "84e6400ec8542a57",
@@ -83657,7 +83657,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "03d7932830efc43b",
@@ -83673,7 +83673,7 @@
     "summary": "公司转型建议与加密市场无直接关联，风险极低。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "ccbdcecbe6210fb7",
@@ -83689,7 +83689,7 @@
     "summary": "风华高科股价异常波动并澄清市场传闻，与加密货币无直接关联。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "a3e670e13f0acf70",
@@ -83705,7 +83705,7 @@
     "summary": "香港证监会披露虚拟资产交易监管进展，属正常行业动态，无直接市场风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "c961d7aa1afd4136",
@@ -83731,7 +83731,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "48a6233835e6f40d",
@@ -83747,7 +83747,7 @@
     "summary": "Polymarket 开放永续合约测试，未发现实质风险，仅属正常产品迭代。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1eb10e8df2a75c90",
@@ -83763,7 +83763,7 @@
     "summary": "谷歌工程师利用内部数据在 Polymarket 预测市场欺诈获利 120 万美元，暴露预测市场公平性与内幕交易风险。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "995f8812264a098a",
@@ -83789,7 +83789,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b44c4551073d03c2",
@@ -83805,7 +83805,7 @@
     "summary": "中东地缘冲突升级预期可能冲击加密市场情绪。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "b60ef1f96c1f8215",
@@ -83831,7 +83831,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "2581e2d79cd4853f",
@@ -83847,7 +83847,7 @@
     "summary": "中东地缘冲突升级，可能对全球风险资产造成短线冲击。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "06c2087fbb143b31",
@@ -83873,7 +83873,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "4d44f4cf49b8f54b",
@@ -83899,7 +83899,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "1944d2c12a2fbd53",
@@ -83925,7 +83925,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "fe872b6527f21d89",
@@ -83941,7 +83941,7 @@
     "summary": "越南监管政策利好，允许数字资产抵押贷款。",
     "coins": [],
     "coin_details": [],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "817046e2d420a693",
@@ -83975,7 +83975,7 @@
         ]
       }
     ],
-    "llm_source": "llm"
+    "llm_source": "scored_dataset"
   },
   {
     "news_id": "7b26e61ec8f2d1d9",
@@ -84001,6 +84001,3119 @@
         ]
       }
     ],
+    "llm_source": "scored_dataset"
+  },
+  {
+    "news_id": "6ba14620fa796619",
+    "csv_order": 1,
+    "title": "IRA Financial 推出新加密平台",
+    "content": "IRA Financial 推出重建的加密平台，允许退休账户投资者实时交易近100种代币。据 NS3 报道，该托管公司管理着超过27000个账户，总资产超过70亿美元。该平台还支持股票、房地产、黄金和私募股权的投资。投资公司协会数据显示，美国退休系统总规模为49.1万亿美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 13:08:15",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "交易所与系统运维风险",
+    "evidence": "新闻仅提及 IRA Financial 推出重建的加密平台，支持近 100 种代币实时交易，未提及任何安全事件或负面信息，风险主要来自新平台上线可能存在的运维不确定性。",
+    "summary": "IRA Financial 推出新加密平台，整体风险极低，仅存在平台运维的常规不确定性。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "447bd0ea52731c1a",
+    "csv_order": 2,
+    "title": "香港拟统一加密货币监管框架",
+    "content": "香港计划建立统一的加密货币交易、托管、投资咨询和资产管理服务的监管框架。据 NS3 报道，拟议规则要求在香港提供这些服务的机构需获得香港证券及期货事务监察委员会的牌照或注册。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 13:05:38",
+    "risk_score": 25,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "香港计划建立统一的加密货币监管框架，要求相关机构须获得牌照或注册，这属于常规监管动态，暂无直接负面市场影响。",
+    "summary": "香港拟统一加密监管框架，目前为中性政策信号，短期风险较低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "d646631c2a34ee2f",
+    "csv_order": 3,
+    "title": "日本自民党建议纳入区块链战略",
+    "content": "日本执政党自民党下属的区块链推广议会联盟敦促政府将区块链和Web3纳入国家战略。据NS3报道，该提案呼吁进行加密税收改革、推出加密ETF、放宽杠杆交易规则、打击未注册运营商，并加强海外监管合作。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 13:05:34",
+    "risk_score": 40,
+    "risk_level": "中风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "日本自民党区块链联盟建议政府将区块链和Web3纳入国家战略，内容包括加密税收改革、推出加密ETF、放宽杠杆交易规则、打击未注册运营商及加强海外监管合作，相关政策方向与落地节奏存在不确定性",
+    "summary": "日本执政党提议将区块链上升为国家战略，相关税收、ETF及杠杆政策调整可能引发市场预期波动",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "e397f765991c1c19",
+    "csv_order": 4,
+    "title": "Hyperliquid未平仓合约达30亿美元新高",
+    "content": "Hyperliquid在X平台发文称，其现实世界资产（RWA）未平仓合约达到30亿美元的历史新高。据PANews报道，自2025年10月推出以来，HIP-3的未平仓合约量每月都创下新纪录。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 13:03:56",
+    "risk_score": 25,
+    "risk_level": "低风险",
+    "risk_type": "爆仓 / 清算风险",
+    "evidence": "Hyperliquid 未平仓合约达到 30 亿美元历史新高，未提及负面事件，但衍生品高持仓可能在市场波动时放大清算压力。",
+    "summary": "Hyperliquid 未平仓合约创新高，埋下潜在清算风险，当前无直接风险事件。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "9508e263be019362",
+    "csv_order": 5,
+    "title": "韩国泡菜溢价变折价",
+    "content": "韩国市场的“泡菜溢价”现象已转变为折价。据 PANews 报道，随着散户投资者逐渐退出，加密市场的资金流入股市。这一变化反映了投资者对市场的态度转变。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 12:43:40",
+    "risk_score": 25,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "韩国市场曾有的“泡菜溢价”已转变为折价，散户投资者逐渐退出加密市场，资金转向股市，反映出投资者对加密资产的风险偏好下降。",
+    "summary": "韩国泡菜溢价消失并转为折价，散户资金流出加密市场，短期情绪偏空但尚未引发系统性风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "3d219c6c65c8717d",
+    "csv_order": 6,
+    "title": "Polymarket用户对MicroStrategy比特币出售时间存争议",
+    "content": "据 Cointelegraph 报道，Polymarket用户对MicroStrategy出售比特币的时间和披露存在争议。超过8000万美元被押注于MicroStrategy是否会在5月31日前出售比特币。MicroStrategy在5月26日至31日间出售了32枚比特币，但在6月1日才披露，导致市场解读为“否”，引发用户困惑。Polymarket表示，任何在市场时间框架外披露的销售确认“不符合资格”。多名用户对市场表示失望，称其应交易事实而非技术细节。最终决定将在周三公布，若无声明，订单簿将被清除。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 12:23:58",
+    "risk_score": 30,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Polymarket 平台因 MicroStrategy 比特币出售日期披露规则与用户产生争议，市场裁决是否出售时机械依赖披露时间而非实际成交时间，导致近 8000 万美元押注结果与事实不符，引发用户不满并质疑平台机制的公平性和透明性，可能削弱用户信任。",
+    "summary": "Polymarket 预测市场因 MicroStrategy 比特币出售时间披露规则引发争议，用户对平台治理机制产生不满。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "9b7823252f36540e",
+    "csv_order": 7,
+    "title": "以太坊现货ETF单日净流出超4400万美元",
+    "content": "据 NS3 报道，SoSoValue数据显示，以太坊现货ETF昨日总净流出达4443.89万美元。其中，贝莱德的ETHA单日净流出最大，达到3497.28万美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 12:18:43",
+    "risk_score": 70,
+    "risk_level": "中风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "以太坊现货ETF昨日总净流出达4443.89万美元，贝莱德的ETHA单日净流出3497.28万美元，大额资金流出可能增加ETH卖压并引发价格波动。",
+    "summary": "以太坊ETF单日净流出逾4400万美元，反映市场短期避险情绪，可能加剧ETH行情波动。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "ea853ddd536f1aba",
+    "csv_order": 8,
+    "title": "洛杉矶天使胜率剧烈波动",
+    "content": "据 ChainCatcher 报道，预测市场 Polymarket 上“科罗拉多洛矶对洛杉矶天使”事件中，子市场“让分 -4.5”的“洛杉矶天使”选项胜率在一小时内从 34.5% 暴跌至 18%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 12:13:49",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "预测市场 Polymarket 上“洛杉矶天使”让分胜率在一小时内从 34.5% 暴跌至 18%，仅为特定体育事件预测的价格波动，无链上漏洞、资金安全或市场系统性风险。",
+    "summary": "体育预测市场单一事件胜率短期大幅波动，对加密货币整体市场几无影响。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "65cde3966e6cdffe",
+    "csv_order": 9,
+    "title": "香橼创始人因操纵股价被判有罪",
+    "content": "据 ChainCatcher 报道，香橼研究创始人 Andrew Left 因利用不诚实的社交媒体帖子操纵股票价格被判有罪。经过洛杉矶为期三周的审判，陪审团裁定 Left 在 17 项指控中有 13 项成立，包括一项证券欺诈罪。 检方指控 Left 在 2018 年至 2023 年间利用关于数十家公司的爆炸性推文非法影响股价并快速获利，从中赚取超 2000 万美元。Left 当庭表示将上诉，称判决是对言论自由和无辜交易行为的攻击。他面临 20 年以上监禁，将于 8 月 31 日宣判。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 12:13:37",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "香橼研究创始人因利用不诚实的社交媒体帖子操纵股票价格被判有罪，涉及证券欺诈，面临监禁。该事件不直接涉及加密资产，但可能引发对市场操纵行为的更广泛监管讨论。",
+    "summary": "传统金融市场操纵案件，与加密货币无直接关联，但对监管情绪有轻微警示作用。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "dc0d0edb5f250219",
+    "csv_order": 10,
+    "title": "美伊谈判重启，进展迅速",
+    "content": "据 NS3 报道，一位熟悉美伊谈判的地区消息人士称，谈判已重回正轨。此前，伊朗媒体曾报道，由于以色列持续攻击黎巴嫩，谈判被暂停。美国总统唐纳德·特朗普随后表示，与伊朗的谈判进展迅速。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:55:12",
+    "risk_score": 30,
+    "risk_level": "低风险",
+    "risk_type": "链上漏洞 / 攻击风险",
+    "evidence": "美伊谈判重启并进展迅速，地缘政治紧张局势可能缓和，降低市场避险情绪，但谈判进程的不确定性仍可能带来短期波动。",
+    "summary": "美伊谈判取得积极进展，地缘风险边际下降，对加密市场风险偏好形成支撑，但仍有反复可能。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "95e3ffdc77476dff",
+    "csv_order": 11,
+    "title": "Knicks vs. Spurs 比分选项剧烈波动",
+    "content": "据 ChainCatcher 报道，Catcher Predict 监测显示，预测市场 Polymarket 上“Knicks vs. Spurs”事件中，子市场“奇偶比分”的“奇数”选项胜率在一小时内从 62% 暴跌至 31.5%，波动幅度达 30.5%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:54:00",
+    "risk_score": 8,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "预测市场 Polymarket 上“Knicks vs. Spurs”奇偶比分子市场的奇数选项胜率在一小时内从 62% 暴跌至 31.5%，波动幅度达 30.5%，但该波动属于体育预测事件本身，不直接涉及加密货币资产风险。",
+    "summary": "体育预测市场单选项胜率剧烈波动，但未关联加密资产漏洞或市场风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "8acb48ff97907b83",
+    "csv_order": 12,
+    "title": "美国劳工部提议允许401(k)投资加密货币",
+    "content": "美国区块链协会提交了一封支持信，支持美国劳工部的提议，该提议允许在401(k)退休计划中进行加密货币投资。据NS3报道，该提议旨在实施美国总统Donald Trump的行政命令14330。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:44:54",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "美国劳工部提议允许401(k)退休计划投资加密货币，区块链协会已提交支持信，但政策最后是否落地存在不确定性，可能影响加密货币市场情绪。",
+    "summary": "美国拟允许退休金投资加密货币，政策提议阶段风险低，但存不确定性。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "6a4e7e3e7aa17bbc",
+    "csv_order": 13,
+    "title": "比特币永续合约24小时爆仓4亿美元",
+    "content": "BTC永续合约在过去24小时内录得约4.0983亿美元的爆仓。据NS3报道，ETH录得约1.1221亿美元，而HYPE录得约1311万美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:44:45",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "爆仓 / 清算风险",
+    "evidence": "BTC永续合约24小时爆仓约4.0983亿美元，ETH爆仓约1.1221亿美元，显示大规模杠杆清算。",
+    "summary": "比特币和以太坊永续合约24小时内发生大规模爆仓，总额超5.2亿美元，市场风险急剧上升。",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "2117e018ed633ea9",
+    "csv_order": 14,
+    "title": "AI趋势 | 迈威尔科技股价大涨",
+    "content": "据金十数据报道，迈威尔科技(MRVL.O)美股夜盘直线拉升，一度涨超16%，现涨幅收窄至11.5%。此前，英伟达CEO黄仁勋称迈威尔科技将成为下一个万亿美元公司。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:41:45",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "该新闻为迈威尔科技（MRVL.O）股价因英伟达CEO言论而上涨，未涉及任何加密货币或区块链项目。",
+    "summary": "传统科技股动态，与加密货币市场无直接关联。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "a345a33296907adf",
+    "csv_order": 15,
+    "title": "用户因恶意交易损失31.6万美元",
+    "content": "据 ChainCatcher 报道，GoPlus 预警称，某用户因签署恶意 Permit2 交易，被钓鱼者转走价值约 31.6 万美元的 USDC。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:34:13",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "诈骗 / 跑路 / Rug Pull 风险",
+    "evidence": "用户因签署恶意 Permit2 交易被钓鱼，损失约 31.6 万美元的 USDC。",
+    "summary": "用户因恶意授权交易损失 31.6 万美元 USDC，涉及钓鱼攻击。",
+    "coins": [
+      "USDC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "416ee521f277f9a0",
+    "csv_order": 16,
+    "title": "AI趋势 | AI长期记忆引发数字人格归属问题",
+    "content": "据 PANews 报道，随着人工智能技术的发展，AI 开始具备长期记忆功能，这引发了关于数字人格归属的讨论。数字人格涉及个人在数字世界中的身份和行为记录，随着 AI 技术的进步，如何保护和管理这些信息成为一个重要问题。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:33:59",
+    "risk_score": 2,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "新闻仅讨论AI长期记忆引发的数字人格归属问题，不涉及加密货币市场或链上活动，无直接金融风险。",
+    "summary": "该新闻为AI技术伦理讨论，对加密货币市场无直接影响。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "fe43d9198945546a",
+    "csv_order": 17,
+    "title": "Ondo Finance 将推进新基础设施计划",
+    "content": "Ondo Finance 首席执行官 Ian De Bode 发布公开信，悼念日前去世的公司创始人 Nathan Allman，并表示 Ondo 将继续按照既定路线图推进业务发展。据Odaily星球日报报道，Ian De Bode 表示，公司领导层及董事会架构保持稳定，战略方向不会改变。Ondo 将在未来几天公布新的基础设施计划，并继续推进 Ondo Perps 上线。该产品定位为首个面向现实世界资产的永续合约平台，预计将在未来数周内正式上线。此外，Ondo 当前链上资产规模已接近 40 亿美元，并将继续扩张业务，向交易、主经纪商及资产管理等领域延伸。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:33:41",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Ondo Finance 创始人 Nathan Allman 去世，但公司 CEO Ian De Bode 公开表示领导层及董事会架构保持稳定，战略方向不变，并将继续推进新产品 Ondo Perps 上线及新基础设施计划，当前链上资产规模接近 40 亿美元。团队异常事件已得到明确的稳定回应，未引发治理危机。",
+    "summary": "创始人去世后公司表示治理结构稳定、业务照常推进，整体风险较低。",
+    "coins": [
+      "ONDO"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ONDO",
+        "name": "Ondo",
+        "matched_terms": [
+          "ONDO",
+          "Ondo"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "7eabb0eb62a13c8b",
+    "csv_order": 18,
+    "title": "ETH 突破 2,000 USDT，24 小时跌幅收窄至0.73%",
+    "content": "据币安行情数据显示，ETH 突破 2,000 USDT，现报价 2,001.01001 USDT，24 小时跌幅收窄至0.73%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:30:14",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "ETH价格突破2000 USDT，24小时跌幅仅为0.73%，属于正常市场波动，未出现剧烈波动或异常交易行为。",
+    "summary": "ETH小幅波动，价格突破2000 USDT，跌幅收窄，无显著风险。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "f461c51ebdbe8c3d",
+    "csv_order": 19,
+    "title": "Tria 启动 Season 3 活动，推出积分奖励框架",
+    "content": "据 ChainCatcher 报道，加密新银行与非托管金融应用 Tria 宣布启动 Season 3 活动，引入积分赚取与奖励解锁框架。用户可通过卡片消费、期货交易等方式赚取积分，达到特定门槛可解锁盲盒，奖励包括现金返还、旅行积分等。盲盒将于 8 月 31 日起每月月底开放。此外，推荐与返现体系升级，推荐等级根据邀请人数晋升，返现机制设定月度额度上限。Tria 计划在 Season 3 期间上线新功能模块。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:24:02",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Tria 启动 Season 3 积分奖励活动，属于项目方正常营销推广，未发现安全漏洞、诈骗、监管等风险迹象。",
+    "summary": "Tria 项目推出积分激励活动，无直接风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "39f4c7f74baa4a46",
+    "csv_order": 20,
+    "title": "AI趋势 | 学生还原谷歌量子成果",
+    "content": "EigenCloud 创始人 Sreeram Kannan 发推称，其团队的两名学生通过 AI Agent 在周末时间内还原了 Google 未公开量子突破成果的约 80%。据 Foresight News 报道，其中一名本科生 Gautham Anant 对现有量子密码学电路进行了约 2 倍的改进，另一名 18 岁研究员 Gajesh 通过自定义 Agent 集群，进一步将结果提升至 Google 未公开成果的 80% 水平。Sreeram Kannan 宣布启动首个公开挑战 Quantum ECC Addition Challenge，欢迎更多人及其 Agent 参与优化。未来还将与斯坦福大学 Dan Boneh、以太坊基金会 Justin Drake 等合作推出更多数学领域的开放挑战。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:23:46",
+    "risk_score": 65,
+    "risk_level": "中风险",
+    "risk_type": "链上漏洞 / 攻击风险",
+    "evidence": "两名学生通过AI Agent在周末还原谷歌未公开量子突破成果的约80%，并对量子密码学电路进行显著改进，未来将与以太坊基金会合作推出开放挑战，表明量子计算发展可能对现有区块链密码学算法构成潜在威胁。",
+    "summary": "学生通过AI还原谷歌量子成果，可能削弱区块链加密算法安全性，引发市场担忧。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "c0013fba2540ddf0",
+    "csv_order": 21,
+    "title": "Santiment：股市表现或影响加密资金流动",
+    "content": "Santiment 表示，股票相对于加密货币的表现可能表明市场情绪的过度转变。据 NS3 报道，该平台指出，随着与股票相关的 FOMO 和与加密货币相关的 FUD 上升，资金可能很快会流回加密市场。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:14:37",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "Santiment分析指出，股票与加密货币的相对表现可能反映市场情绪过度转变，当前股票FOMO与加密FUD的极端差异或促使资金回流加密市场，暂无直接风险事件发生，仅为前瞻性情绪观察。",
+    "summary": "市场情绪分析暗示潜在资金回流，未发现实质性风险事件。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "43f20c731b56d40c",
+    "csv_order": 22,
+    "title": "STEPN 将解锁 5531 万枚 GMT",
+    "content": "据 ChainCatcher 报道，Web3 资产数据平台 RootData 的代币解锁数据显示，STEPN（GMT）将于东八区时间 06 月 09 日 8 时解锁约 5531 万枚代币。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:14:26",
+    "risk_score": 50,
+    "risk_level": "中风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "STEPN 将于 6 月 9 日解锁约 5531 万枚 GMT 代币，大量解锁可能增加市场抛压，影响价格稳定性。",
+    "summary": "STEPN 将解锁巨量 GMT 代币，可能引发短期抛售风险。",
+    "coins": [
+      "GMT"
+    ],
+    "coin_details": [
+      {
+        "symbol": "GMT",
+        "name": "STEPN",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "4a3312ff5d67d80e",
+    "csv_order": 23,
+    "title": "Mango Network 将解锁 19312 万枚代币",
+    "content": "据 ChainCatcher 报道，Web3 资产数据平台 RootData 的代币解锁数据显示，Mango Network（MGO）将于东八区时间 6 月 9 日 9 时解锁约 19312 万枚代币。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:14:19",
+    "risk_score": 45,
+    "risk_level": "中风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Mango Network（MGO）将于东八区时间6月9日9时解锁约19312万枚代币，大量代币进入流通可能引发抛售压力。",
+    "summary": "Mango Network将解锁近2亿枚代币，存在潜在供应冲击风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "b8a08b2092455e60",
+    "csv_order": 24,
+    "title": "Movement 将解锁 17674 万枚代币",
+    "content": "据 ChainCatcher 报道，Web3 资产数据平台 RootData 的代币解锁数据显示，Movement（MOVE）将于东八区时间 6 月 9 日 11 时解锁约 17674 万枚代币。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:14:11",
+    "risk_score": 40,
+    "risk_level": "中风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "新闻披露 Movement 将解锁约 1.7674 亿枚代币，大额解锁通常会增加市场流通量，可能引发抛售和价格波动。",
+    "summary": "Movement 大量代币解锁可能引发市场波动",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "2a1dd9e74307bafd",
+    "csv_order": 25,
+    "title": "Avantis 将解锁 2925 万枚代币",
+    "content": "据 ChainCatcher 报道，Web3 资产数据平台 RootData 的代币解锁数据显示，Avantis（AVNT）将于东八区时间 6 月 9 日 14 时解锁约 2925 万枚代币。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:13:58",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "Avantis（AVNT）将于东八区时间 6 月 9 日 14 时解锁约 2925 万枚代币，代币解锁可能增加市场流通量，引发短期价格波动。",
+    "summary": "Avantis 将解锁约 2925 万枚代币，或导致短期行情波动",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "4ea913088f172e0e",
+    "csv_order": 26,
+    "title": "HumidiFi 将解锁 19250 万枚 WET 代币",
+    "content": "据 ChainCatcher 报道，Web3 资产数据平台 RootData 的代币解锁数据显示，HumidiFi（WET）将于东八区时间 6 月 9 日 14 时解锁约 19250 万枚代币。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:13:47",
+    "risk_score": 65,
+    "risk_level": "中风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "据 RootData 数据显示，HumidiFi 将于东八区时间 6 月 9 日 14 时解锁约 19250 万枚 WET 代币。",
+    "summary": "HumidiFi 将解锁约 1.925 亿枚 WET 代币，可能引发市场抛售和价格波动。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "bb9c9f484cec89e7",
+    "csv_order": 27,
+    "title": "澳洲联储成员：长期通胀预期上升",
+    "content": "据金十数据报道，澳洲联储委员会成员Ian Harper表示，澳大利亚的长期通胀预期已小幅上升，金融市场目前预计消费者价格将在较长时间内保持在澳洲联储的目标之上，这是多年未见的转变。Harper周二在墨尔本举行的澳大利亚经济发展委员会活动上表示：“通胀预期很重要，人们担心长期端的情况。如果长期通胀预期有失锚的风险，正如我们所说，那就需要采取强力行动。”Harper是澳洲联储九人货币政策委员会成员，该委员会对利率决定进行投票，这是他担任该职务以来的首次演讲。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:11:36",
+    "risk_score": 25,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "澳洲联储成员表示澳大利亚长期通胀预期已小幅上升，并警告若预期失锚将需要采取强力行动，暗示未来货币政策可能收紧。",
+    "summary": "澳联储成员警示长期通胀预期上升，可能引发政策收紧预期，对加密货币等风险资产构成潜在宏观压力。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "c22519d4a5f36d0f",
+    "csv_order": 28,
+    "title": "巨鲸计划通过TWAP买入超26.9万枚HYPE",
+    "content": "Hyperliquid上计划以TWAP买入超1万枚HYPE现货的地址共11个，合计计划买入逾26.9万枚。据 BlockBeats 链上侦探报道，上述地址均归属同一巨鲸，该巨鲸通过链上向多个地址分散转入资金，并计划于未来24小时内持续买入。昨日尚未完全成交的TWAP订单上，合计买入达8.35万枚；今日近2小时内，其又新增7笔订单，计划买入18.5万枚。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 11:02:06",
+    "risk_score": 75,
+    "risk_level": "中风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "同一巨鲸通过11个地址分散资金并计划在24小时内用TWAP买入超26.9万枚HYPE，已有部分成交，新增订单持续买入。这种大规模、多地址隐蔽建仓行为可能意在操纵市场价格，引发跟风盘和后续抛售风险，对HYPE短期行情造成剧烈波动。",
+    "summary": "巨鲸利用多地址分散大额买入HYPE，存在市场操纵和异常波动风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "92cca4d971cd9947",
+    "csv_order": 29,
+    "title": "比特币跌破7.1万美元，SocialFi逆势上涨",
+    "content": "据 NS3 报道，SoSoValue数据显示，加密货币板块普遍下跌，比特币下跌3.60%，跌破7.1万美元。SocialFi在24小时内上涨7.03%，而PayFi下跌4.15%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:53:07",
+    "risk_score": 30,
+    "risk_level": "中风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "比特币下跌3.60%，跌破7.1万美元，加密货币板块普遍下跌。",
+    "summary": "比特币短线跌破7.1万美元，带动市场整体回调。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "1f420e092a3be81c",
+    "csv_order": 30,
+    "title": "智能资金押注科罗拉多洛矶队胜洛杉矶天使队",
+    "content": "一位智能资金地址在Polymarket上以平均37.3美分的开盘价购买了价值7万美元的科罗拉多洛矶队战胜洛杉矶天使队的合约。据NS3报道，这笔交易显示出对科罗拉多洛矶队的信心。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:52:54",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "新闻内容是关于Polymarket上体育博彩交易，与加密货币市场无直接关联。",
+    "summary": "体育博彩新闻，无加密货币风险",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "5d01f3839693ddee",
+    "csv_order": 31,
+    "title": "Blockworks退出Arbitrum DAO代表角色",
+    "content": "Blockworks宣布将逐步退出其在Arbitrum DAO中的代表角色。据NS3报道，Blockworks表示，此决定符合其业务目标，并不意味着对Arbitrum DAO持悲观态度。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:45:54",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Blockworks宣布将逐步退出在Arbitrum DAO的代表角色，理由为符合自身业务目标，并明确表示并非对Arbitrum DAO持悲观态度。",
+    "summary": "知名机构退出Arbitrum DAO代表，但未表达负面态度，属正常业务调整，风险较低。",
+    "coins": [
+      "ARB"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ARB",
+        "name": "Arbitrum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "df63c0c644ade65e",
+    "csv_order": 32,
+    "title": "碳酸锂期货跌超4%",
+    "content": "据金十数据报道，碳酸锂期货跌超4%。机构表示，目前临近宁德时代枧下窝矿山的预期复产节点，小作文频发导致市场博弈增强。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:42:09",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "碳酸锂期货跌超4%，主要受宁德时代矿山复产预期等商品自身基本面消息影响，与加密货币市场无直接关联，对加密市场的传导路径微弱。",
+    "summary": "碳酸锂期货下跌对加密货币市场风险影响极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "2f2f9ee56f25ede3",
+    "csv_order": 33,
+    "title": "Liquid Network上线ELIP 203升级",
+    "content": "Blockstream开发的比特币侧链Liquid Network宣布已成功激活并上线ELIP 203升级。据Foresight News报道，该升级移除了非LBTC资产的发行上限，并为大规模代币化提供更好的用户体验。未来官方计划在6月底前实现0-conf（零确认）功能。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:33:46",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "基础设施 / 协议层异常风险",
+    "evidence": "比特币侧链 Liquid Network 通过 ELIP 203 升级移除了非 LBTC 资产的发行上限，并计划实现零确认功能。升级本身属于协议改进，但移除发行上限可能在未来引入未知的资产风险敞口，目前无负面事件。",
+    "summary": "Liquid 侧链升级移除资产发行上限，潜在扩大代币化规模，暂无明显风险。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "e0b6550228ddc431",
+    "csv_order": 34,
+    "title": "BNB 突破 690 USDT，24 小时跌幅收窄至1.97%",
+    "content": "据币安行情数据显示，BNB 突破 690 USDT，现报价 690.950012 USDT，24 小时跌幅收窄至1.97%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:32:07",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "新闻报道BNB突破690 USDT，24小时跌幅收窄至1.97%，属于常规行情波动，未出现异常或风险事件。",
+    "summary": "BNB价格小幅波动，跌幅收窄，无实质风险。",
+    "coins": [
+      "BNB"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BNB",
+        "name": "BNB",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "46360f19b4237399",
+    "csv_order": 35,
+    "title": "AI趋势 | SpaceX将水资源列为AI扩张风险",
+    "content": "SpaceX在其招股书中首次将水资源短缺列为AI算力扩张的核心风险。据PANews报道，数据中心冷却用水在干旱地区引发激烈竞争，投资者敦促科技巨头披露水足迹。水资源正从运营成本转变为投资定价的重要因素。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:24:27",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "SpaceX 指出水资源短缺可能制约 AI 算力扩张，但新闻内容未提及任何加密货币或区块链项目，对加密市场无直接风险传导。",
+    "summary": "水资源短缺风险仅涉及 AI 基础设施，与加密资产无直接关联，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "fe5e89ae5aac431b",
+    "csv_order": 36,
+    "title": "腾讯控股日内涨幅扩大至4%",
+    "content": "腾讯控股(00700.HK)继续拉升，日内涨幅扩大至 4%。据Odaily星球日报报道，此前消息称腾讯接近推出微信 AI 助手。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:24:04",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为腾讯控股股价因微信AI助手消息上涨，未提及任何加密货币或区块链项目，对加密市场无直接风险。",
+    "summary": "腾讯推出AI助手的股票反应与加密市场无直接关联，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "606d9582a857b27d",
+    "csv_order": 37,
+    "title": "ZetaChain 转型为 AI 互操作基础设施",
+    "content": "ZetaChain 宣布将转型为 AI 互操作基础设施，并逐步淘汰跨链互操作功能。据 NS3 报道，Anuma 在首月吸引了超过 6 万用户。用户可以通过锁定 ZETA 来赚取 Anuma 代币，或通过锁定 8 万 ZETA 访问 Anuma Pro。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:22:58",
+    "risk_score": 60,
+    "risk_level": "中风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "ZetaChain 宣布将转型为 AI 互操作基础设施，并逐步淘汰跨链互操作功能，同时推出通过锁定 ZETA 赚取 Anuma 代币的机制，这种核心业务的突然转向和代币经济模式变更可能影响原有持币者权益和项目稳定性。",
+    "summary": "ZetaChain 战略转型并逐步淘汰原有跨链功能，代币经济模式变更，存在治理与业务连续性风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "845c277a5a5405c3",
+    "csv_order": 38,
+    "title": "SpeedLabs 完成 650 万美元融资",
+    "content": "据 ChainCatcher 报道，体育“动量市场”SpeedLabs 宣布完成 650 万美元种子轮融资，Parlay Capital 领投。SpeedLabs 构建面向实时体育赛事的市场引擎，能够读取比赛的实时动态并即时创建和定价市场。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:13:47",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "该新闻仅报道 SpeedLabs 完成种子轮融资，未涉及任何安全、欺诈、监管或链上异常等信息，不构成可识别的风险。",
+    "summary": "融资信息，无直接风险",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "40f651598db2992e",
+    "csv_order": 39,
+    "title": "Strategy比特币持有亏损29.32亿美元",
+    "content": "Strategy的比特币持有显示未实现亏损29.32亿美元。据NS3报道，BitMine的以太坊持有显示未实现亏损81.16亿美元。此外，IREN完成36.5亿美元融资，以支持与微软的AI云合同。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:07:41",
+    "risk_score": 45,
+    "risk_level": "中风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "Strategy的比特币持有显示未实现亏损29.32亿美元，BitMine的以太坊持有显示未实现亏损81.16亿美元。",
+    "summary": "机构持仓出现巨额未实现亏损，反映加密市场下行对大户资产的影响。",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "4dd55bee91972995",
+    "csv_order": 40,
+    "title": "股票市场 | 美股三大股指期货走低",
+    "content": "据金十数据报道，美股三大股指期货走低，标普500指数期货跌幅扩大至0.5%，纳斯达克100指数期货下跌0.75%，道指期货跌0.47%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:07:08",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "美股三大股指期货走低，标普500指数期货跌幅扩大至0.5%，纳斯达克100指数期货下跌0.75%，道指期货跌0.47%，可能引发跨市场避险情绪，对加密市场产生轻微间接压力。",
+    "summary": "美股期货小幅下跌，宏观情绪偏弱，对加密货币市场影响有限。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "85a1386fe2b4a9f0",
+    "csv_order": 41,
+    "title": "Ethereum OG 再次出售 5000 枚 ETH",
+    "content": "据Odaily星球日报报道，Onchain Lens 监测显示，某 Ethereum OG 地址再次出售 5000 枚 ETH，价值 1000 万美元。此前，该地址已累计以 2106 美元均价出售 6 万枚 ETH，价值 1.2225 亿美元，以及 9442 枚 wsETH，价值 2399 万美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:05:08",
+    "risk_score": 75,
+    "risk_level": "中风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "某 Ethereum OG 地址再次出售 5000 枚 ETH（价值约 1000 万美元），此前已累计以均价 2106 美元出售 6 万枚 ETH 和 9442 枚 wsETH，总价值超过 1.46 亿美元。持续的大额抛售可能引发市场恐慌和 ETH 价格波动。",
+    "summary": "Ethereum OG 地址持续大量抛售 ETH 及衍生资产，累计变现超 1.46 亿美元，可能造成 ETH 市场短期抛压。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "99e5cb603ec324af",
+    "csv_order": 42,
+    "title": "EDGE代币价格异常波动",
+    "content": "edgeX 发文表示，已观察到 EDGE 代币出现突然且异常的价格波动。据Odaily星球日报报道，团队称正紧急核查具体情况，并将在确认相关信息后尽快公布最新进展。同时提醒用户以 edgeX 官方渠道发布的信息为准，并谨慎对待未经证实的市场传言。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:04:58",
+    "risk_score": 70,
+    "risk_level": "中风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "edgeX 团队发文确认 EDGE 代币出现突然且异常的价格波动，正紧急核查具体情况，并提醒用户谨慎对待未经证实的市场传言。",
+    "summary": "EDGE代币出现异常价格波动，团队正在核查并警告用户注意市场传言风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "c58a40e15e89a47d",
+    "csv_order": 43,
+    "title": "Serenity揭露机器人农场传播虚假信息",
+    "content": "“新股神”Serenity 发文表示，其近期发现一个由数十个账户组成的“机器人农场”，过去几天持续传播有关 SIVE 的虚假信息。据Odaily星球日报报道，这些账户此前曾参与包括 Alchemy Pay 在内的部分亚洲项目营销活动，或为新购买的 X 平台账号。相关账户历史活跃度较低，但近期集中发布关于出售 SIVE 持仓的负面内容，并反复建议其他投资者卖出。部分账户被发现使用 AI 生成负面评论。Serenity 称，由于相关活动存在可追踪记录，其计划将相关信息提交给美国证券交易委员会（SEC）调查，并提醒市场参与者谨慎对待未经证实的信息来源。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 10:03:54",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "诈骗 / 跑路 / Rug Pull 风险",
+    "evidence": "数十个账户组成的机器人农场集中传播关于 SIVE 的虚假负面信息，诱导投资者卖出，部分账户使用 AI 生成评论，该行为涉嫌市场操纵，已计划提交 SEC 调查。",
+    "summary": "机器人农场通过虚假信息操纵市场，诱导卖出 SIVE，可能引发监管介入。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "a4e2bcccdc50c496",
+    "csv_order": 44,
+    "title": "Robinhood完成对WonderFi的收购",
+    "content": "Robinhood已完成对加拿大加密平台运营商WonderFi的收购。据NS3报道，Bitbuy和Coinsquare将纳入Robinhood品牌旗下。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:58:39",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "该新闻为 Robinhood 完成对加拿大加密平台 WonderFi 的正常商业收购，将 Bitbuy 和 Coinsquare 纳入旗下，无任何负面或异常信息，属于常规企业治理变动。",
+    "summary": "Robinhood 完成对 WonderFi 的常规收购，未发现风险因素。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "0674859e44e2b662",
+    "csv_order": 45,
+    "title": "CoinMarketCap的Altcoin季节指数下降",
+    "content": "CoinMarketCap的Altcoin季节指数从昨日的39下降至38。据NS3报道，该指数用于追踪过去90天内顶级币种是否跑赢Bitcoin。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:57:41",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "CoinMarketCap的Altcoin季节指数从39降至38，表明过去90日内山寨币相对比特币的表现略有回落，但单日降幅极小，未构成明确风险信号。",
+    "summary": "Altcoin季节指数微降，市场情绪偏弱但无直接风险事件。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "Bitcoin"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "db8da83c5f3764f0",
+    "csv_order": 46,
+    "title": "AI链景气度持续，市场结构分化显著",
+    "content": "据金十数据报道，上周市场结构分化显著，延续过去一个多月的格局，主要是AI链景气度持续，部分产业链继续出现催化。同时，两大国产存储巨头上市预期带来相关产业链公司的表现。5月份以来融资规模快速上行，增速仅次于去年8月份，上周余额一度逼近2.9万亿元。电子、通信两个行业融资净买入额超千亿元，市场容易出现极致交易后的剧烈波动，剧烈波动带来的是风险释放而非累积。当市场风险偏好较低时，资金更容易聚焦高景气方向。考虑到海外地缘形势再次出现缓和，市场机会预计会由少数核心方向向更多科技方向扩散；但部分大市值非科技品种仍有可能市场重新过热而受到压制。从分子端看，当下看AI仍是最为景气资产，并带动半导体、上游元器件材料等景气度提升；其他板块包括储能、机械及化工中的部分细分领域需求向好。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:55:38",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻提到融资规模快速上行，余额逼近2.9万亿元，市场容易出现极致交易后的剧烈波动，但认为剧烈波动带来的是风险释放而非累积；海外地缘形势再次出现缓和。",
+    "summary": "市场融资快速上行，结构分化，波动风险释放，地缘缓和带来扩散机会。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "3ad181342af514bc",
+    "csv_order": 47,
+    "title": "AI趋势 | Anthropic 上市概率升至 81%",
+    "content": "据Odaily星球日报报道，Polymarket 上“Anthropic 先于 OpenAI 上市”概率涨至 81%，24 小时上涨 56%。Anthropic 于 6 月 1 日宣布，公司已秘密向美 SEC 提交 S-11 表格的注册声明草案，拟进行普通股首次公开发行。此举意味着 Anthropic 并未锁定明确的上市时间表，但已率先于竞争对手 OpenAI。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:44:21",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容仅涉及AI公司Anthropic上市概率变化，与加密货币市场无直接关联，未提及任何加密资产或链上事件。",
+    "summary": "该新闻对加密货币市场无实质风险影响。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "e52834379ba9dba6",
+    "csv_order": 48,
+    "title": "Detroit Tigers 胜率暴跌 25.65%",
+    "content": "据 ChainCatcher 报道，预测市场 Polymarket 上“Detroit Tigers vs. Tampa Bay Rays”事件中，“Detroit Tigers”选项的胜率在过去一小时内从 94.5% 暴跌至 68.85%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:44:04",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "该新闻仅描述预测市场 Polymarket 上体育赛事‘Detroit Tigers’选项的胜率在一小时内从 94.5% 暴跌至 68.85%，不涉及任何加密货币资产、交易所、链上漏洞、监管或稳定币等加密金融风险要素。",
+    "summary": "Polymarket 体育预测市场赔率波动，与加密金融风险无直接关联。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "ca8db545c2701a95",
+    "csv_order": 49,
+    "title": "Polymarket 上 Minnesota Twins 胜率剧烈波动",
+    "content": "据 ChainCatcher 报道，Catcher Predict 监测显示，预测市场 Polymarket 上“Chicago White Sox vs. Minnesota Twins”事件中，子市场 “Spread -3.5” 的 “Minnesota Twins” 选项胜率在 1 小时内从 26.5% 飙升至 53%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:43:46",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "预测市场 Polymarket 上“Chicago White Sox vs. Minnesota Twins”事件的子市场胜率在 1 小时内从 26.5% 飙升至 53%，出现剧烈波动。",
+    "summary": "Polymarket 体育赛事市场胜率短时剧烈波动，未涉及加密资产直接风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "85d3063cff5f0313",
+    "csv_order": 50,
+    "title": "嘉信理财计划2027年推出面向顾问的加密币现货交易",
+    "content": "据Citywire报道，嘉信理财顾问体验负责人Jalina Kerr表示，公司计划于2027年在其托管平台上为顾问推出加密货币现货交易功能，目前进展顺利，预计上线时间可能更接近年中，具体日期尚未确定。嘉信理财今年已向零售客户推出比特币和以太坊现货交易。Kerr指出，数字资产不像其他经纪和证券产品那样受统一监管，从资金存入到提取都需要周全考量。她表示，顾问目前最倾向于通过嘉信理财的交易所交易产品为客户配置加密资产，但对现货交易的兴趣最近有所上升。嘉信理财的竞争对手富达目前已为财富管理经理提供加密托管和交易解决方案。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:39:50",
+    "risk_score": 40,
+    "risk_level": "中风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "嘉信理财顾问体验负责人指出，数字资产不像其他经纪和证券产品那样受统一监管，从资金存入到提取都需要周全考量，存在监管不确定性。",
+    "summary": "嘉信理财计划推出加密货币现货交易，但监管框架不统一带来法律合规风险。",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "d6f10c0ce2d6204e",
+    "csv_order": 51,
+    "title": "澳大利亚经常帐赤字扩大",
+    "content": "据金十数据报道，澳大利亚第一季度经常帐赤字达到271亿澳元，超出预期的230亿澳元，前值为211亿澳元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:35:17",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "澳大利亚第一季度经常帐赤字扩大至271亿澳元，超出预期的230亿澳元，前值为211亿澳元，可能引发澳元汇率波动及全球市场风险情绪变化，但对加密货币市场直接影响有限。",
+    "summary": "澳大利亚经常帐赤字超预期扩大，可能间接影响风险资产情绪，但对加密市场直接影响较小。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "568021585a895a4e",
+    "csv_order": 52,
+    "title": "BTC 跌破 71,000 USDT，24 小时跌幅3.60%",
+    "content": "据币安行情数据显示，BTC 跌破 71,000 USDT，现报价 70,975.742188 USDT，24 小时跌幅3.60%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:35:08",
+    "risk_score": 30,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "BTC 价格跌破 71,000 USDT，24 小时跌幅 3.60%，属于正常范围的小幅下跌。",
+    "summary": "BTC 短线下跌 3.6%，属常规行情波动。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "90c2242a0c95ec51",
+    "csv_order": 53,
+    "title": "OpenSea 或将推出合约交易功能",
+    "content": "据 ChainCatcher 报道，OpenSea 产品营销人员 Zack Brenner 在 X 上询问社区用户是否希望体验该平台的合约交易，疑似暗示 OpenSea 将推出该功能。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:33:44",
+    "risk_score": 15,
+    "risk_level": "低风险",
+    "risk_type": "交易所与系统运维风险",
+    "evidence": "OpenSea 产品营销人员向社区征询合约交易功能意向，目前仅为初步设想，尚未实际部署，因此即时风险较低。",
+    "summary": "OpenSea 探索合约交易功能尚处社区调研阶段，未产生实质操作风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "ed5ff5876eb86ca2",
+    "csv_order": 54,
+    "title": "edgeX 价格异动疑似市场操纵",
+    "content": "去中心化衍生品交易所 edgeX 针对「EDGE 价格异常波动事件」发推表示，edgeX 协议并未遭到入侵，也不存在黑客攻击或安全漏洞。据 Foresight News 报道，此次价格异动疑似由外部特定主体故意实施的市场操纵行为，属于市场问题而非平台安全问题。目前团队正在积极调查，并与相关交易所和平台合作追查责任方。完整调查结果将在调查结束后公布。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:33:32",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "edgeX 代币价格出现异常波动，官方声明协议未遭入侵，但怀疑为外部主体故意实施的市场操纵行为，属于市场问题而非平台安全问题。",
+    "summary": "edgeX 代币价格异动疑似市场操纵，虽无安全漏洞，但存在市场操纵引发的行情异常风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "e3e63a51fd756e26",
+    "csv_order": 55,
+    "title": "Serenity 看好 AAOI 光子学前景",
+    "content": "据 ChainCatcher 报道，“新股神”Serenity 表示，AAOI 是其最看好的美国光子学标的，该股今日上涨 20.1%。Serenity 认为，光子学相关公司或将在 2027 年上半年进入下半年时迎来重要拐点。目前行业仍处于产能建设阶段。Serenity 指出，市场通常会提前约 8 个月定价未来增长，光子学公司收入加速增长的拐点正在到来，关键在于等待时点并承受期间波动。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:23:48",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为 Serenity 对美股 AAOI（光子学标的）的看法及股价上涨，未涉及任何加密货币、区块链、交易所或链上活动，与加密货币金融风险无关。",
+    "summary": "新闻为传统股票市场分析，与加密货币无直接关联，无加密货币风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "5e3d29c299e798ec",
+    "csv_order": 56,
+    "title": "贵金属 | 现货白银上涨1美元",
+    "content": "现货白银日内上涨1美元，现报75.83美元/盎司，涨幅1.35%。纽约期银站上76美元/盎司，日内涨0.99%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:16:06",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅报道贵金属现货白银及纽约期银价格上涨，未涉及任何加密货币资产或事件，对加密货币市场无直接风险。",
+    "summary": "贵金属价格上涨，对加密货币无直接影响",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "86b04c3d06cf30f4",
+    "csv_order": 57,
+    "title": "Uniswap 创始人澄清与以太坊基金会关系",
+    "content": "据 ChainCatcher 报道，Uniswap 创始人 Hayden Adams 表示，感谢以太坊基金会长期以来的资助及支持，但澄清 Uniswap 并非由以太坊基金会孵化，他是以外部受资助者身份参与其中。此前，以太坊基金会主席 Aya Miyaguchi 和联合创始人 Vitalik Buterin 分享了对基金会未来方向的看法。Miyaguchi 表示，去年底提出 EF 使命框架是因为技术讨论出现偏离。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:13:45",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Uniswap创始人澄清Uniswap并非由以太坊基金会孵化，仅作为外部受资助者，消除潜在的治理误解，但未发现实际风险事件。",
+    "summary": "Uniswap创始人澄清与以太坊基金会关系，无风险信号。",
+    "coins": [
+      "ETH",
+      "UNI"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "以太坊"
+        ]
+      },
+      {
+        "symbol": "UNI",
+        "name": "Uniswap",
+        "matched_terms": [
+          "Uniswap"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "7ad932ad7088ef77",
+    "csv_order": 58,
+    "title": "Zama cUSDC 合约冻结解除",
+    "content": "隐私协议 Zama 创始人 Rand 发推表示，针对 Zama 旗下 cUSDC 合约的冻结已被解除，所有系统均已恢复正常。据 Foresight News 报道，此前美国法院要求 Circle 临时冻结了 Zama 持有 USDC 的一个 1250 万美元协议合约。目前法院已认定该冻结是不合理的并撤销临时限制令（TRO），Zama 的 cUSDC 合约及资产已完全恢复。该事件并未动摇其对 USDC 的信任，团队仍计划于本月晚些时候推出 cUSDC 产品。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:13:33",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "美国法院此前要求Circle临时冻结Zama的1250万美元协议合约，现已认定冻结不合理并撤销临时限制令，cUSDC合约及资产完全恢复。",
+    "summary": "Zama cUSDC合约冻结已解除，相关监管风险已消退，但事件显示隐私协议仍面临法律干预可能。",
+    "coins": [
+      "USDC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "3a172b7a6a2b8f5f",
+    "csv_order": 59,
+    "title": "US HYPE ETF单日净流入127.71万美元",
+    "content": "据 NS3 报道，SoSoValue数据显示，昨日US HYPE现货ETF单日总净流入为127.71万美元。仅21Shares Hyperliquid ETF出现资金流入。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 09:03:03",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "US HYPE现货ETF单日总净流入127.71万美元，仅21Shares Hyperliquid ETF出现资金流入，金额较小，未出现异常流出或大额异动。",
+    "summary": "ETF产品小额净流入，无明显风险信号。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "e556f4806e26de08",
+    "csv_order": 60,
+    "title": "密尔沃基酿酒人队胜率大幅波动",
+    "content": "据 ChainCatcher 报道，预测市场 Polymarket 上“旧金山巨人队对密尔沃基酿酒人队”事件中，子市场“让分 -3.5”的“密尔沃基酿酒人队”选项胜率在一小时内从 20.5% 飙升至 76.5%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 08:53:39",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "新闻描述的是预测市场 Polymarket 上一个棒球赛事选项的胜率在短时间内从 20.5% 飙升至 76.5%，属于体育博彩类事件的市场波动，与加密货币市场或资产无直接关联。",
+    "summary": "体育预测市场胜率大幅波动，对加密市场无实质风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "6b9910ebb85e4f67",
+    "csv_order": 61,
+    "title": "白宫审查掉期申报新规提案",
+    "content": "据 ChainCatcher 报道，白宫正在审查美国 SEC 和 CFTC 提出的重新审议掉期及证券掉期申报要求的早期提案，目前处在预规则阶段。两家监管机构计划征集公众意见后再正式拟定监管细则。国际掉期与衍生工具协会、美国证券业和金融市场协会上月联名致函，敦促监管方统一两类产品的数据申报标准。CFTC 表示此项工作由两家机构联合开展，SEC 主席在 3 月行业会议中已安排人员搭建统一申报制度。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 08:43:51",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "白宫正在审查美国SEC和CFTC提出的掉期及证券掉期申报要求预规则提案，目前仅处于征集公众意见阶段，未形成具体细则，对加密货币市场无直接影响。",
+    "summary": "美国衍生品申报规则预审阶段，短期无实质影响，风险较低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "89705a540ac0df4e",
+    "csv_order": 62,
+    "title": "美国参议院推进CLARITY法案讨论",
+    "content": "美国参议院在本周休会后推进CLARITY法案的讨论。据NS3报道，该法案旨在赋予联邦商品监管机构更大的数字资产监管权。关于稳定币、代币化股票、道德条款和利益冲突的分歧仍然存在。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 08:38:20",
+    "risk_score": 65,
+    "risk_level": "中风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "美国参议院推进CLARITY法案，旨在扩大联邦商品监管机构对数字资产的监管权限，法案涉及稳定币、代币化股票及道德条款，各方仍存分歧。监管框架的不确定性可能影响行业合规与创新。",
+    "summary": "美国CLARITY法案讨论可能强化数字资产监管，行业面临合规风险",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "c87bcd7899a868f7",
+    "csv_order": 63,
+    "title": "韩国KOSPI指数日内跌3%",
+    "content": "据Odaily星球日报报道，韩国KOSPI指数日内跌3%，此前一度涨超1.5%。LG电子跌超5%，此前一度上涨11%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 08:23:33",
+    "risk_score": 45,
+    "risk_level": "中风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "韩国KOSPI指数日内由涨转跌3%，LG电子等大盘股剧烈回落，反映市场情绪急剧恶化，可能对加密货币市场产生负面溢出效应。",
+    "summary": "韩国股市大幅逆转下跌，或引发避险情绪传导至加密市场。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "a066570a33f13cc6",
+    "csv_order": 64,
+    "title": "巨鲸建立2.1948万枚ETH空单",
+    "content": "据Odaily星球日报报道，Onchain Lens 监测显示，某巨鲸已建立 2.1948 万枚 ETH 空单，杠杆倍数为 10 倍，价值 4400 万美元，强平价格为 2339.76 美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 08:17:26",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "爆仓 / 清算风险",
+    "evidence": "某巨鲸建立2.1948万枚ETH空单，杠杆10倍，价值4400万美元，强平价格为2339.76美元，面临爆仓风险，若强平可能引发市场剧烈波动。",
+    "summary": "巨鲸高杠杆大额ETH空单面临清算风险，或引发市场波动。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "5edbbf58b78443fa",
+    "csv_order": 65,
+    "title": "Ondo Finance 将推出 RWA 永续合约平台",
+    "content": "据 ChainCatcher 报道，Ondo Finance 首席执行官 Ian De Bode 表示，首个为现实世界资产打造的永续合约平台 Ondo Perps 将在未来几周内上线。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 08:14:16",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "Ondo Finance 宣布将推出 RWA 永续合约平台，该新产品可能面临监管不确定性，但新闻本身未提及任何已发生的风险事件或负面信号。",
+    "summary": "Ondo 计划上线 RWA 永续合约，潜在监管风险较低。",
+    "coins": [
+      "ONDO"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ONDO",
+        "name": "Ondo",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "1331151e7f2ef502",
+    "csv_order": 66,
+    "title": "AI趋势 | Salesforce持有Anthropic股份价值达50亿美元",
+    "content": "据金十数据报道，Salesforce在多次向Anthropic公司进行投资后，持有的股份价值约达50亿美元。据知情人士透露，这家软件巨头于2023年初首次参与Anthropic的融资，投资额约为5000万美元，此后在后续融资轮次中持续跟投。Anthropic已成为全球增长最快、备受瞩目的公司之一。另一家从早期投资Anthropic中获益的软件公司是Zoom Communications，该公司通过2023年初对Anthropic C轮融资的投资，净赚逾10亿美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 08:07:34",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容仅描述传统软件公司Salesforce和Zoom对AI公司Anthropic的股份投资，未提及任何加密货币或区块链相关事件，不构成对加密市场的直接风险。",
+    "summary": "该新闻为传统科技企业投资动态，与加密货币无直接关联，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "7bc85dda411a9ddb",
+    "csv_order": 67,
+    "title": "堪萨斯城皇家胜率大幅波动",
+    "content": "据 ChainCatcher 报道，Catcher Predict 监测显示，预测市场 Polymarket 上“堪萨斯城皇家对阵辛辛那提红人”事件中，子市场“堪萨斯城皇家”选项的胜率在一小时内从 45.5% 飙升至 71.5%，波动幅度达 26%。请注意相关突发消息影响。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 07:43:33",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "新闻仅描述了预测市场Polymarket上体育事件胜率的短期波动，未涉及任何加密货币或链上资产，也未提及具体风险事件。",
+    "summary": "体育预测市场胜率波动，与加密市场无直接关联，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "fabfdcbfbdbdb5ee",
+    "csv_order": 68,
+    "title": "特朗普阻止以色列对贝鲁特空袭",
+    "content": "Donald Trump在6月1日的电话中批评了Benjamin Netanyahu，反对以色列在黎巴嫩的军事升级。据NS3报道，Axios援引消息人士称，特朗普使用了粗话，并阻止了以色列对贝鲁特的空袭计划。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 07:36:41",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为特朗普阻止以色列对贝鲁特空袭，未涉及任何加密货币项目、市场或资产，没有可识别的加密货币风险因素。",
+    "summary": "政治外交事件，与加密货币无关，无风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "f6129d085f2b86c9",
+    "csv_order": 69,
+    "title": "EdgeX调查EDGE代币价格异常下跌",
+    "content": "EdgeX正在调查EDGE代币价格约70%的异常下跌。据NS3报道，此次下跌始于6月1日东八区时间凌晨5点左右。EdgeX敦促社区避免未经证实的猜测。EDGE价格跌至0.4美元以下，目前在部分回升后约为0.64美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 07:36:35",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "EDGE代币价格出现约70%的异常下跌，从6月1日凌晨5点开始，价格一度跌至0.4美元以下，EdgeX团队正在对此进行调查。",
+    "summary": "EDGE代币短时间内暴跌70%，触发异常行情波动风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "0c3f8d4057b29046",
+    "csv_order": 70,
+    "title": "Nvidia发布Nemotron 3 Ultra",
+    "content": "Nvidia于6月1日在Computex发布了Nemotron 3 Ultra，拥有5500亿个参数。据NS3报道，Artificial Analysis在其智能指数上为该模型打分48，低于Moonshot AI的Kimi K2.6的54分。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 06:53:58",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为Nvidia发布AI模型Nemotron 3 Ultra，与加密货币市场无直接关联，未提及任何币种或风险事件。",
+    "summary": "AI模型发布新闻，对加密市场无影响。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "b49a09eb13405363",
+    "csv_order": 71,
+    "title": "Revolut将在法国投资1亿欧元并新增200个岗位",
+    "content": "Revolut宣布将在2030年前在法国投资1亿欧元，并创造200个新工作岗位。据BeInCrypto报道，此举是为了将巴黎打造为其欧洲金融创新中心。法国总统马克龙在2026年凡尔赛“选择法国”峰会上宣布了这一承诺。Revolut此前已在2025年承诺投资10亿欧元用于其西欧总部，并计划在2027年初开放位于巴黎证券交易所区的新总部。Revolut还在申请法国银行牌照，以扩大其在欧洲的银行业务。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 06:37:26",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅涉及Revolut在法国的投资和招聘计划，未提及任何加密货币安全事件、市场异常或合规风险，属于企业正常扩张行为。若后续涉及金融牌照申请过程受阻可能产生间接影响，但当前内容无直接负面信号。",
+    "summary": "Revolut在法国投资扩张，无直接市场或币种风险，但若监管审批不顺可能产生间接影响，当前维持低风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "59a368036c6c88b0",
+    "csv_order": 72,
+    "title": "贵金属 | SPDR黄金ETF持仓减少",
+    "content": "据金十数据报道，全球最大黄金ETF--SPDR Gold Trust持仓较上日减少0.286吨，当前持仓量为1028.856吨。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 06:21:05",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "全球最大黄金ETF持仓减少0.286吨，为常规持仓变动，对加密货币市场无直接影响，但可能微弱反映宏观情绪变化。",
+    "summary": "SPDR黄金ETF持仓微减，对加密货币市场风险影响极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "f4a1c09f8cf6862a",
+    "csv_order": 73,
+    "title": "Amy Lee 出任新加坡海湾银行全球顾问委员会主席",
+    "content": "Amy Lee 现任新加坡海湾银行全球顾问委员会主席。据 NS3 报道，该银行是一家总部位于巴林的全牌照数字银行，2025年存款额超过400亿美元。该银行由黄埔集团和Mumtalakat合作成立。今年2月，SGB为其实时结算平台SGB Net引入了稳定币层。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 06:15:43",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "稳定币异常风险",
+    "evidence": "新闻提到新加坡海湾银行为其实时结算平台SGB Net引入了稳定币层，但未披露任何异常或风险事件，整体为中性动态。",
+    "summary": "银行引入稳定币层属正常发展，无直接风险信号。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "48d01aa54438fb18",
+    "csv_order": 74,
+    "title": "美国参议院将重启CLARITY法案审议",
+    "content": "美国参议院预计将在本周重启对CLARITY法案的审议。据NS3报道，该加密市场结构法案已于2025年7月在众议院通过，并在参议院的两个委员会获得批准。经过为期一周的休会后，参议院可能会在8月对合并后的法案进行投票。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 06:12:08",
+    "risk_score": 60,
+    "risk_level": "中风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "美国参议院将重启对加密市场结构法案CLARITY的审议，该法案已获众议院通过和参议院两个委员会批准，可能于8月进行投票，监管进程带来不确定性。",
+    "summary": "美国参议院重启关键加密监管法案审议，市场面临政策不确定性风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "11dbfd33c7f980f6",
+    "csv_order": 75,
+    "title": "美联储6月维持利率不变概率达98.4%",
+    "content": "据金十数据报道，CME“美联储观察”显示，美联储到6月维持利率不变的概率为98.4%，累计降息25个基点的概率为1.6%。此外，美联储到7月维持利率不变的概率为90.2%，累计加息25个基点的概率为8.4%，累计降息25个基点的概率为1.4%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 06:06:36",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "美联储6月维持利率不变概率高达98.4%，市场预期高度一致，无意外紧缩或宽松信号，未引发宏观冲击。",
+    "summary": "市场预期美联储6月维持利率不变，无政策冲击风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "b3ef04b87197c897",
+    "csv_order": 76,
+    "title": "AI趋势 | OpenAI模型登陆Amazon Bedrock",
+    "content": "据金十数据报道，亚马逊(AMZN.O)宣布，OpenAI的GPT-5.5、GPT-5.4及Codex现已登陆Amazon Bedrock。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 05:36:59",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "基础设施 / 协议层异常风险",
+    "evidence": "亚马逊宣布OpenAI的GPT-5.5、GPT-5.4及Codex登陆Amazon Bedrock，属于正常的云服务合作，未暴露安全、运维或协议层异常。",
+    "summary": "OpenAI 模型接入 Amazon Bedrock，非加密原生事件，无直接风险信号。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "81326aeed169996f",
+    "csv_order": 77,
+    "title": "Buterin提议以期权合约重建DeFi",
+    "content": "以太坊联合创始人Vitalik Buterin提议围绕期权合约重建去中心化金融（DeFi），而非依赖抵押债务。据NS3报道，该设计将从一个ETH中铸造P和N资产，使清算变得不可能，因为它们的收益总和始终为一个ETH。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 05:32:56",
+    "risk_score": 15,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Vitalik Buterin 提出围绕期权合约重建 DeFi 的新设计，使清算不可能，该提案仍处于概念阶段，尚未实施，无已知攻击或损失。",
+    "summary": "Buterin 提议用期权合约代替抵押债务的 DeFi 设计，可能改变风险模型，但目前仅是一个学术建议。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "df4fff72e6e67790",
+    "csv_order": 78,
+    "title": "AI趋势 | Alphabet筹资800亿美元",
+    "content": "据Odaily星球日报报道，谷歌母公司Alphabet(GOOG.O)正通过股权发行筹集800亿美元资金，以支持其人工智能支出计划。此次融资包括300亿美元的承销公开发行和400亿美元的“按市价发行”交易。伯克希尔·哈撒韦公司将通过私募方式认购价值100亿美元的股票。Alphabet表示，AI需求已超出公司现有供应能力，扩大投资规模旨在扩展基础架构，为未来增长提供支撑。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 05:13:38",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅报道Alphabet通过股权发行筹资800亿美元用于AI基础设施，未涉及加密货币市场及任何加密资产，对加密市场的直接冲击有限，仅可能通过AI概念情绪产生间接影响。",
+    "summary": "Alphabet融资行为对加密市场无直接风险，仅存间接情绪传导可能",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "5c71fe2f74ccf388",
+    "csv_order": 79,
+    "title": "特朗普 Meme 币推出 Trump Coin Club",
+    "content": "Bill Zanker 推出 Trump Coin Club，为特朗普 Meme 币的顶级持有者提供福利。据 NS3 报道，首场活动将为19名持有者提供世界杯决赛VIP之旅。Zanker 表示，类似活动将至少每季度举行一次，围绕大型国际赛事展开。该代币自去年1月峰值以来已下跌超过97%，Zanker 希望持有者继续持有该币。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 05:08:11",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "诈骗 / 跑路 / Rug Pull 风险",
+    "evidence": "该特朗普 Meme 币自峰值已下跌超过 97%，项目方通过建立俱乐部提供世界杯决赛 VIP 之旅等福利，诱导顶级持有者继续持有，实质上可能是避免集中抛售、延缓崩盘的收割手段。",
+    "summary": "暴跌 97% 的 Meme 币通过 VIP 福利诱导持仓，存在进一步归零风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "950cc8dabc719aaa",
+    "csv_order": 80,
+    "title": "布鲁塞尔数字资产公司计划收购BlockFills",
+    "content": "布鲁塞尔的数字资产服务公司计划收购总部位于芝加哥的BlockFills，该公司数月前申请了第11章破产保护。据CoinDesk报道，此次收购需获得法院批准。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 05:00:31",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "偿付能力 / 储备 / 流动性风险",
+    "evidence": "BlockFills 数周前申请第11章破产保护，表明该公司存在偿付能力或流动性问题，但收购计划若完成可能缓解相关风险，目前仅为计划阶段。",
+    "summary": "一家陷入破产保护的数字资产公司被收购，显示细分领域存在偿付能力隐患，但对市场直接影响有限。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "b6452dcf1cb53fae",
+    "csv_order": 81,
+    "title": "欧盟拟赋予成员国财政灵活性",
+    "content": "据金十数据报道，欧盟正权衡相关方案，拟赋予成员国额外的财政灵活性，以应对因伊朗局势引发的高昂能源成本所带来的冲击。知情人士透露，欧盟委员会正在讨论的一项提案，将允许各国政府在欧盟既定的财政框架之外，额外支出相当于其GDP约0.3%的资金用于能源相关开支。这项措施将作为一种“豁免条款”发挥作用，类似于此前成员国获准享有的“国防支出豁免权”。意大利长期以来一直饱受高债务水平的困扰；近几个月来，随着该国全力应对高昂的能源成本，意大利已成为呼吁布鲁塞尔赋予其更大财政灵活性的最强音之一。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:57:34",
+    "risk_score": 15,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "欧盟计划赋予成员国额外财政灵活性，允许增加能源支出，可能增加政府债务与通胀压力，间接影响全球金融市场及加密货币情绪。",
+    "summary": "欧盟财政灵活性提案可能引发宏观不确定性，但未直接涉及加密货币。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "96fe1f743fda9e56",
+    "csv_order": 82,
+    "title": "Keyrock拟以325万美元收购破产公司BlockFills",
+    "content": "比利时数字资产服务公司Keyrock计划以325万美元收购破产的加密交易和借贷公司BlockFills，此交易需经法院批准。据CoinDesk报道，BlockFills于3月申请第11章破产保护，资产在5000万至1亿美元之间，负债在1亿至5亿美元之间。此次收购将使Keyrock获得BlockFills的机构客户网络，包括对冲基金、资产管理公司、做市商和矿业公司。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:49:11",
+    "risk_score": 75,
+    "risk_level": "高风险",
+    "risk_type": "偿付能力 / 储备 / 流动性风险",
+    "evidence": "BlockFills 已申请第11章破产保护，其资产在5000万至1亿美元之间，但负债高达1亿至5亿美元，存在严重的偿付能力缺口，导致破产清算。",
+    "summary": "加密借贷公司 BlockFills 破产，资产远低于负债，凸显行业偿付能力与流动性风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "cb06e9da94d6c001",
+    "csv_order": 83,
+    "title": "Intel股价下跌5.14%",
+    "content": "Intel股价周五下跌5.14%，周一早盘继续下滑，因Nvidia发布RTX Spark。Intel股价自3月下旬的低点约40美元上涨超过230%，至5月11日接近133美元。据NS3报道，摩根士丹利估计Intel的18A工艺良率约为50%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:39:18",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容仅涉及 Intel 股价因 Nvidia 新品发布及工艺良率报道而下跌，与加密货币市场无直接关联，未发现可识别的加密资产风险信号。",
+    "summary": "Intel股价下跌的科技股新闻与加密货币无关，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "8d2c78f17e100ee0",
+    "csv_order": 84,
+    "title": "特朗普政府放弃设立18亿美元基金",
+    "content": "据金十数据引述外媒报道，据一位知情人士透露，特朗普政府打算放弃设立一项备受争议的18亿美元法律基金。该基金旨在援助那些声称自己是政府权力“武器化”受害者的人。此决定是在共和党和民主党人士的强烈反对声中做出的；两党人士均嘲讽该基金不过是为特朗普总统的政治盟友设立的一个“小金库”。这对特朗普而言是近期遭遇的又一挫折：他此前关于改革肯尼迪表演艺术中心的计划刚在法庭上遭遇败诉，而在结束伊朗战争的问题上也一直举步维艰。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:37:50",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为特朗普政府放弃设立一项18亿美元法律基金，属于美国国内政治决策，未提及任何与加密货币市场、交易所或特定代币相关的信息。",
+    "summary": "非加密相关政治新闻，对加密货币市场无直接冲击",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "e23e7c74e4f310c5",
+    "csv_order": 85,
+    "title": "美股三大指数创新高",
+    "content": "美国三大股指周一收盘创历史新高。据 NS3 报道，Nvidia上涨6%，Oracle上涨约10%，Qualcomm下跌约9%，Tesla下跌4.5%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:26:07",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "美股三大指数创新高，部分科技股大涨，但未直接提及加密货币市场，亦无链上或币种相关风险信息，整体对加密市场无直接负面冲击。",
+    "summary": "美股创新高但未涉及加密货币，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "3cd9a568f28f5efe",
+    "csv_order": 86,
+    "title": "BNB 突破 700 USDT，24 小时跌幅收窄至1.34%",
+    "content": "据币安行情数据显示，BNB 突破 700 USDT，现报价 701.190002 USDT，24 小时跌幅收窄至1.34%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:22:07",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "BNB 价格突破 700 USDT，24 小时跌幅收窄至 1.34%，属于正常日内波动，无异常或风险事件。",
+    "summary": "BNB 行情小幅回升，跌幅收窄，无实质性风险。",
+    "coins": [
+      "BNB"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BNB",
+        "name": "BNB",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "b8c93b0de40352b6",
+    "csv_order": 87,
+    "title": "CME 推加密货币期货24/7交易，首周末名义成交额5000万美元",
+    "content": "全球最大衍生品交易所CME集团周一发布公告称，已正式推出加密货币期货与期权24/7全天候交易。该延长交易时段于5月29日周五上线，首个周末合计成交逾7200张合约，名义价值约5000万美元，参与机构涵盖零售与机构客户。CME集团股票、外汇及另类产品全球主管Tim McCourt表示，自2017年推出比特币期货以来，转向全天候模式是市场发展的自然演进，旨在弥合传统受监管场所与加密资产7×24交易特性之间的缺口。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:19:45",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "交易所与系统运维风险",
+    "evidence": "CME集团正式推出加密货币期货与期权24/7全天候交易，首个周末成交逾7200张合约，名义价值约5000万美元，运行平稳，未出现系统中断或异常情况。",
+    "summary": "CME推出加密产品全天候交易，短期运行正常，风险极低。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "比特币"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "0012edfff3a9889a",
+    "csv_order": 88,
+    "title": "Anchorage Digital 推出新平台优化加密交易结算",
+    "content": "据 Cointelegraph 报道，Anchorage Digital 推出了一种结算平台，允许机构在加密场所交易，同时将资产保存在其联邦监管的银行中，以帮助管理对手方和运营风险。 该平台名为 Coordinated Multiparty Settlement（CMS），通过共享结算层连接交易场所、主经纪商和机构客户，减少资产转移次数，降低预先资助的交易所账户需求。 Anchorage 表示，CMS 验证资金义务并协调参与者之间的结算，减少完成交易所需的资产转移次数。该系统旨在减少预先资助的交易所账户需求。 在 CMS 模式下，主经纪商管理客户余额和信用关系，交易场所充当匹配引擎，Anchorage 提供托管和结算服务。首批合作平台为 Spotex，未来将整合更多场所。 金融机构和数字资产公司正快速扩展代币化资产和机构交易的基础设施，Canton Network 成为这些努力的一个焦点。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:13:41",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "交易所与系统运维风险",
+    "evidence": "Anchorage Digital 推出协调多方结算平台 CMS，通过共享结算层减少资产转移次数和预先资助账户需求，旨在降低对手方和运营风险，属于积极的基础设施优化，未出现实际风险事件。",
+    "summary": "Anchorage 推出机构级结算平台，降低交易对手和运营风险，整体风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "c855582052bd585d",
+    "csv_order": 89,
+    "title": "特朗普称与伊朗谈判进展迅速",
+    "content": "美国总统特朗普表示，与伊朗的谈判正在进行中，并且进展迅速。据 NS3 报道，该声明描述了积极的外交谈判，但未宣布达成协议。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:11:06",
+    "risk_score": 35,
+    "risk_level": "中风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "地缘政治谈判进展可能影响全球市场情绪和风险资产，虽声明积极但未达成协议，不确定性仍存。",
+    "summary": "美伊谈判进展带来地缘政治不确定性，可能间接影响加密货币等风险资产。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "dd1f0b2072967dd8",
+    "csv_order": 90,
+    "title": "以色列推迟对贝鲁特空袭计划",
+    "content": "据Odaily星球日报报道，消息人士称，以色列应美国的要求推迟了原定对黎巴嫩贝鲁特的空袭计划。美国正在推进一项停火倡议，并要求以色列等待。但相关消息未得到以色列官方证实。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 04:03:55",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "以色列应美国要求推迟原定对黎巴嫩贝鲁特的空袭计划，美国正在推进停火倡议。此举可能暂时缓解中东地缘紧张局势，但相关消息未得到官方证实，未来仍存在不确定性。",
+    "summary": "中东地缘冲突暂缓，短期利空情绪减弱，但仍存不确定性。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "82d79fe0024e67c1",
+    "csv_order": 91,
+    "title": "内塔尼亚胡称以色列将打击贝鲁特目标",
+    "content": "以色列总理内塔尼亚胡6月1日表示，如果真主党不停止对以色列城市和公民的攻击，以色列将打击贝鲁特的目标。据 NS3 报道，他表示已与美国总统特朗普通电话。内塔尼亚胡称，以色列国防军将按计划继续在黎巴嫩南部展开行动。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:53:50",
+    "risk_score": 75,
+    "risk_level": "高风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "以色列总理威胁打击黎巴嫩首都贝鲁特，中东地缘政治冲突可能升级，引发全球市场避险情绪和波动。",
+    "summary": "中东地缘冲突升级言论可能冲击全球风险资产，包括加密货币市场。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "be37e5b65ff9232b",
+    "csv_order": 92,
+    "title": "特朗普预测油价将很快下跌",
+    "content": "特朗普表示，他不在乎伊朗谈判是否结束，并预测油价将很快下跌。据 NS3 报道，伊朗国家媒体声称，德黑兰将停止谈判并完全封锁霍尔木兹海峡。特朗普还表示，他将询问以色列总理内塔尼亚胡有关黎巴嫩的情况。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:42:20",
+    "risk_score": 45,
+    "risk_level": "中风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "特朗普预测油价下跌，但新闻同时提及伊朗可能封锁霍尔木兹海峡，地缘政治紧张可能引发能源价格冲击，进而扰动全球金融市场与风险资产。",
+    "summary": "地缘政治言论与封锁海峡威胁可能引发宏观冲击，间接影响加密市场情绪。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "587dd9022ea55d34",
+    "csv_order": 93,
+    "title": "Kalshi申请自认证12种山寨币永续期货",
+    "content": "Kalshi申请自认证与12种主要山寨币挂钩的永续期货，包括Ethereum、XRP、Solana和Dogecoin。据NS3报道，这些产品未立即获得批准，因为CFTC表示，除Bitcoin外的批准将逐案处理。CoinGlass数据显示，Bitcoin在加密衍生品未平仓合约中领先，达到549亿美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:39:53",
+    "risk_score": 50,
+    "risk_level": "中风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "Kalshi申请自认证12种山寨币永续期货，CFTC表示除比特币外的批准将逐案处理，表明山寨币衍生品面临监管障碍，可能带来不确定性。",
+    "summary": "Kalshi山寨币永续期货申请遭遇CFTC逐案审查，监管不确定性增加。",
+    "coins": [
+      "ETH",
+      "XRP",
+      "SOL",
+      "DOGE",
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "XRP",
+        "name": "XRP",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "SOL",
+        "name": "Solana",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "DOGE",
+        "name": "Dogecoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "ce7a0038ebc80c1c",
+    "csv_order": 94,
+    "title": "ETH 突破 2,000 USDT，24 小时涨幅0.20%",
+    "content": "据币安行情数据显示，ETH 突破 2,000 USDT，现报价 2,002.27002 USDT，24 小时涨幅0.20%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:30:14",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "ETH 价格突破 2000 USDT，24 小时涨幅仅 0.20%，属于日常行情波动，无风险事件或异常迹象。",
+    "summary": "ETH 小幅上涨突破 2000 美元，属于正常行情，无风险",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "d38f1ae9310ffc7d",
+    "csv_order": 95,
+    "title": "TON 将原生加密货币更名为 Gram",
+    "content": "Pavel Durov 周一表示，TON 的原生加密货币将更名为 Gram。据 NS3 报道，此次更名预计将耗时约三周。这是 Durov 的 MTONGA 计划中七个步骤中的第四步。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:28:55",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "新闻仅报道 TON 将原生代币更名为 Gram，属于项目品牌重塑的常规操作，无相关风险信息。",
+    "summary": "TON 代币更名为 Gram，属于品牌更新，无直接风险。",
+    "coins": [
+      "TON"
+    ],
+    "coin_details": [
+      {
+        "symbol": "TON",
+        "name": "Toncoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "7fdbd76d18249b0a",
+    "csv_order": 96,
+    "title": "黎巴嫩总统办公室：真主党同意美国提议的停火",
+    "content": "黎巴嫩总统办公室表示，真主党已同意美国提出的双方停火协议。据 NS3 报道，总统办公室称真主党已将其接受停火的决定传达给黎巴嫩当局。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:28:51",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "黎巴嫩真主党同意美国提议的停火，地缘政治紧张局势缓和，可能对风险资产情绪产生正面影响，但新闻未提及加密市场或具体币种。",
+    "summary": "中东停火消息降低地缘政治不确定性，对加密市场影响有限且偏正面。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "6f2e7b3a2be48272",
+    "csv_order": 97,
+    "title": "Buterin支持桑德斯AI公司股权税提案",
+    "content": "以太坊联合创始人Vitalik Buterin支持美国参议员伯尼·桑德斯（Bernie Sanders）的提案，建议对主要AI公司征收一次性50%的股权税。据NS3报道，桑德斯表示，OpenAI和xAI等领先公司在未经许可的情况下利用了集体人类知识进行训练。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:28:48",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "以太坊联合创始人Vitalik Buterin支持美国参议员伯尼·桑德斯对主要AI公司征收一次性50%股权税的提案，该提案可能影响科技行业政策走向，间接波及加密市场情绪，但未直接提及加密货币风险。",
+    "summary": "Buterin支持AI股权税提案，政策动态对加密市场情绪有轻微间接影响。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "2468b459380558b7",
+    "csv_order": 98,
+    "title": "Vitalik批评AI民族主义",
+    "content": "以太坊联合创始人Vitalik Buterin批评前沿AI公司拥护AI民族主义。据BeInCrypto报道，他在回应参议员伯尼·桑德斯的提案时发表了这一言论。桑德斯提议对OpenAI、Anthropic等公司征收一次性股权税，将其50%的股份转为公共所有。桑德斯认为，AI是基于人类集体知识构建的，其产生的财富不应仅流向少数高管。Vitalik指出，这些公司曾承诺服务全人类，如今却以民族主义为由集中权力。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:25:54",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Vitalik Buterin批评前沿AI公司拥护AI民族主义，该言论与加密货币市场无直接关联，未引发项目或市场风险。",
+    "summary": "以太坊创始人批评AI民族主义，不构成加密资产直接风险。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "以太坊"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "43a15bbce1fe985d",
+    "csv_order": 99,
+    "title": "Salesforce 持有 Anthropic 股份价值约 50 亿美元",
+    "content": "据 ChainCatcher 报道，Salesforce 在多次投资后，持有 Anthropic 的股份价值约 50 亿美元。知情人士透露，Salesforce 于 2023 年初首次参与 Anthropic 的融资，投资额约为 5000 万美元，并在后续融资中持续跟投。Zoom Communications 通过 2023 年初对 Anthropic C 轮融资的投资，净赚逾 10 亿美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:23:35",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为Salesforce对AI公司Anthropic的股权投资，与加密货币市场无直接关联，未发现任何链上漏洞、诈骗、监管、交易所风险或币价波动等风险因素。",
+    "summary": "该新闻涉及传统科技公司股权投资，无加密货币相关风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "2fe107f0c2176e8c",
+    "csv_order": 100,
+    "title": "Twenty One Capital面临NYSE合规问题",
+    "content": "Twenty One Capital需在周五前解决NYSE审计委员会不合规问题，否则其股票资料将被标注BC。据NS3报道，此问题源于Tether在5月19日购买软银全部A类股后，两名软银董事辞职。Twenty One Capital最近披露持有43,514枚BTC，其股票在过去一年中下跌了83%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:17:45",
+    "risk_score": 80,
+    "risk_level": "高风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "Twenty One Capital面临NYSE审计委员会不合规问题，如周五前未解决将被标注BC；公司披露持有43,514枚BTC，且股价过去一年下跌83%，此背景可能引发市场对其资产处置的担忧。",
+    "summary": "持有巨量BTC的Twenty One Capital因NYSE合规问题面临财务与市场风险，可能波及BTC市场。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "b16900220a12e56b",
+    "csv_order": 101,
+    "title": "AI趋势 | OpenAI投资改善萨林娱乐中心",
+    "content": "据金十数据报道，OpenAI宣布与Related Digital、甲骨文、沃尔布里奇和黑石集团合作，共同贡献1000万美元用于萨林娱乐中心的改善。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 03:14:54",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为OpenAI联合多家企业捐款改善娱乐中心，属于传统企业慈善活动，与加密货币市场无直接关联，不涉及任何链上漏洞、监管、币价波动或交易风险。",
+    "summary": "企业慈善新闻，无加密货币风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "7003136aea27e0ce",
+    "csv_order": 102,
+    "title": "奥尔特曼：未关注Anthropic上市时机",
+    "content": "据金十数据引述CNBC报道，OpenAI创始人奥尔特曼表示，在Anthropic提交上市申请后，他并未关注IPO的时机。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 02:48:13",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容仅涉及OpenAI创始人奥尔特曼对Anthropic上市时机的个人表态，未提及任何加密货币、交易平台、链上活动或加密市场相关风险，与加密金融领域无直接关联。",
+    "summary": "无关加密市场的AI公司上市动态，无风险信号",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "d4bfefda03c792d6",
+    "csv_order": 103,
+    "title": "投资者上周从数字资产产品撤资16.7亿美元",
+    "content": "据CoinDesk报道，CoinShares最新报告显示，上周投资者从数字资产投资产品中撤资16.7亿美元，其中比特币基金录得今年最大单周资金流出。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 02:44:52",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "上周数字资产投资产品净流出16.7亿美元，其中比特币基金录得年内最大单周资金流出，可能反映市场避险情绪蔓延，引发进一步抛售和价格剧烈波动。",
+    "summary": "数字资产产品遭遇2023年最大单周资金撤出，比特币基金流出创年内纪录，市场下行波动风险加剧。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "4b145ca6d29b90e2",
+    "csv_order": 104,
+    "title": "Anchorage Digital 推出 Atlas 结算层",
+    "content": "Anchorage Digital 正在将 Atlas 定位为机构交易的多方协调结算层，适用于三个非托管 DeFi 平台。该设置首先在 Hyperliquid、Lighter 和 Aave 上启动。据 NS3 报道，Anchorage 未披露通过 Atlas 非托管分支结算的费用或实时交易量。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 02:38:39",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "交易所与系统运维风险",
+    "evidence": "新闻为Anchorage Digital推出Atlas结算层，用于非托管DeFi平台Hyperliquid、Lighter和Aave，未披露费用和交易量，未提及任何安全漏洞、诈骗或监管风险，属于正常业务公告。",
+    "summary": "Anchorage Digital推出Atlas结算层，无直接风险。",
+    "coins": [
+      "AAVE"
+    ],
+    "coin_details": [
+      {
+        "symbol": "AAVE",
+        "name": "Aave",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "737790112ff17aef",
+    "csv_order": 105,
+    "title": "Grayscale更新ETF申请，管理费0.29%",
+    "content": "Grayscale向美国证券交易委员会提交了其Hyperliquid Staking ETF的修订版S-1注册申请。更新后的文件列出了0.29%的管理费。据NS3报道，Bloomberg分析师James Seyffart表示，交易可能最早于本周开始。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 02:37:18",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "Grayscale 提交了 Hyperliquid Staking ETF 的修订版 S-1 申请，管理费定为 0.29%，分析师称交易可能近期开始。此属常规监管申请流程更新，未见负面风险因素。",
+    "summary": "Grayscale 更新 ETF 申请文件，管理费 0.29%，属于正常监管推进，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "06bba5bda235de37",
+    "csv_order": 106,
+    "title": "USDC 财政部铸造 2.5 亿 USDC",
+    "content": "Whale Alert 报告称，USDC 财政部铸造了 2.5 亿 USDC。据 NS3 报道，这一铸币活动引起了市场的关注。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 02:37:13",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "稳定币异常风险",
+    "evidence": "USDC 财政部铸造了 2.5 亿 USDC，该铸币活动引发市场关注，但未说明是否存在异常或负面背景。",
+    "summary": "USDC 财政部铸造 2.5 亿枚 USDC，属于正常供应管理，暂无明显风险信号。",
+    "coins": [
+      "USDC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "b1c4b27d011844bb",
+    "csv_order": 107,
+    "title": "BNB 突破 690 USDT，24 小时跌幅收窄至2.85%",
+    "content": "据币安行情数据显示，BNB 突破 690 USDT，现报价 690.52002 USDT，24 小时跌幅收窄至2.85%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 02:24:07",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "新闻仅提及 BNB 价格回升至 690 USDT，24 小时跌幅收窄至 2.85%，属于正常的市场行情波动，未出现极端异常或风险事件。",
+    "summary": "BNB 价格小幅波动，跌幅收窄，无明显风险信号。",
+    "coins": [
+      "BNB"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BNB",
+        "name": "BNB",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "161b2e894bdb3a4b",
+    "csv_order": 108,
+    "title": "预测市场显示美伊协议胜率波动",
+    "content": "据 ChainCatcher 报道，Catcher Predict 监测显示，预测市场 Polymarket 上关于“美国宣布与伊朗新协议或停火延期”的子市场“6 月 30 日”的“是”选项胜率在一小时内从 46.5% 上升至 62%，波动幅度达 15.5%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 02:13:45",
+    "risk_score": 30,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "预测市场 Polymarket 显示美国与伊朗新协议或停火延期的胜率在一小时内从46.5%飙升至62%，短期波动达15.5%，反映市场对地缘政治事件的高度敏感和不确定性。",
+    "summary": "美伊协议预测胜率大幅波动，反映地缘政治不确定性，可能间接影响整体金融市场情绪。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "198bef677f89379e",
+    "csv_order": 109,
+    "title": "Bitwise 收购 Superstate 的 Crypto Carry Fund",
+    "content": "据 Cointelegraph 报道，Bitwise 完成了对 Superstate 的 Crypto Carry Fund (USCC) 的收购，获得了一个使用市场中性加密交易策略的代币化投资工具。 Bitwise 表示将于 5 月 7 日接管该基金的管理，Superstate 将专注于其代币化基金平台 FundOS。该基金面向合格购买者，通过加密现金和套利交易产生收益。 截至 5 月 29 日，基金管理的资产约为 2.59 亿美元，收益率约为 4%。投资组合包括现金抵押、代币化国债和加密资产。 Superstate 网站显示，USCC 股份在 Aave、Kamino 和 Morpho 等 DeFi 协议上支持借贷活动。Bitwise 成立于 2017 年，总部位于旧金山，管理约 110 亿美元的客户资产。 代币化主动策略基金快速增长，RWA.xyz 数据显示，从 2025 年 6 月的约 4.49 亿美元增长到 2026 年 5 月底的约 13.8 亿美元，增长超过 200%。 资产管理公司也在将主动管理的加密策略引入 ETF 市场。3 月，T. Rowe Price 修订计划推出主动管理的加密 ETF，4 月，高盛申请推出主动管理的比特币收入 ETF。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 02:13:35",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "新闻为 Bitwise 收购 Superstate 的 Crypto Carry Fund，获得市场中性代币化投资工具，未提及任何漏洞、欺诈或监管问题，仅涉及基金管理权变更及 DeFi 借贷协议支持，无明显负面风险。",
+    "summary": "基金收购事件无直接市场风险，但管理团队变更和 DeFi 协议参与需关注后续运营。",
+    "coins": [
+      "AAVE",
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "AAVE",
+        "name": "Aave",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "c73ef7cd55352a08",
+    "csv_order": 110,
+    "title": "Strive计划扩展42亿美元ATM股票计划",
+    "content": "Strive计划将其ATM股票发行计划扩大42亿美元，以资助额外的BTC购买。据NS3报道，该计划将把ASST和SATA的股票限额各提高21亿美元。Strive目前持有16,500枚BTC，价值约12.7亿美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 01:48:57",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "Strive 计划通过 ATM 股票发行筹集 42 亿美元用于额外购买 BTC，目前持有 16,500 枚 BTC（约 12.7 亿美元），可能引发大额买入需求。",
+    "summary": "Strive 拟扩大股票发行以资助 BTC 购买，构成潜在巨鲸买入行为。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "a4dad0a95b7cabcd",
+    "csv_order": 111,
+    "title": "特朗普称以色列与真主党达成停火协议",
+    "content": "特朗普于6月1日表示，以色列和真主党同意停止相互攻击。据 NS3 报道，他表示美国不会向贝鲁特派遣军队。特朗普称，华盛顿通过高级代表与真主党进行了良好对话后达成了该协议。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 01:48:47",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻提及以色列与真主党达成停火协议，可能缓解地缘紧张局势，对风险资产情绪有微弱正面影响，未直接涉及加密市场。",
+    "summary": "地缘停火协议可能降低宏观不确定性，对加密货币影响微弱。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "578ff543cbbccf8b",
+    "csv_order": 112,
+    "title": "布伦特原油价格或飙升至150美元",
+    "content": "布伦特原油价格在反弹后接近每桶94美元。据 NS3 报道，埃克森美孚（ExxonMobil）高级副总裁Neil Chapman预测，布伦特原油价格可能飙升至每桶150至160美元。国际能源署（IEA）表示，全球库存在3月和4月减少了约2.46亿桶。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 01:28:19",
+    "risk_score": 15,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻预测布伦特原油价格可能飙升至150-160美元，可能引发宏观冲击，间接影响风险资产。",
+    "summary": "原油价格飙升预期或引发通胀担忧，可能对加密货币市场带来宏观经济压力",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "041be0a21b10bd09",
+    "csv_order": 113,
+    "title": "Polymarket裁定Strategy未售BTC",
+    "content": "据Odaily星球日报报道，尽管市场传言Strategy出售了BTC，Polymarket上“Strategy 5月卖币”最终裁定为否。Polymarket官方表示，如需发布澄清公告，将于美国东部时间6月1日下午1点出炉；若未发布声明，即代表不再出具相关澄清说明。无论是否发布澄清内容，委托挂单簿都将在美国东部时间当日下午1点进行清算。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 01:13:34",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "Polymarket 裁定 Strategy 未在 5 月出售 BTC，平息了此前市场关于大规模抛售的传言，避免潜在恐慌。",
+    "summary": "预测市场裁定 Strategy 未售 BTC，缓解巨鲸抛售担忧。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "8e15afa4b8454cdd",
+    "csv_order": 114,
+    "title": "Telegram创始人宣布TON代币更名为Gram",
+    "content": "Telegram创始人Pavel Durov表示，TON生态系统将把其原生代币从TON更名为Gram。据NS3报道，此次更名预计将在未来三周内完成。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 01:10:26",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "TON生态系统原生代币将从TON更名为Gram，预计三周内完成，更名可能造成市场与用户短期认知混淆。",
+    "summary": "TON更名Gram，属团队治理决策，短期存在轻微认知风险。",
+    "coins": [
+      "TON"
+    ],
+    "coin_details": [
+      {
+        "symbol": "TON",
+        "name": "Toncoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "c762f430a01bf25a",
+    "csv_order": 115,
+    "title": "Buterin提议用期权合约构建加密指数资产",
+    "content": "以太坊联合创始人Vitalik Buterin提议使用期权合约来构建指数追踪的加密资产，而非基于债务的DeFi结构。据NS3报道，Buterin表示，该模型可以减少突然的清算，并与较慢的价格预言机配合使用。目前，这一概念仍处于理论阶段，尚未在以太坊上实施。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 01:07:45",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Vitalik Buterin提出用期权合约构建加密指数资产的理论概念，旨在减少清算风险并与慢预言机配合，目前仅处于理论阶段，未在以太坊上实施，不构成直接市场或安全风险。",
+    "summary": "Vitalik Buterin的理论性DeFi改进提议，暂无实际风险。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "9387000fa8cd44f1",
+    "csv_order": 116,
+    "title": "布伦特原油上涨5%至96美元以上",
+    "content": "布伦特原油价格上涨约5%，超过每桶96美元，因美伊和平谈判结束后，美国表示将继续封锁霍尔木兹海峡。据 NS3 报道，WTI原油价格也跳涨约7%，超过每桶93美元。塔斯尼姆通讯社报道，德黑兰将寻求完全关闭霍尔木兹海峡。全球五分之一的石油供应通过该海峡运输。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 01:04:51",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "布伦特原油上涨5%至96美元以上，WTI原油跳涨7%至93美元以上，伊朗威胁完全关闭霍尔木兹海峡，全球五分之一的石油供应通过该海峡，地缘政治冲突急剧升级可能引发全球能源供应危机和市场剧烈动荡。",
+    "summary": "霍尔木兹海峡封锁威胁导致油价飙升，宏观地缘政治冲击可能引发全球风险资产（含加密货币）大幅波动。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "15391166fe54d184",
+    "csv_order": 117,
+    "title": "Karmine Corp 首杀胜率飙升至 88.5%",
+    "content": "据 ChainCatcher 报道，预测市场 Polymarket 上“LoL：Karmine Corp 对阵 GIANTX - LEC 季后赛”事件中，子市场“第二局首杀”的“Karmine Corp”选项胜率在一小时内从 50% 飙升至 88.5%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:43:57",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "预测市场 Polymarket 上“Karmine Corp 第二局首杀”选项胜率在一小时内从 50% 飙升至 88.5%，属于电子竞技赛事预测市场行为，与加密货币市场无直接风险关联。",
+    "summary": "电竞预测市场胜率急剧变化，但未涉及加密货币市场风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "9843d258b4b10eb3",
+    "csv_order": 118,
+    "title": "伊朗要求继续调解以支持停火",
+    "content": "据沙特阿拉伯阿拉比亚电视台报道，巴基斯坦外交部表示，伊朗方面要求继续进行调解，以缓和当前局势并支持停火。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:43:35",
+    "risk_score": 25,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "伊朗要求继续调解以缓和局势并支持停火，表明地缘政治紧张可能出现暂时缓解信号，但局势仍存不确定性，对加密货币市场影响有限。",
+    "summary": "伊朗呼吁停火调解，地缘政治紧张略现缓和，短期对大盘资产的避险情绪有所降温。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "be2d3adb8c2c91b7",
+    "csv_order": 119,
+    "title": "THORChain修复关键漏洞",
+    "content": "V12表示，THORChain悄然修复了一个影响约3000万美元总锁定价值的关键资金损失漏洞。据NS3报道，THORChain的一位代表称，该漏洞赏金计划已永久取消。V12计划在未来几天披露更多链暂停拒绝服务漏洞。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:34:43",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "链上漏洞 / 攻击风险",
+    "evidence": "THORChain修复了一个可能影响约3000万美元TVL的关键资金损失漏洞，且漏洞赏金计划已被永久取消，并预告未来将披露链暂停拒绝服务漏洞，表明协议层仍存在严重安全缺陷。",
+    "summary": "THORChain存在高达3000万美元潜在损失的关键漏洞，虽已修复但赏金计划取消引发安全担忧。",
+    "coins": [
+      "RUNE"
+    ],
+    "coin_details": [
+      {
+        "symbol": "RUNE",
+        "name": "THORChain",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "915eca2b4a5db913",
+    "csv_order": 120,
+    "title": "Serenity EWY ETF 持仓增长485%",
+    "content": "Serenity 表示，其 EWY ETF 持仓在过去几个月增长了485%。据 NS3 报道，Serenity 将这一增长主要归因于隐含波动率的扩张和方向性记忆长策略。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:29:36",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅提及Serenity EWY ETF持仓增长485%及原因，属于传统金融市场产品表现，未涉及任何加密货币、交易所或链上活动，与加密市场无直接关联。",
+    "summary": "传统ETF持仓增长消息，与加密货币市场无关，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "5a10390c68cc69e5",
+    "csv_order": 121,
+    "title": "ARM Holdings股价上涨18.51%",
+    "content": "，达到418.68美元，总市值达到4470.2亿美元。据NS3报道，这一增长反映了市场对该公司的积极预期。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:29:20",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "ARM Holdings 是传统半导体公司，股价上涨与加密货币市场无直接关联，未发现加密领域风险因素。",
+    "summary": "ARM 股价上涨对加密市场无风险影响。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "abe999bdfc61fd03",
+    "csv_order": 122,
+    "title": "特朗普称将继续封锁霍尔木兹海峡",
+    "content": "特朗普表示，他将继续维持霍尔木兹海峡的封锁。据 NS3 报道，特朗普称尚未收到来自伊朗的任何关于暂停谈判的信息。他还表示，关于伊朗的讨论过多。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:29:11",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "特朗普宣称将继续维持霍尔木兹海峡的封锁，且未收到伊朗暂停谈判的信息，地缘紧张局势可能加剧，引发全球能源供应担忧和金融市场动荡。",
+    "summary": "霍尔木兹海峡封锁持续，中东地缘风险升级，可能冲击全球市场。",
+    "coins": [
+      "BTC",
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      },
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "3f280f04d93080a7",
+    "csv_order": 123,
+    "title": "Anthropic提交上市申请",
+    "content": "Anthropic于2026年6月1日向美国证券交易委员会（SEC）秘密提交了一份S-1草案。据NS3报道，此前该公司在H轮融资中筹集了650亿美元，融资后估值为9650亿美元。目前尚未确定股票数量和发行价格。SpaceX和OpenAI也在推进上市计划。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:28:50",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "该新闻仅涉及AI公司Anthropic提交上市申请，与加密货币市场无直接关联，未发现加密资产风险。",
+    "summary": "AI公司上市新闻，无加密市场风险",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "27fb413d244c65eb",
+    "csv_order": 124,
+    "title": "Michael Saylor：STRC将成为全球最佳信用工具",
+    "content": "据CoinDesk报道，Strategy（MSTR）执行主席Michael Saylor在公司近四年来首次出售比特币后打破沉默，于X平台发文称\"我们的目标是让STRC成为全球最佳信用工具\"。公司上周以均价77,135美元出售32枚BTC，获得约250万美元资金用于支付优先股股息。比特币目前交易价约70,000美元。两位华尔街分析师认为此次出售经济上\"微不足道\"，属于支持资本结构的战术性操作，而非背离Strategy长期增持比特币的战略方针。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:27:35",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Strategy执行主席宣布让STRC成为全球最佳信用工具，同时公司近四年来首次出售32枚BTC（约250万美元）用于支付优先股股息，两位分析师认为出售经济上微不足道，属于战术性操作。",
+    "summary": "Strategy微量出售BTC支付股息并宣传STRC信用工具，市场无重大波动，风险极低。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "af5f37ae3133b9ad",
+    "csv_order": 125,
+    "title": "加拿大央行：经济出现反弹迹象",
+    "content": "据金十数据报道，加拿大央行高级副行长罗杰斯表示，4月份GDP的初步数据显示，经济已出现一定程度的反弹。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:26:12",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "加拿大央行高级副行长罗杰斯表示4月份GDP初步数据显示经济已出现一定程度的反弹，可能影响加拿大央行货币政策宽松步伐。",
+    "summary": "加拿大经济反弹迹象可能推迟降息预期，对加密市场构成轻微宏观压力。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "4453487ca0abf8d4",
+    "csv_order": 126,
+    "title": "加拿大央行副行长：GDP收缩符合衰退定义",
+    "content": "据金十数据报道，加拿大央行高级副行长罗杰斯表示，连续两个季度的年化GDP收缩符合衰退的一种定义，但不应过于依赖任何单一指标。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:25:53",
+    "risk_score": 30,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "加拿大央行副行长指出连续两个季度年化GDP收缩符合衰退的一种定义，暗示经济下行压力，可能抑制风险资产偏好，但未直接针对加密货币市场。",
+    "summary": "加拿大央行官员暗示经济衰退风险，对加密货币市场情绪构成轻微宏观压力。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "9f52fdd24492313b",
+    "csv_order": 127,
+    "title": "特朗普称未收到伊朗暂停谈判消息",
+    "content": "特朗普在接受 NBC 新闻记者采访时表示，他尚未收到伊朗关于暂停谈判的消息。据Odaily星球日报报道，特朗普认为关于伊朗的谈判过多，保持沉默会非常好，并将继续在霍尔木兹海峡维持封锁。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:23:36",
+    "risk_score": 55,
+    "risk_level": "中风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "特朗普表示未收到伊朗暂停谈判消息，并称保持沉默会非常好，将继续在霍尔木兹海峡维持封锁。此举可能加剧中东地缘政治紧张局势，引发全球市场避险情绪，对加密货币市场造成宏观冲击。",
+    "summary": "特朗普关于伊朗的强硬言论可能加剧地缘政治紧张，构成宏观冲击风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "31b37de2819fd39b",
+    "csv_order": 128,
+    "title": "Buterin提议以期权替代CDP",
+    "content": "Ethereum创始人Vitalik Buterin提出了一种去中心化金融（DeFi）结构，使用期权替代CDP和强制清算。据NS3报道，Buterin表示，延迟预言机可以减少对实时预言机的依赖，并降低操控或故障风险。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:15:46",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "基础设施 / 协议层异常风险",
+    "evidence": "新闻仅报道了 Vitalik Buterin 提出的 DeFi 结构设想，用期权替代 CDP 和强制清算，并引入延迟预言机以降低操控风险，属于正常的技术讨论，未发现任何实际发生的安全事件、攻击或异常。",
+    "summary": "Vitalik Buterin 提出 DeFi 改进构想，无实际风险事件。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "73373f178fb38b68",
+    "csv_order": 129,
+    "title": "Anthropic 提交 IPO 申请",
+    "content": "Anthropic 向美国证券交易委员会秘密提交了 S-1 注册声明草案，计划进行首次公开募股。据 NS3 报道，公司表示，任何发行仍取决于市场条件和其他因素。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:12:57",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "Anthropic 提交 IPO 申请为传统科技行业事件，新闻未提及任何加密货币或区块链相关内容，对加密市场无直接冲击。",
+    "summary": "Anthropic 秘密提交 IPO 申请，对加密货币市场几乎无影响。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "daf80b64cbc9f442",
+    "csv_order": 130,
+    "title": "Micron市值突破1万亿美元",
+    "content": "Micron股价上涨约19%，市值突破1万亿美元。据NS3报道，瑞银将其目标价上调至1625美元，而华尔街的平均目标价为628.20美元。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:09:49",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为Micron股价上涨市值突破1万亿美元，瑞银上调目标价，未涉及任何加密货币相关事件或风险。",
+    "summary": "Micron股价大涨，与加密货币市场无直接关联，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "5def202db5d1422c",
+    "csv_order": 131,
+    "title": "BTC 跌破 71,000 USDT，24 小时跌幅3.79%",
+    "content": "据币安行情数据显示，BTC 跌破 71,000 USDT，现报价 70,914.109375 USDT，24 小时跌幅3.79%。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:09:05",
+    "risk_score": 25,
+    "risk_level": "低风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "据币安行情数据，BTC跌破71,000 USDT，24小时跌幅3.79%，价格出现短期回落。",
+    "summary": "BTC 24小时下跌3.79%，出现短期行情波动。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "892437361c1ed2ea",
+    "csv_order": 132,
+    "title": "Serenity：韩国股市ETF上涨485%",
+    "content": "据Odaily星球日报报道，“新股神”Serenity 在 X 平台发文表示，其持有的追踪韩国股市的 ETF EWY 在过去几个月内上涨了 485%，主要受隐含波动率扩张和方向性“内存多头”策略推动。Serenity 进一步表示，如果能够预判三星与 SK 海力士在 2028 年成长为全球最具盈利能力的公司之一，那么在高波动环境下坚持该长期逻辑并承受波动，或许是一种有效的投资路径。EWY 主要成分包括：三星电子、SK 海力士、以及韩国大型金融、制造与出口企业。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:04:21",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容仅涉及韩国股市ETF EWY上涨及投资策略，未涉及任何加密货币市场风险事件。",
+    "summary": "传统金融新闻，无直接加密货币风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "bac0c068933e703b",
+    "csv_order": 133,
+    "title": "AI公司Anthropic秘密提交IPO申请",
+    "content": "AI公司Anthropic已向监管机构秘密提交首次公开募股（IPO）申请文件。据PANews报道，这种“保密递交”方式允许公司在正式披露财务和募资细节前，先与监管机构完成审核沟通。",
+    "date": "2026-06-02",
+    "published_at": "2026-06-02 00:03:39",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为AI公司Anthropic秘密递交IPO申请，未涉及任何加密货币或区块链资产，对加密市场无直接风险。",
+    "summary": "AI公司IPO事件与加密货币市场无关，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "5818bd8aa6c0633d",
+    "csv_order": 134,
+    "title": "股票市场 | IBM股价突破300美元",
+    "content": "IBM股价周五上涨近13%，收于约298美元，周一早盘突破300美元。据NS3报道，巴克莱分析师Raimo Lenschow于6月1日开始覆盖IBM，给予增持评级，目标价为350美元。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:59:58",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "该新闻仅涉及传统股票市场（IBM股价突破300美元），未提及任何加密货币、区块链项目或相关风险事件，对加密市场无直接或间接风险信号。",
+    "summary": "IBM股价上涨与传统市场相关，对加密货币领域无显著影响",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "8c52a348d9858ab7",
+    "csv_order": 135,
+    "title": "TON原生货币更名为Gram",
+    "content": "Pavel Durov宣布，TON的原生货币将更名为Gram，恢复了Telegram 2018年白皮书中的代币名称。据NS3报道，TON仍然是区块链的名称，此次更名不会影响代币余额、质押或去中心化金融（DeFi）功能。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:59:52",
+    "risk_score": 20,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "Pavel Durov宣布TON原生货币更名为Gram，恢复Telegram 2018年白皮书中的代币名称，官方声明不影响代币余额、质押或DeFi功能，但品牌变更可能引起市场混淆。",
+    "summary": "TON代币更名事件，无功能影响，但品牌变更存在轻微混淆风险。",
+    "coins": [
+      "TON"
+    ],
+    "coin_details": [
+      {
+        "symbol": "TON",
+        "name": "Toncoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "ecbb625d85f6baff",
+    "csv_order": 136,
+    "title": "Strive 将提高 ASST 和 SATA 融资计划规模",
+    "content": "据 ChainCatcher 报道，Strive 首席执行官 Matt Cole 表示，公司计划将 ASST 和 SATA 两项 ATM 融资计划规模分别提高 21 亿美元，以反映市场对这两只证券的流动性和投资需求的增长。Cole 还提到，公司计划于明日美股盘前发布最新资产负债表更新，披露更多财务及资本配置情况。ATM 融资机制允许上市公司在市场交易过程中逐步出售新发行股票，以提高融资灵活性并根据市场需求动态筹集资金。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:53:53",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容涉及 Strive 公司提高 ASST 和 SATA 融资计划规模，属于传统证券市场融资行为，未提及任何加密货币或区块链项目，与加密货币市场无直接关联，因此无风险。",
+    "summary": "该则新闻与传统证券融资有关，与加密货币无关，无风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "8f8758ea76f1058d",
+    "csv_order": 137,
+    "title": "Vitalik建议DeFi基础采用期权指数追踪资产",
+    "content": "以太坊创始人Vitalik表示，基于期权的指数追踪资产值得作为DeFi基础进行考虑，而非依赖CDP和清算机制。据NS3报道，他指出该设计可以使用慢速预言机，但定期再平衡可能面临滑点阻力挑战。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:50:09",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "项目治理 / 团队异常风险",
+    "evidence": "新闻为 Vitalik 对 DeFi 基础设计的建议，讨论期权指数追踪资产与慢速预言机的可行性，指出定期再平衡可能面临滑点挑战，未提及具体风险事件、漏洞或攻击。",
+    "summary": "技术性建议，无直接风险事件，仅讨论潜在设计挑战。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "以太坊"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "5accd116a36bfa4c",
+    "csv_order": 138,
+    "title": "黎巴嫩顾问称真主党愿立即停火",
+    "content": "黎巴嫩议会议长纳比·贝里的一位顾问表示，真主党已准备好与以色列立即全面停火。据 NS3 报道，贝里于当地时间周日通知特朗普政府，并承诺确保停火的实施。伊朗谈判团队于周一暂停通过调解人与美国的谈判，以抗议以色列在黎巴嫩的行动。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:49:53",
+    "risk_score": 22,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻涉及真主党与以色列的停火谈判，以及伊朗暂停通过调解人与美国的谈判，反映中东地缘政治局势存在不确定性，可能对全球风险资产情绪产生轻微扰动，但未直接涉及加密货币市场或相关项目。",
+    "summary": "中东地缘政治停火谈判进展曲折，可能带来短期市场情绪波动，但对加密货币市场直接影响有限。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "74f7af9b31b47365",
+    "csv_order": 139,
+    "title": "比特币一周流出16.7亿美元",
+    "content": "CoinShares数据显示，机构投资者在一周内从比特币和加密资产中撤出16.7亿美元。据NS3报道，这标志着连续第三周出现负流出，三周累计流出达到42.1亿美元。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:48:18",
+    "risk_score": 70,
+    "risk_level": "中风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "CoinShares数据显示机构投资者一周内从比特币和加密资产撤出16.7亿美元，连续第三周净流出，三周累计流出42.1亿美元。",
+    "summary": "机构连续大规模撤资，三周累计流出超42亿美元，可能引发市场抛压与行情下行。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "1bf88681949164de",
+    "csv_order": 140,
+    "title": "Telegram创始人拟更名TON Coin为GRAM",
+    "content": "据Odaily星球日报报道，Telegram创始人Pavel Durov拟将Telegram生态代币TON Coin更名为“GRAM”。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:43:58",
+    "risk_score": 40,
+    "risk_level": "中风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "Telegram创始人拟将TON Coin更名为GRAM，而GRAM是此前因SEC指控被放弃的项目名称，更名动作可能重新引起监管机构关注或法律纠纷。",
+    "summary": "拟更名GRAM或引发历史监管风险再现",
+    "coins": [
+      "TON"
+    ],
+    "coin_details": [
+      {
+        "symbol": "TON",
+        "name": "Toncoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "a5a445bae9ef3bda",
+    "csv_order": 141,
+    "title": "Vitalik Buterin：DeFi基础层新设想",
+    "content": "据 Foresight News 报道，Vitalik Buterin 在 Farcaster 发文提出以期权而非 CDP 和清算机制构建 DeFi 基础层的设想。他指出，这一设计的核心优势在于可用「慢预言机」替代实时预言机，降低预言机被操纵的风险；用户对指数的敞口将以二次方式平滑偏离，而非遭遇剧烈的强制清算。他表示，这一方案的主要缺点是需要定期再平衡，其抗滑点能力仍是待解问题，但值得进一步研究。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:43:35",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "基础设施 / 协议层异常风险",
+    "evidence": "Vitalik提出以期权替代CDP和清算机制的DeFi新设想，仍处于概念研究阶段，尚未实现或部署，未产生实际市场风险。",
+    "summary": "Vitalik提出DeFi基础层新概念，仅属理论探讨，无直接风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "57b19eefc485cb48",
+    "csv_order": 142,
+    "title": "Vitalik：期权构建指数资产值得尝试",
+    "content": "据Odaily星球日报报道，Vitalik 在 X 平台发文表示，基于期权而非债务构建指数跟踪资产值得考虑和尝试。该设计可避免极端价格波动造成剧烈清算效果，并可基于慢速预言机运行。其缺点是需要定期再平衡，目前仍需明确再平衡能否具备足够的抗滑点能力。Vitalik 补充称，相比实时预言机机制，他认为持有置于此类机制中的算法稳定币更安全。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:33:40",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "稳定币异常风险",
+    "evidence": "Vitalik 在 X 平台讨论基于期权构建指数资产的理论设计，认为其比基于实时预言机的算法稳定币机制更安全，内容仅为技术观点分享，未涉及任何漏洞、攻击、违约或市场异动。",
+    "summary": "Vitalik 提出基于期权的指数资产构想，讨论安全性与再平衡问题，不构成现实风险事件。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "bbd4ecf15e2fcc7f",
+    "csv_order": 143,
+    "title": "地缘政治 | 希腊船东在霍尔木兹海峡冲突中受益",
+    "content": "希腊船东在霍尔木兹海峡冲突期间继续运营油轮舰队，称这一冲突对航运业有利。Bloomberg 在 X（原 Twitter）发文表示，希腊船东在打破封锁方面有着悠久的历史。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:30:40",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻仅提及希腊船东在霍尔木兹海峡冲突中受益，未涉及任何加密货币相关事件或市场反应，对加密市场直接影响极小。",
+    "summary": "地缘政治新闻未直接涉及加密市场，潜在宏观传导风险有限。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "6a4cb8f3af37c184",
+    "csv_order": 144,
+    "title": "LAB 24小时暴涨62.4%",
+    "content": "HYPE、LAB和VVV在2026年6月的第一周呈现不同的技术走势。其中，LAB在24小时内上涨62.4%。据NS3报道，HYPE在突破后交易价格为72.25美元，而VVV则在18.20美元附近徘徊，低于21.55美元的阻力位。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:28:52",
+    "risk_score": 75,
+    "risk_level": "中风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "LAB在24小时内上涨62.4%，属于异常价格波动。",
+    "summary": "LAB代币短期暴涨62.4%，异常行情波动风险较高。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "0876674004357aa9",
+    "csv_order": 145,
+    "title": "欧佩克+或将7月增产18.8万桶/日",
+    "content": "据Odaily星球日报报道，三位消息人士称，欧佩克+产油国在周日的会议上很可能会同意在7月份进一步提高原油产量配额。伊朗战争迄今已导致部分国家未能实现此前的产量提升目标。如果再次提高产量配额，将表明该组织正在逐步恢复正常运营。消息人士称，预计欧佩克+7月将增产约18.8万桶/日，与6月达成的增产幅度相同。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:23:57",
+    "risk_score": 25,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "欧佩克+可能在7月增产约18.8万桶/日，逐步恢复正常运营，这或将对原油价格及通胀预期产生下行压力，间接影响加密货币等风险资产的市场情绪。",
+    "summary": "欧佩克+增产预期可能通过油价传导影响宏观环境，但对加密市场直接冲击较小。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "f535a0994e9cc81d",
+    "csv_order": 146,
+    "title": "Microsoft将发布新AI模型",
+    "content": "Microsoft将推出一款新的AI模型，并对Windows进行改进。据NS3报道，这一举措旨在提升用户体验和系统性能。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:22:36",
+    "risk_score": 0,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻内容为微软计划推出新AI模型并改进Windows，旨在提升用户体验和系统性能，未涉及任何加密货币相关实体或事件，无风险信息。",
+    "summary": "微软发布新AI模型与加密货币市场无直接关联，无风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "ea4b7bbffd8b43ad",
+    "csv_order": 147,
+    "title": "佛州总检察长起诉OpenAI",
+    "content": "佛罗里达州总检察长对OpenAI提起诉讼，指控其人工智能造成损害。据NS3报道，华尔街日报（WSJ）是该报道的来源。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:22:20",
+    "risk_score": 5,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "佛罗里达州总检察长对OpenAI提起诉讼，指控其人工智能造成损害。",
+    "summary": "佛州总检察长起诉OpenAI，指控其AI造成损害，暂无直接加密市场影响",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "936206bff333b39c",
+    "csv_order": 148,
+    "title": "智谱计划申请A股和科创板上市",
+    "content": "智谱计划申请中国监管部门批准其A股发行和科创板上市。据NS3报道，拟发行股份将占公司完成后总股本的2%至8%。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:22:07",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "新闻内容为智谱计划申请A股及科创板上市，需获中国监管部门批准，属于企业上市常规监管流程，未涉及加密资产。",
+    "summary": "智谱申请A股上市，与加密货币市场无直接关联，风险极低。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "da0cb2313f83e826",
+    "csv_order": 149,
+    "title": "Clarity Act面临参议院休会压力",
+    "content": "Clarity Act在参议院进入与7月4日假期相关的两周休会前面临推进压力。据NS3报道，参议院繁忙的议程、委员会版本分歧以及60票的阻挠门槛可能会延迟其进展。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:21:57",
+    "risk_score": 25,
+    "risk_level": "低风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "Clarity Act在参议院因7月4日休会、议程繁忙、委员会版本分歧及60票阻挠门槛面临推进延迟压力。",
+    "summary": "美国加密监管法案Clarity Act因参议院休会和立法障碍面临进展延迟，增加短期政策不确定性。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "0966ec937c228490",
+    "csv_order": 150,
+    "title": "AI基础设施热潮或推高通胀",
+    "content": "Apollo首席经济学家Torsten Slok表示，美国计划中的高达7250亿美元的科技资本支出可能会因AI基础设施热潮而增加通胀压力。据NS3报道，Slok指出，半导体、能源和劳动力价格显示出明显的通胀压力信号。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:21:39",
+    "risk_score": 30,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻指出AI基础设施热潮及计划中的7250亿美元科技资本支出可能推高通胀，半导体、能源和劳动力价格已出现通胀压力信号，可能影响宏观政策预期。",
+    "summary": "AI投资热潮可能加大通胀压力，间接影响风险资产情绪。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "0ab76d715ba09ae9",
+    "csv_order": 151,
+    "title": "HYPE 五天内上涨超 30%",
+    "content": "HYPE 在五天内上涨超过 30%，达到接近 74 美元的历史新高。据 NS3 报道，牛市旗形突破指向接近 105 美元的目标。根据 DefiLlama 数据，Hyperliquid 在 30 天内的应用收入为 5790 万美元。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:14:36",
+    "risk_score": 65,
+    "risk_level": "中风险",
+    "risk_type": "异常行情波动风险",
+    "evidence": "HYPE 在五天内上涨超过30%，价格逼近历史新高，技术分析目标指向105美元。短期过快上涨可能引发获利回吐与剧烈回调。",
+    "summary": "HYPE 短期暴涨超30%，存在异常波动与回调风险。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "b2cc82df44d38826",
+    "csv_order": 152,
+    "title": "Strive 将融资规模增至 42 亿美元",
+    "content": "据 Bitcoin Magazine 报道，美国上市比特币财库公司 Strive 将融资规模增至 42 亿美元，以购买更多比特币。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:13:46",
+    "risk_score": 15,
+    "risk_level": "低风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "上市公司 Strive 计划融资 42 亿美元用于购买比特币，大规模购买行为可能引起短期价格波动，并可能在未来带来巨鲸抛售压力。",
+    "summary": "Strive 计划大规模融资增持比特币，存在潜在市场波动风险",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "564e24abf69c7ebd",
+    "csv_order": 153,
+    "title": "OranjeBTC购入20枚BTC并回购股份",
+    "content": "OranjeBTC购入20枚BTC，价值约150.6万美元。据NS3报道，该公司还报告2026年BTC年初至今收益率为2.20%。此外，公司在同一时期回购了289,100股OBTC3股票。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:07:48",
+    "risk_score": 10,
+    "risk_level": "低风险",
+    "risk_type": "大额转账 / 巨鲸行为风险",
+    "evidence": "OranjeBTC购入20枚BTC，价值约150.6万美元，同时回购了289,100股OBTC3股票。该行为属于公开披露的公司投资与回购动作，未发现与协议漏洞、诈骗、监管制裁等直接风险关联，整体风险较低。",
+    "summary": "OranjeBTC追加购入比特币并回购股份，属常规公司运营行为，无明显风险信号。",
+    "coins": [
+      "BTC"
+    ],
+    "coin_details": [
+      {
+        "symbol": "BTC",
+        "name": "Bitcoin",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "fb29f24d6c0d102f",
+    "csv_order": 154,
+    "title": "Jeffrey Huang 持有 2200 ETH 高杠杆多头仓位",
+    "content": "据 NS3 报道，Hyperscan 数据显示，Jeffrey Huang 持有 2200 ETH 的 25 倍杠杆多头仓位，价值 433 万美元。他的入场价格为 2009 美元，清算价格为 1946 美元。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:04:51",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "爆仓 / 清算风险",
+    "evidence": "Jeffrey Huang 持有 2200 ETH 的 25 倍高杠杆多头仓位，入场价 2009 美元，清算价仅 1946 美元，距清算仅有约 3% 的跌幅空间，极易触发大规模强平。",
+    "summary": "巨鲸以 25 倍高杠杆做多 ETH，清算价 1946 美元逼近当前市价，面临极高爆仓风险。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "1cc2ea0263c4d867",
+    "csv_order": 155,
+    "title": "Radiant Capital 宣布停止运营",
+    "content": "据The Block报道，DeFi借贷协议Radiant Capital在经历2024年10月约5000万美元的黑客攻击后，历时18个月仍未能追回有意义数额的资金或筹集新资本，于周一宣布停止运营。该攻击涉及Arbitrum和BNB Chain两条链，攻击者通过部署后门合约获取未授权访问权限。Radiant在X平台声明称\"DAO已无可行前进路径\"，协议将转入维护状态，前端和智能合约保持运行，用户仍可提取、偿还及管理仓位。该协议在2024年初还曾遭遇闪贷攻击，损失约1900枚ETH（当时价值450万美元）。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:04:47",
+    "risk_score": 85,
+    "risk_level": "高风险",
+    "risk_type": "链上漏洞 / 攻击风险",
+    "evidence": "Radiant Capital在2024年10月遭后门合约攻击损失约5000万美元，此前还遭遇闪贷攻击损失1900枚ETH（当时约450万美元），历时18个月未能追回资金或筹集新资本，DAO宣布无可行前进路径并停止运营。",
+    "summary": "Radiant Capital因遭受严重黑客攻击且资金追回失败，宣布停止运营，协议转入维护状态。",
+    "coins": [
+      "ETH"
+    ],
+    "coin_details": [
+      {
+        "symbol": "ETH",
+        "name": "Ethereum",
+        "matched_terms": [
+          "LLM"
+        ]
+      }
+    ],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "41a18199b835c0fe",
+    "csv_order": 156,
+    "title": "加密市场法案推进面临时间压力",
+    "content": "美国参议院在结束阵亡将士纪念日休会后复会，但仅剩约四周立法窗口，使加密市场结构法案《Clarity Act》的推进面临时间压力。据Odaily星球日报报道，参议院需优先处理多项议程，立法日程拥堵。法案仍处于参议院银行委员会与农业委员会版本的协调阶段，部分关键条款存在分歧。法案需在参议院获得60票支持以克服阻挠议事，跨党派共识成为关键。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 23:03:43",
+    "risk_score": 65,
+    "risk_level": "中风险",
+    "risk_type": "监管与法律风险",
+    "evidence": "美国参议院仅剩约四周立法窗口，立法日程拥堵，加密市场结构法案《Clarity Act》处于委员会版本协调阶段，关键条款存在分歧，需获得60票支持以克服阻挠议事，跨党派共识成为关键。",
+    "summary": "加密市场结构法案推进面临时间压力和立法障碍，监管不确定性增加。",
+    "coins": [],
+    "coin_details": [],
+    "llm_source": "llm"
+  },
+  {
+    "news_id": "038b35077f4a78c5",
+    "csv_order": 157,
+    "title": "S&P 500 创历史新高，半导体股领涨",
+    "content": "S&P 500 指数在5月最后一个交易日创下历史新高，但仅有20只成分股达到新高。据 NS3 报道，美国银行策略师Michael Hartnett表示，这种分化与2000年互联网泡沫高峰期非常相似。半导体股票引领了5月美国股市的上涨。",
+    "date": "2026-06-01",
+    "published_at": "2026-06-01 22:50:53",
+    "risk_score": 30,
+    "risk_level": "低风险",
+    "risk_type": "宏观 / 政策冲击风险",
+    "evidence": "新闻提到S&P 500指数创历史新高，但仅20只成分股达到新高，美国银行策略师指出这种分化与2000年互联网泡沫高峰期相似，半导体股领涨。历史经验表明，类似泡沫特征可能预示未来出现宏观冲击，间接影响加密货币市场情绪。",
+    "summary": "S&P 500创新高但内部分化与互联网泡沫相似，存在宏观不确定性风险，对加密市场情绪产生潜在压力。",
+    "coins": [],
+    "coin_details": [],
     "llm_source": "llm"
   }
 ]

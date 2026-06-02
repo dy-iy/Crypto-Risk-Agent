@@ -68,6 +68,10 @@ const reportCreatedEventName = "cryptorisk:analysis-record-created";
 const openAssistantEventName = "cryptorisk:open-risk-assistant";
 const authUsernameStorageKey = "cryptorisk.auth.username";
 
+function createAssistantMessageId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export default function AskAIOnSelection() {
   const router = useRouter();
   const [storageScope, setStorageScope] = useState(() => readAssistantStorageScope());
@@ -82,7 +86,10 @@ export default function AskAIOnSelection() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const endRef = useRef<HTMLDivElement | null>(null);
-  const activeSession = sessions.find((item) => item.id === activeSessionId) || sessions[0] || createAssistantSession();
+  const resolvedActiveSessionId = activeSessionId && sessions.some((item) => item.id === activeSessionId)
+    ? activeSessionId
+    : sessions[0]?.id || "";
+  const activeSession = sessions.find((item) => item.id === resolvedActiveSessionId) || sessions[0] || createAssistantSession();
   const messages = activeSession.messages;
 
   useEffect(() => {
@@ -113,24 +120,12 @@ export default function AskAIOnSelection() {
   }, [storageScope]);
 
   useEffect(() => {
-    if (!sessions.length) {
-      const session = createAssistantSession();
-      setSessions([session]);
-      setActiveSessionId(session.id);
-      return;
-    }
-    if (!activeSessionId || !sessions.some((item) => item.id === activeSessionId)) {
-      setActiveSessionId(sessions[0].id);
-    }
-  }, [activeSessionId, sessions]);
-
-  useEffect(() => {
     writeAssistantSessions(storageScope, sessions);
   }, [sessions, storageScope]);
 
   useEffect(() => {
-    writeActiveAssistantSessionId(storageScope, activeSessionId);
-  }, [activeSessionId, storageScope]);
+    writeActiveAssistantSessionId(storageScope, resolvedActiveSessionId);
+  }, [resolvedActiveSessionId, storageScope]);
 
   useEffect(() => {
     const handleSelection = () => {
@@ -204,7 +199,7 @@ export default function AskAIOnSelection() {
   function updateActiveSession(updater: (session: AssistantSession) => AssistantSession) {
     setSessions((items) => {
       const existing = items.length ? items : [createAssistantSession()];
-      const targetId = activeSessionId || existing[0].id;
+      const targetId = resolvedActiveSessionId || existing[0].id;
       return existing.map((session) => session.id === targetId ? updater(session) : session);
     });
   }
@@ -297,10 +292,10 @@ export default function AskAIOnSelection() {
     const userMessage = selected
       ? `引用内容：${compactText(selected, 180)}\n\n${effectiveQuestion}`
       : effectiveQuestion;
-    const replyId = `global-assistant-reply-${Date.now()}`;
+    const replyId = createAssistantMessageId("global-assistant-reply");
 
     appendMessages([
-      { id: `global-assistant-user-${Date.now()}`, role: "user", content: userMessage },
+      { id: createAssistantMessageId("global-assistant-user"), role: "user", content: userMessage },
       { id: replyId, role: "assistant", content: "" },
     ]);
     setQuestion("");

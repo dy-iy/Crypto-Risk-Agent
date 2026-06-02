@@ -800,7 +800,12 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<TradeToast | null>(null);
   const [pendingHighRiskBuy, setPendingHighRiskBuy] = useState<number | null>(null);
-  const [tourWelcomeOpen, setTourWelcomeOpen] = useState(false);
+  const [tourWelcomeOpen, setTourWelcomeOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const tourDone = window.localStorage.getItem(simTourStorageKey) === "true";
+    const welcomeSeen = window.localStorage.getItem(simTourWelcomeStorageKey) === "true";
+    return !tourDone && !welcomeSeen;
+  });
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const [tourCongratsOpen, setTourCongratsOpen] = useState(false);
@@ -1201,12 +1206,6 @@ export function SimTradingPanel({ embedded = false }: { embedded?: boolean }) {
     const clearTimer = window.setTimeout(() => setToast(null), 2200);
     return () => window.clearTimeout(clearTimer);
   }, [toast]);
-
-  useEffect(() => {
-    const tourDone = window.localStorage.getItem(simTourStorageKey) === "true";
-    const welcomeSeen = window.localStorage.getItem(simTourWelcomeStorageKey) === "true";
-    if (!tourDone && !welcomeSeen) setTourWelcomeOpen(true);
-  }, []);
 
   const content = (
     <div className={embedded ? "flex min-w-0 flex-col gap-4" : "mx-auto flex w-full max-w-[1440px] flex-col gap-4"} data-tour-id="sim-shell">

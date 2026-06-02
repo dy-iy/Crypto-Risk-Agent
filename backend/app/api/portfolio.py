@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from os import getenv
 import uuid
 from datetime import datetime, timezone
 from threading import Lock, Thread
@@ -103,7 +104,7 @@ def _resolve_user_id(
     user_id: str | None,
     cryptorisk_session: str | None,
 ) -> str:
-    if user_id:
+    if user_id and getenv("ALLOW_USER_ID_QUERY_OVERRIDE") == "1":
         return user_id
     user = get_user_by_session(cryptorisk_session)
     return user.id if user else DEFAULT_USER_ID

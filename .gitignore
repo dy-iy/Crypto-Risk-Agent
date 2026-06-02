@@ -25,8 +25,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.hypothesis/
 .mypy_cache/
 .ruff_cache/
+.pyre/
 .coverage
 htmlcov/
 .venv/
@@ -61,10 +63,13 @@ backend/app/data/saved_news/
 backend/app/data/temp_*.csv
 backend/app/data/*.tmp
 backend/app/data/*.bak
+backend/app/data/*.bak_*
 backend/app/data/auth.sqlite3
 backend/app/data/auth.sqlite3-*
 backend/app/data/analysis_reports.sqlite3
 backend/app/data/analysis_reports.sqlite3-*
+backend/app/data/daily_reports/
+backend/app/data/portfolio_state.json
 backend/app/data/update_jobs.json
 
 # Tooling caches
@@ -72,6 +77,10 @@ backend/app/data/update_jobs.json
 .turbo/
 .vercel/
 .parcel-cache/
+coverage/
+playwright-report/
+test-results/
+.agents/
 
 # IDE / editor
 .vscode/

@@ -1,4 +1,5 @@
 import json
+import os
 from queue import Queue
 from threading import Thread
 
@@ -31,18 +32,26 @@ from app.services.risk_assistant_service import (
 
 app = FastAPI(title="CryptoRisk Agent Backend")
 
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://kassa-wiki.top",
+DEFAULT_CORS_ORIGINS = [
     "https://kassa-wiki.top",
-    "http://www.kassa-wiki.top",
     "https://www.kassa-wiki.top",
 ]
+LOCAL_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+
+def _cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+    origins = [item.strip() for item in raw.split(",") if item.strip()] if raw else list(DEFAULT_CORS_ORIGINS)
+    if os.getenv("ALLOW_LOCAL_CORS") == "1":
+        origins.extend(LOCAL_CORS_ORIGINS)
+    return list(dict.fromkeys(origins))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

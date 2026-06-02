@@ -1,5 +1,5 @@
-import RiskDashboard from "@/components/risk-dashboard";
+import { redirect } from "next/navigation";
 
 export default function AnalysizePage() {
-  return <RiskDashboard initialView="chat" />;
+  redirect("/analysis");
 }
