@@ -234,7 +234,7 @@ def cmd_analyze_news(args: argparse.Namespace) -> Any:
 
 
 def cmd_health(_: argparse.Namespace) -> Any:
-    return request_json("GET", "/health")
+    return request_json("GET", "/api/health")
 
 
 def cmd_assistant(args: argparse.Namespace) -> Any:

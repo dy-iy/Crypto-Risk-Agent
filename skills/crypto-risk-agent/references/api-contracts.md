@@ -2,11 +2,11 @@
 
 Base URL defaults to `https://kassa-wiki.top`.
 
-All public app endpoints are under `/api/...` except backend health/root internals. Nginx maps `/api/` to the FastAPI backend.
+All public app endpoints are under `/api/...`. Nginx maps `/api/` to the FastAPI backend.
 
 ## Health
 
-`GET /health`
+`GET /api/health`
 
 Response:
 

@@ -78,6 +78,11 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/health")
+def api_health():
+    return health()
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
     try:
