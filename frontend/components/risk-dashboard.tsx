@@ -15,9 +15,13 @@ import {
   CoinLibraryItem,
   CoinRankingItem,
   DailyRiskReport,
+  DailyReportSubscription,
+  DailySchedulerStatus,
   fetchCoinRanking,
   fetchCoinLibrary,
+  fetchDailyReportSubscription,
   fetchDailyRiskReport,
+  fetchDailySchedulerStatus,
   fetchCurrentNewsUpdateJob,
   fetchNewsDetail,
   fetchNewsUpdateJob,
@@ -82,11 +86,14 @@ import {
   RateLimitStatus,
   registerUser,
   revokeOtherAuthSessions,
+  runDailySchedulerNow,
   saveAnalysisReport,
   BackupManifest,
   StorageInventory,
   SystemReadiness,
   SystemTaskEvent,
+  updateDailyReportSubscription,
+  updateDailySchedulerStatus,
   updateAnalysisReportDisposition,
   updateUserAsset,
 } from "@/lib/api";
@@ -404,7 +411,7 @@ const userAssetsUpdatedEventName = "cryptorisk:user-assets-updated";
 const maxStoredAnalysisRecords = 80;
 const maxStoredChatMessages = 120;
 const maxRankingTableRows = 60;
-const newsRankingFetchLimit = 80;
+const newsRankingFetchLimit = 0;
 const storageWriteDelayMs = 250;
 const defaultUserAssetForm: UserAssetFormState = {
   alertThreshold: "70",
@@ -881,6 +888,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [dailyReportFetching, setDailyReportFetching] = useState(false);
   const [dailyReportLoading, setDailyReportLoading] = useState(false);
   const [dailyReportError, setDailyReportError] = useState("");
+  const [dailyReportSubscription, setDailyReportSubscription] = useState<DailyReportSubscription | null>(null);
+  const [dailyReportSubscriptionLoading, setDailyReportSubscriptionLoading] = useState(false);
   const [rankingLoading, setRankingLoading] = useState(initialSnapshot.rankingLoading);
   const [rankingError, setRankingError] = useState("");
   const [newsUpdateLoading, setNewsUpdateLoading] = useState(false);
@@ -893,8 +902,11 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null);
   const [storageInventory, setStorageInventory] = useState<StorageInventory | null>(null);
   const [backupManifest, setBackupManifest] = useState<BackupManifest | null>(null);
+  const [dailySchedulerStatus, setDailySchedulerStatus] = useState<DailySchedulerStatus | null>(null);
   const [systemStatusLoading, setSystemStatusLoading] = useState(false);
   const [systemStatusError, setSystemStatusError] = useState("");
+  const [dailySchedulerActionLoading, setDailySchedulerActionLoading] = useState(false);
+  const [dailySchedulerMessage, setDailySchedulerMessage] = useState("");
   const [auditPruneLoading, setAuditPruneLoading] = useState(false);
   const [auditPruneResult, setAuditPruneResult] = useState<AuditPruneResult | null>(null);
   const [simPruneLoading, setSimPruneLoading] = useState(false);
@@ -1014,6 +1026,30 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       ignore = true;
     };
   }, [activeView, authUser?.id, rankingRange]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (activeView !== "daily") return;
+
+    async function loadDailySubscription() {
+      setDailyReportSubscriptionLoading(true);
+      try {
+        const data = await fetchDailyReportSubscription();
+        if (!ignore) setDailyReportSubscription(data);
+      } catch (error) {
+        console.error(error);
+        if (!ignore) setDailyReportError("日报订阅状态读取失败，仍可手动生成日报。");
+      } finally {
+        if (!ignore) setDailyReportSubscriptionLoading(false);
+      }
+    }
+
+    void loadDailySubscription();
+
+    return () => {
+      ignore = true;
+    };
+  }, [activeView, authUser?.id]);
 
   useEffect(() => {
     function handlePopState() {
@@ -1327,6 +1363,20 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     }
   }
 
+  async function handleToggleDailyReportSubscription(enabled: boolean) {
+    setDailyReportSubscriptionLoading(true);
+    setDailyReportError("");
+    try {
+      const data = await updateDailyReportSubscription(enabled);
+      setDailyReportSubscription(data);
+    } catch (error) {
+      console.error(error);
+      setDailyReportError("日报订阅状态更新失败，请稍后重试。");
+    } finally {
+      setDailyReportSubscriptionLoading(false);
+    }
+  }
+
   const refreshRankingsAfterUpdate = useCallback(async (silent = false) => {
     if (!silent) setRankingLoading(true);
     setRankingError("");
@@ -1366,14 +1416,15 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     try {
       const readiness = await fetchSystemReadiness();
       setSystemReadiness(readiness);
-      const [auditResult, taskEventsResult, rateLimitResult, storageResult, backupResult] = await Promise.allSettled([
+      const [auditResult, taskEventsResult, rateLimitResult, storageResult, backupResult, schedulerResult] = await Promise.allSettled([
         fetchAuditSummary(24),
         fetchSystemTaskEvents(12),
         fetchRateLimitStatus(),
         fetchStorageInventory(),
         fetchBackupManifest(),
+        fetchDailySchedulerStatus(),
       ]);
-      const protectedErrors = [auditResult, taskEventsResult, rateLimitResult, storageResult, backupResult]
+      const protectedErrors = [auditResult, taskEventsResult, rateLimitResult, storageResult, backupResult, schedulerResult]
         .filter((item): item is PromiseRejectedResult => item.status === "rejected")
         .map((item) => item.reason);
 
@@ -1387,6 +1438,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       else setStorageInventory(null);
       if (backupResult.status === "fulfilled") setBackupManifest(backupResult.value);
       else setBackupManifest(null);
+      if (schedulerResult.status === "fulfilled") setDailySchedulerStatus(schedulerResult.value);
+      else setDailySchedulerStatus(null);
 
       if (protectedErrors.some((error) => error instanceof ApiRequestError && error.status === 401)) {
         setSystemStatusError("管理员登录后可查看审计汇总和限流状态；公开健康检查已显示。");
@@ -1515,6 +1568,52 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       }
     } finally {
       setInvalidBackupPruneLoading(false);
+    }
+  }, [loadSystemStatus]);
+
+  const handleToggleDailyScheduler = useCallback(async (enabled: boolean) => {
+    setDailySchedulerActionLoading(true);
+    setDailySchedulerMessage("");
+    setSystemStatusError("");
+    try {
+      const result = await updateDailySchedulerStatus(enabled);
+      setDailySchedulerStatus(result);
+      setDailySchedulerMessage(enabled ? "每日 08:00 定时任务已启动。" : "每日 08:00 定时任务已暂停。");
+      await loadSystemStatus();
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("管理员登录后才能管理每日定时任务。");
+      } else if (error instanceof ApiRequestError && error.status === 403) {
+        setSystemStatusError("当前账号没有管理员权限，无法管理每日定时任务。");
+      } else {
+        setSystemStatusError("每日定时任务状态更新失败，请稍后重试。");
+      }
+    } finally {
+      setDailySchedulerActionLoading(false);
+    }
+  }, [loadSystemStatus]);
+
+  const handleRunDailySchedulerNow = useCallback(async () => {
+    setDailySchedulerActionLoading(true);
+    setDailySchedulerMessage("");
+    setSystemStatusError("");
+    try {
+      const result = await runDailySchedulerNow();
+      setDailySchedulerStatus(result);
+      setDailySchedulerMessage(result.last_message || "每日定时任务已执行。");
+      await loadSystemStatus();
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("管理员登录后才能手动执行每日定时任务。");
+      } else if (error instanceof ApiRequestError && error.status === 403) {
+        setSystemStatusError("当前账号没有管理员权限，无法手动执行每日定时任务。");
+      } else {
+        setSystemStatusError("每日定时任务执行失败，请稍后重试。");
+      }
+    } finally {
+      setDailySchedulerActionLoading(false);
     }
   }, [loadSystemStatus]);
 
@@ -2029,7 +2128,10 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   loading={dailyReportLoading}
                   onChangeRange={handleDailyRangeChange}
                   onGenerate={handleGenerateDailyReport}
+                  onToggleSubscription={handleToggleDailyReportSubscription}
                   range={rankingRange}
+                  subscription={dailyReportSubscription}
+                  subscriptionLoading={dailyReportSubscriptionLoading}
                 />
               )}
               {activeView === "portfolio" && (
@@ -2099,6 +2201,9 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   accountDeleteLoading={accountDeleteLoading}
                   auditSummary={auditSummary}
                   backupManifest={backupManifest}
+                  dailySchedulerActionLoading={dailySchedulerActionLoading}
+                  dailySchedulerMessage={dailySchedulerMessage}
+                  dailySchedulerStatus={dailySchedulerStatus}
                   auditPruneLoading={auditPruneLoading}
                   auditPruneResult={auditPruneResult}
                   onExportAccountData={handleExportAccountData}
@@ -2108,6 +2213,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   onPruneGuestSimAccounts={handlePruneGuestSimAccounts}
                   onPruneInvalidJsonBackups={handlePruneInvalidJsonBackups}
                   onPruneRuntimeJobs={handlePruneRuntimeJobs}
+                  onRunDailySchedulerNow={handleRunDailySchedulerNow}
+                  onToggleDailyScheduler={handleToggleDailyScheduler}
                   onRefreshSystemStatus={loadSystemStatus}
                   rateLimitStatus={rateLimitStatus}
                   storageInventory={storageInventory}
@@ -3378,7 +3485,10 @@ function DailyReportView({
   loading,
   onChangeRange,
   onGenerate,
+  onToggleSubscription,
   range,
+  subscription,
+  subscriptionLoading,
 }: {
   agentReport: DailyRiskReport | null;
   error: string;
@@ -3386,11 +3496,15 @@ function DailyReportView({
   loading: boolean;
   onChangeRange: (range: RankingRange) => void;
   onGenerate: () => void;
+  onToggleSubscription: (enabled: boolean) => void;
   range: RankingRange;
+  subscription: DailyReportSubscription | null;
+  subscriptionLoading: boolean;
 }) {
   const report = useMemo(() => (agentReport ? buildDailyRiskReport(range, agentReport) : null), [agentReport, range]);
   const sourceLabel = report?.source === "llm" ? "LangGraph Agent 生成" : report ? "LangGraph 规则兜底" : loading ? "Agent 生成中" : fetching ? "读取已保存日报" : "等待生成";
   const busy = loading || fetching;
+  const subscriptionEnabled = Boolean(subscription?.enabled);
 
   return (
     <section className="space-y-5">
@@ -3438,6 +3552,19 @@ function DailyReportView({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => onToggleSubscription(!subscriptionEnabled)}
+              disabled={subscriptionLoading}
+              className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
+                subscriptionEnabled
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span className={`h-2.5 w-2.5 rounded-full ${subscriptionEnabled ? "bg-emerald-500" : "bg-slate-300"}`} />
+              {subscriptionLoading ? "更新订阅" : subscriptionEnabled ? "已订阅 08:00 日报" : "订阅 08:00 日报"}
+            </button>
             <RangeSegmentedControl range={range} onChangeRange={onChangeRange} />
             <button
               type="button"
@@ -3799,7 +3926,8 @@ function NewsRankingPanel({
       return categoryMatched;
     });
   }, [categoryFilter, items]);
-  const renderedCount = Math.min(panelItems.length, maxRankingTableRows);
+  const maxRows = panelItems.length;
+  const renderedCount = maxRows;
 
   return (
     <section className="risk-card rounded-lg">
@@ -3863,6 +3991,7 @@ function NewsRankingPanel({
             favoriteActionLoadingId={favoriteActionLoadingId}
             favoriteNewsIds={favoriteNewsIds}
             items={panelItems}
+            maxRows={maxRows}
             onAnalyzeNews={onAnalyzeNews}
             onToggleFavorite={onToggleFavorite}
           />
@@ -4941,6 +5070,9 @@ function SettingsView({
   auditPruneResult,
   auditSummary,
   backupManifest,
+  dailySchedulerActionLoading,
+  dailySchedulerMessage,
+  dailySchedulerStatus,
   onDeleteAccountData,
   onExportAccountData,
   onPruneAuditEvents,
@@ -4948,6 +5080,8 @@ function SettingsView({
   onPruneGuestSimAccounts,
   onPruneInvalidJsonBackups,
   onPruneRuntimeJobs,
+  onRunDailySchedulerNow,
+  onToggleDailyScheduler,
   onRefreshSystemStatus,
   onUpdateTodayNews,
   rateLimitStatus,
@@ -4976,6 +5110,9 @@ function SettingsView({
   auditPruneResult: AuditPruneResult | null;
   auditSummary: AuditSummary | null;
   backupManifest: BackupManifest | null;
+  dailySchedulerActionLoading: boolean;
+  dailySchedulerMessage: string;
+  dailySchedulerStatus: DailySchedulerStatus | null;
   onDeleteAccountData: (currentPassword: string) => void;
   onExportAccountData: () => void;
   onPruneAuditEvents: () => void;
@@ -4983,6 +5120,8 @@ function SettingsView({
   onPruneGuestSimAccounts: () => void;
   onPruneInvalidJsonBackups: () => void;
   onPruneRuntimeJobs: () => void;
+  onRunDailySchedulerNow: () => void;
+  onToggleDailyScheduler: (enabled: boolean) => void;
   onRefreshSystemStatus: () => void;
   onUpdateTodayNews: () => void;
   rateLimitStatus: RateLimitStatus | null;
@@ -5015,6 +5154,7 @@ function SettingsView({
   const [sessionsMessage, setSessionsMessage] = useState("");
   const [sessionsError, setSessionsError] = useState("");
   const [securityEvents, setSecurityEvents] = useState<AccountSecurityEvent[]>([]);
+  const [activeSettingsSectionId, setActiveSettingsSectionId] = useState("settings-automation");
   const [deleteCurrentPassword, setDeleteCurrentPassword] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const passwordStrength = getPasswordStrength(newPassword, "");
@@ -5186,6 +5326,51 @@ function SettingsView({
     { name: "排行榜 Agent", detail: "刷新风险榜单", status: fallbackJob.ranking.status },
     { name: "报告生成 Agent", detail: "生成证据链报告", status: hasError ? "error" : "success" },
   ] satisfies Array<{ name: string; detail: string; status: NewsUpdateProgress["status"] }>;
+  const schedulerEnabled = Boolean(dailySchedulerStatus?.enabled);
+  const schedulerStatusText = dailySchedulerStatus?.running
+    ? "运行中"
+    : schedulerEnabled
+      ? "已启动"
+      : dailySchedulerStatus
+        ? "已暂停"
+        : "未读取";
+  const schedulerTone: "emerald" | "amber" | "rose" | "blue" | "slate" = dailySchedulerStatus?.running ? "blue" : schedulerEnabled ? "emerald" : "amber";
+  const schedulerTime = dailySchedulerStatus
+    ? `${String(dailySchedulerStatus.schedule_hour).padStart(2, "0")}:${String(dailySchedulerStatus.schedule_minute).padStart(2, "0")}`
+    : "08:00";
+  const settingsSections = {
+    automation: {
+      id: "settings-automation",
+      title: "任务自动化",
+      summary: "每日调度、新闻更新流水线和自动生成日报。",
+      icon: <ClockIcon />,
+    },
+    observability: {
+      id: "settings-observability",
+      title: "运行观测",
+      summary: "系统 Readiness、审计、限流、存储和备份状态。",
+      icon: <ChartIcon />,
+    },
+    accountSecurity: {
+      id: "settings-account-security",
+      title: "账号安全",
+      summary: "密码、登录会话、安全事件和账号数据删除。",
+      icon: <ShieldIcon />,
+    },
+    agentHealth: {
+      id: "settings-agent-health",
+      title: "Agent 状态",
+      summary: "多 Agent 节点健康度和当前任务阶段。",
+      icon: <BotIcon />,
+    },
+  } satisfies Record<string, SettingsSectionMeta>;
+  const settingsSectionList = [
+    settingsSections.automation,
+    settingsSections.observability,
+    settingsSections.accountSecurity,
+    settingsSections.agentHealth,
+  ];
+  const activeSettingsSection = settingsSectionList.find((section) => section.id === activeSettingsSectionId) || settingsSections.automation;
 
   return (
     <section className="risk-card overflow-hidden rounded-lg border border-blue-100 bg-white">
@@ -5226,7 +5411,83 @@ function SettingsView({
           </div>
         )}
 
-        <div className="mb-5 rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
+        <div className="grid gap-5 xl:grid-cols-[220px_minmax(0,1fr)]">
+          <SettingsSubSidebar
+            activeSectionId={activeSettingsSection.id}
+            onSelect={setActiveSettingsSectionId}
+            sections={settingsSectionList}
+          />
+
+          <div className="min-w-0 space-y-5">
+            {activeSettingsSection.id === settingsSections.automation.id && (
+            <SettingsSection
+              {...settingsSections.automation}
+            >
+        <div className="rounded-lg border border-emerald-100 bg-white/90 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600">Daily Scheduler</p>
+              <h3 className="mt-1 text-lg font-bold text-slate-950">每日新闻与资产日报定时任务</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                每天 {schedulerTime} 自动更新新闻，并只为已订阅用户生成近 1 天资产日报。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onToggleDailyScheduler(!schedulerEnabled)}
+                disabled={dailySchedulerActionLoading}
+                className={`inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-bold text-white transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${schedulerEnabled ? "bg-amber-600 hover:bg-amber-700" : "bg-emerald-700 hover:bg-emerald-800"}`}
+              >
+                {schedulerEnabled ? <PauseIcon /> : <PlayIcon />}
+                {dailySchedulerActionLoading ? "处理中" : schedulerEnabled ? "暂停定时" : "启动定时"}
+              </button>
+              <button
+                type="button"
+                onClick={onRunDailySchedulerNow}
+                disabled={dailySchedulerActionLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 transition-colors duration-200 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshIcon />
+                立即执行一次
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <SystemMetricCard
+              label="Scheduler"
+              tone={schedulerTone}
+              value={schedulerStatusText}
+              detail={dailySchedulerStatus?.thread_alive ? "后台线程运行中" : "后台线程未确认"}
+            />
+            <SystemMetricCard
+              label="Last Run"
+              tone={dailySchedulerStatus?.last_status === "error" ? "rose" : dailySchedulerStatus?.last_run_date ? "emerald" : "slate"}
+              value={dailySchedulerStatus?.last_run_date || "--"}
+              detail={dailySchedulerStatus?.last_message || "等待首次执行"}
+            />
+            <SystemMetricCard
+              label="Generated"
+              tone="blue"
+              value={String((dailySchedulerStatus?.last_result?.generated_report_count as number | undefined) ?? 0)}
+              detail={`订阅用户 ${(dailySchedulerStatus?.last_result?.subscribed_user_count as number | undefined) ?? 0} 个`}
+            />
+          </div>
+          {dailySchedulerMessage && (
+            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
+              {dailySchedulerMessage}
+            </p>
+          )}
+        </div>
+
+            </SettingsSection>
+            )}
+
+            {activeSettingsSection.id === settingsSections.observability.id && (
+            <SettingsSection
+              {...settingsSections.observability}
+            >
+        <div className="rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Operations</p>
@@ -5545,7 +5806,15 @@ function SettingsView({
           )}
         </div>
 
-        <div className="mb-5 rounded-lg border border-rose-100 bg-rose-50/80 p-4 shadow-sm">
+            </SettingsSection>
+            )}
+
+            {activeSettingsSection.id === settingsSections.accountSecurity.id && (
+            <SettingsSection
+              {...settingsSections.accountSecurity}
+            >
+        <div className="space-y-4">
+        <div className="rounded-lg border border-rose-100 bg-rose-50/80 p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-2xl">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-rose-600">Danger Zone</p>
@@ -5585,7 +5854,7 @@ function SettingsView({
           </div>
         </div>
 
-        <form onSubmit={handlePasswordChange} className="mb-5 rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
+        <form onSubmit={handlePasswordChange} className="rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Account Security</p>
@@ -5647,7 +5916,7 @@ function SettingsView({
           </div>
         </form>
 
-        <div className="mb-5 rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
+        <div className="rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Sessions</p>
@@ -5730,6 +5999,14 @@ function SettingsView({
           </div>
         </div>
 
+        </div>
+            </SettingsSection>
+            )}
+
+            {activeSettingsSection.id === settingsSections.agentHealth.id && (
+            <SettingsSection
+              {...settingsSections.agentHealth}
+            >
         <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.42fr)_minmax(0,0.58fr)]">
           <div className="rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
@@ -5776,7 +6053,80 @@ function SettingsView({
             </div>
           </div>
         </div>
+            </SettingsSection>
+            )}
+          </div>
+        </div>
       </div>
+    </section>
+  );
+}
+
+type SettingsSectionMeta = {
+  id: string;
+  icon: ReactNode;
+  summary: string;
+  title: string;
+};
+
+function SettingsSubSidebar({
+  activeSectionId,
+  onSelect,
+  sections,
+}: {
+  activeSectionId: string;
+  onSelect: (sectionId: string) => void;
+  sections: SettingsSectionMeta[];
+}) {
+  return (
+    <aside className="xl:sticky xl:top-5 xl:self-start">
+      <nav aria-label="系统设置索引" className="rounded-lg border border-blue-100 bg-white/90 p-3 shadow-sm">
+        <p className="px-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Settings Index</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+          {sections.map((section) => (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => onSelect(section.id)}
+              aria-current={activeSectionId === section.id ? "page" : undefined}
+              className={`group flex min-h-[64px] w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                activeSectionId === section.id
+                  ? "border-blue-200 bg-blue-50 text-blue-800 shadow-sm"
+                  : "border-transparent text-slate-600 hover:border-blue-100 hover:bg-blue-50"
+              }`}
+            >
+              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors duration-200 ${
+                activeSectionId === section.id
+                  ? "border-blue-200 bg-white text-blue-700"
+                  : "border-blue-100 bg-blue-50 text-blue-700 group-hover:bg-white"
+              }`}>
+                {section.icon}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-slate-950">{section.title}</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">{section.summary}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </nav>
+    </aside>
+  );
+}
+
+function SettingsSection({ children, icon, id, summary, title }: SettingsSectionMeta & { children: ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-5 rounded-lg border border-blue-100 bg-white/70 p-3 shadow-sm sm:p-4">
+      <div className="mb-4 flex items-start gap-3 border-b border-blue-50 pb-4">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-blue-700">
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-lg font-bold text-slate-950">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-slate-600">{summary}</p>
+        </div>
+      </div>
+      {children}
     </section>
   );
 }
@@ -6065,6 +6415,7 @@ function NewsTable({
   favoriteActionLoadingId = "",
   favoriteNewsIds = new Set<string>(),
   items,
+  maxRows,
   onAnalyzeNews,
   onToggleFavorite,
 }: {
@@ -6072,11 +6423,13 @@ function NewsTable({
   favoriteActionLoadingId?: string;
   favoriteNewsIds?: Set<string>;
   items: NewsRankingItem[];
+  maxRows?: number;
   onAnalyzeNews?: (item: NewsRankingItem) => void;
   onToggleFavorite?: (item: NewsRankingItem) => void;
 }) {
   const router = useRouter();
-  const renderedItems = compact ? items : items.slice(0, maxRankingTableRows);
+  const rowLimit = maxRows ?? maxRankingTableRows;
+  const renderedItems = compact ? items : items.slice(0, rowLimit);
   const headers = [
     { label: "", className: "w-12 px-3 py-3 text-center font-semibold" },
     { label: "#", className: "w-14 px-3 py-3 text-center font-semibold" },
@@ -8687,6 +9040,8 @@ function StarIcon({ filled = false }: { filled?: boolean }) {
   );
 }
 function TrashIcon() { return <IconSvg><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 14h10l1-14" /><path d="M9 7V4h6v3" /></IconSvg>; }
+function PlayIcon() { return <IconSvg><path d="M8 5v14l11-7z" /></IconSvg>; }
+function PauseIcon() { return <IconSvg><path d="M8 5v14" /><path d="M16 5v14" /></IconSvg>; }
 function RefreshIcon() { return <IconSvg><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v6h-6" /></IconSvg>; }
 function CopyIcon() { return <IconSvg><rect x="8" y="8" width="11" height="13" rx="2" /><path d="M5 16V5a2 2 0 0 1 2-2h8" /></IconSvg>; }
 function DownloadIcon() { return <IconSvg><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></IconSvg>; }

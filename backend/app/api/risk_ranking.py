@@ -622,7 +622,7 @@ def news_ranking(
     date: str | None = Query(default=None),
     limit: int = Query(default=10, ge=0, le=5000),
 ):
-    effective_limit = limit or PUBLIC_NEWS_RANKING_FALLBACK_LIMIT
+    effective_limit = 0 if limit <= 0 else limit
     return _compact_news_response(_news(date, effective_limit), effective_limit)
 
 

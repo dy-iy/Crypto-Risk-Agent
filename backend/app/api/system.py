@@ -5,10 +5,16 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Cookie, HTTPException, Query, Response, status
+from pydantic import BaseModel
 
 from app.api.auth import SESSION_COOKIE_NAME
 from app.schemas_auth import AuthUser
 from app.services.auth_service import get_user_by_session, prune_expired_sessions
+from app.services.daily_scheduler_service import (
+    get_daily_scheduler_status,
+    run_daily_scheduler_once,
+    set_daily_scheduler_enabled,
+)
 from app.services.product_readiness_service import get_product_readiness
 from app.services.rate_limit_service import rate_limit_status
 from app.services.sim_engine import DEFAULT_GUEST_RETENTION_DAYS, sim_engine
@@ -26,6 +32,10 @@ from app.services.task_audit_service import (
 
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+
+
+class DailySchedulerUpdateRequest(BaseModel):
+    enabled: bool
 
 
 def _env_enabled(name: str) -> bool:
@@ -111,6 +121,45 @@ def system_version() -> dict[str, object]:
         "started_at": readiness["started_at"],
         "uptime_seconds": readiness["uptime_seconds"],
     }
+
+
+@router.get("/daily-scheduler")
+def system_daily_scheduler(
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+) -> dict[str, object]:
+    _require_system_admin_access(cryptorisk_session)
+    return get_daily_scheduler_status()
+
+
+@router.patch("/daily-scheduler")
+def system_update_daily_scheduler(
+    payload: DailySchedulerUpdateRequest,
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+) -> dict[str, object]:
+    admin = _require_system_admin_access(cryptorisk_session)
+    result = set_daily_scheduler_enabled(payload.enabled)
+    _record_system_admin_event(
+        admin=admin,
+        event_type="daily_scheduler_toggle",
+        stage="enabled" if payload.enabled else "paused",
+        message="管理员启动每日定时任务" if payload.enabled else "管理员暂停每日定时任务",
+        payload={"enabled": payload.enabled},
+    )
+    return result
+
+
+@router.post("/daily-scheduler/run-now")
+def system_run_daily_scheduler_now(
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+) -> dict[str, object]:
+    admin = _require_system_admin_access(cryptorisk_session)
+    _record_system_admin_event(
+        admin=admin,
+        event_type="daily_scheduler_run_now",
+        stage="requested",
+        message="管理员手动触发每日定时任务",
+    )
+    return run_daily_scheduler_once(force=True)
 
 
 @router.get("/task-events")

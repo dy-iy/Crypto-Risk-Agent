@@ -46,6 +46,10 @@ def news_risk_agent(state: RankingAgentState) -> RankingAgentState:
         cached = scored_by_id.get(news_id)
         analysis = llm_analysis.get(news_id, {})
         source = cached or analysis
+        analysis_source = analysis or {
+            "source": (cached.get("llm_source") if cached else "") or "scored_dataset",
+            "coins": source.get("coins", []),
+        }
         risk_score = source.get("risk_score", 0)
         risk_level = source.get("risk_level", "低风险")
         risk_type = source.get("risk_type", "异常行情波动风险")
@@ -63,7 +67,7 @@ def news_risk_agent(state: RankingAgentState) -> RankingAgentState:
                 "summary": summary,
                 "coins": coins,
                 "coin_details": source.get("coin_details", []),
-                "llm_analysis": analysis or {"source": "scored_dataset", "coins": coins},
+                "llm_analysis": analysis_source,
             }
         )
 

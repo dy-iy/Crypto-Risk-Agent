@@ -411,6 +411,20 @@ def get_user_by_session(token: str | None) -> AuthUser | None:
         return _row_to_user(row) if row else None
 
 
+def get_user_by_id(user_id: str) -> AuthUser | None:
+    if not user_id:
+        return None
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _row_to_user(row) if row else None
+
+
+def list_users() -> list[AuthUser]:
+    with _connect() as conn:
+        rows = conn.execute("SELECT * FROM users ORDER BY created_at ASC").fetchall()
+        return [_row_to_user(row) for row in rows]
+
+
 def delete_session(token: str | None) -> None:
     if not token:
         return

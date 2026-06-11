@@ -30,15 +30,18 @@ def load_risk_ranking_with_fastapi_stub():
     fastapi_stub.APIRouter = _APIRouter
     fastapi_stub.HTTPException = Exception
     fastapi_stub.Query = lambda default=None, *args, **kwargs: default
+    ranking_graph_stub = types.ModuleType("app.agents.ranking_agent.graph")
+    ranking_graph_stub.run_ranking_agent = lambda *args, **kwargs: {}
     update_news_stub = types.ModuleType("app.data.update_news")
     update_news_stub.update_news_dataset = lambda *args, **kwargs: {"crawler_error": "stubbed"}
     sys.modules.setdefault("fastapi", fastapi_stub)
+    sys.modules.setdefault("app.agents.ranking_agent.graph", ranking_graph_stub)
     sys.modules.setdefault("app.data.update_news", update_news_stub)
     return importlib.import_module("app.api.risk_ranking")
 
 
 class RankingApiCompactionTest(unittest.TestCase):
-    def test_public_news_limit_zero_returns_compact_bounded_list(self) -> None:
+    def test_public_news_limit_zero_returns_full_list(self) -> None:
         risk_ranking = load_risk_ranking_with_fastapi_stub()
         items = [
             {
@@ -53,11 +56,9 @@ class RankingApiCompactionTest(unittest.TestCase):
         with patch.object(risk_ranking, "_news", return_value={"items": items, "date": "24h"}) as news:
             response = risk_ranking.news_ranking(date="24h", limit=0)
 
-        news.assert_called_once_with("24h", risk_ranking.PUBLIC_NEWS_RANKING_FALLBACK_LIMIT)
-        self.assertEqual(len(response["items"]), risk_ranking.PUBLIC_NEWS_RANKING_FALLBACK_LIMIT)
-        self.assertTrue(all(item["content"] == "" for item in response["items"]))
-        self.assertTrue(all(len(item["evidence"]) <= 180 for item in response["items"]))
-        self.assertTrue(all(len(item["summary"]) <= 160 for item in response["items"]))
+        news.assert_called_once_with("24h", 0)
+        self.assertEqual(len(response["items"]), len(items))
+        self.assertEqual(response["items"][0]["content"], items[0]["content"])
 
     def test_public_coin_limit_zero_returns_compact_bounded_list(self) -> None:
         risk_ranking = load_risk_ranking_with_fastapi_stub()

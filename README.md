@@ -70,6 +70,7 @@ ALLOW_SYSTEM_EVENT_GLOBAL_QUERY=0
 SYSTEM_ADMIN_USERNAMES=
 SYSTEM_ADMIN_USER_IDS=user-替换为管理员账号ID
 ALLOW_ADMIN_USERNAME_REGISTRATION=0
+DAILY_SCHEDULER_ENABLED=1
 CSRF_PROTECTION_ENABLED=1
 API_RATE_LIMIT_ENABLED=1
 AUTH_RATE_LIMIT_PER_MINUTE=8
@@ -146,6 +147,9 @@ BINANCE_HTTPS_PROXY=
 - `GET /api/system/rate-limits`：管理员查看当前 API 限流规则和运行中桶状态。
 - `GET /api/system/storage-inventory`：管理员查看 SQLite、日报文件和模拟交易运行态的数据量与文件大小。
 - `GET /api/system/backup-manifest`：管理员查看生产备份清单，确认 SQLite、WAL/SHM、日报目录和运行态 JSON 的备份范围。
+- `GET /api/system/daily-scheduler`：管理员查看每日 08:00 新闻更新与资产日报定时任务状态。
+- `PATCH /api/system/daily-scheduler`：管理员启动或暂停每日定时任务。
+- `POST /api/system/daily-scheduler/run-now`：管理员手动执行一次新闻更新与订阅用户资产日报生成。
 
 ## 产品化上线门禁
 
@@ -160,6 +164,7 @@ BINANCE_HTTPS_PROXY=
 - `ALLOW_ADMIN_USERNAME_REGISTRATION` 必须保持 `0`，避免公网用户抢注 `SYSTEM_ADMIN_USERNAMES` 中的管理员用户名。
 - `ALLOW_SYSTEM_EVENT_GLOBAL_QUERY` 是旧兼容开关，系统观测已改为管理员可见，生产环境不建议开启。
 - 生产环境建议关闭 `ALLOW_LOCAL_CORS` 和 `CRYPTO_RISK_AGENT_OFFLINE`。
+- `DAILY_SCHEDULER_ENABLED=1` 时后端会启动每日 08:00 定时任务；可在系统设置页由管理员暂停或恢复。
 - `DEEPSEEK_API_KEY` 缺失时系统仍可规则兜底，但 Agent 深度会下降。
 - `DEEPSEEK_CLIENT` readiness 会检查 Python `openai` 客户端是否可导入；有 API Key 但客户端缺失时应先安装后端依赖。
 - `DEEPSEEK_MODEL` 必须保持 `deepseek-v4-pro`；`DEEPSEEK_TIMEOUT` 应为 1-120 秒数字，readiness 会提示模型漂移或非法 timeout。

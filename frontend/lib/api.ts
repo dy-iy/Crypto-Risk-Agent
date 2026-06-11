@@ -729,6 +729,28 @@ export type SystemReadiness = {
   };
 };
 
+export type DailySchedulerStatus = {
+  enabled: boolean;
+  schedule_hour: number;
+  schedule_minute: number;
+  last_run_date: string;
+  last_started_at: string;
+  last_finished_at: string;
+  last_status: string;
+  last_message: string;
+  last_job_id: string;
+  last_result?: Record<string, unknown> | null;
+  updated_at: string;
+  running: boolean;
+  thread_alive: boolean;
+};
+
+export type DailyReportSubscription = {
+  user_id: string;
+  enabled: boolean;
+  updated_at: string;
+};
+
 export type AuditSummaryKind = {
   job_kind: string;
   total: number;
@@ -918,6 +940,7 @@ export type AccountDeleteResult = {
     analysis_reports_deleted: number;
     portfolio_watchlist_deleted: number;
     daily_reports_deleted: number;
+    daily_report_subscriptions_deleted?: number;
     sim_accounts_deleted?: number;
     audit_events_deleted?: number;
     favorites_deleted: number;
@@ -1359,6 +1382,24 @@ export function fetchBackupManifest() {
   return requestJson<BackupManifest>("/api/system/backup-manifest");
 }
 
+export function fetchDailySchedulerStatus() {
+  return requestJson<DailySchedulerStatus>("/api/system/daily-scheduler");
+}
+
+export function updateDailySchedulerStatus(enabled: boolean) {
+  return requestJson<DailySchedulerStatus>("/api/system/daily-scheduler", {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function runDailySchedulerNow() {
+  clearApiCache();
+  return requestJson<DailySchedulerStatus>("/api/system/daily-scheduler/run-now", {
+    method: "POST",
+  });
+}
+
 export function pruneTaskEvents() {
   return requestJson<AuditPruneResult>("/api/system/task-events/prune", {
     method: "POST",
@@ -1614,6 +1655,17 @@ export function readCachedRiskOverview(date?: string) {
 export function fetchDailyRiskReport(date?: string) {
   const search = date ? `?date=${encodeURIComponent(date)}` : "";
   return requestJson<DailyRiskReport | null>(`/api/daily-report${search}`);
+}
+
+export function fetchDailyReportSubscription() {
+  return requestJson<DailyReportSubscription>("/api/daily-report/subscription");
+}
+
+export function updateDailyReportSubscription(enabled: boolean) {
+  return requestJson<DailyReportSubscription>("/api/daily-report/subscription", {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 export function generateDailyRiskReport(date?: string) {

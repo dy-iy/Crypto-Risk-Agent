@@ -295,8 +295,15 @@ def build_backup_manifest() -> dict[str, Any]:
             "用户资产日报 JSON 文件目录。",
         )
     )
-    for name in ("sim_accounts.json", "portfolio_state.json", "portfolio_refresh_jobs.json", "update_jobs.json"):
-        path = DATA_DIR / name
+    runtime_json_paths = {
+        "sim_accounts.json": DATA_DIR / "sim_accounts.json",
+        "portfolio_state.json": DATA_DIR / "portfolio_state.json",
+        "portfolio_refresh_jobs.json": DATA_DIR / "portfolio_refresh_jobs.json",
+        "update_jobs.json": DATA_DIR / "update_jobs.json",
+        "daily_scheduler_state.json": DATA_DIR / "daily_scheduler_state.json",
+        "daily_report_subscriptions.json": DATA_DIR / "daily_report_subscriptions.json",
+    }
+    for name, path in runtime_json_paths.items():
         items.append(
             _backup_item(
                 name=name,
@@ -361,6 +368,8 @@ def build_storage_inventory() -> dict[str, Any]:
         ),
         _daily_report_inventory(daily_report_store.DAILY_REPORTS_DIR),
         _json_file_inventory("sim_accounts", sim_engine_service.SIM_ACCOUNTS_PATH),
+        _json_file_inventory("daily_scheduler_state", DATA_DIR / "daily_scheduler_state.json"),
+        _json_file_inventory("daily_report_subscriptions", DATA_DIR / "daily_report_subscriptions.json"),
         invalid_json_backup_inventory,
     ]
     total_size = sum(int(item.get("size_bytes") or 0) for item in datastores)

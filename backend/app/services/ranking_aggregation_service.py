@@ -55,17 +55,15 @@ def _filter_news_by_recent_delta(items: list[dict[str, object]], delta: timedelt
 
 
 def filter_news_by_date(items: list[dict[str, object]], date_filter: str | None) -> list[dict[str, object]]:
+    if date_filter == "all":
+        return items
     if date_filter == "24h":
-        filtered = _filter_news_by_recent_delta(items, timedelta(hours=24))
-        return filtered or items
+        return _filter_news_by_recent_delta(items, timedelta(hours=24))
     if date_filter == "7d":
-        filtered = _filter_news_by_recent_delta(items, timedelta(days=7))
-        return filtered or items
+        return _filter_news_by_recent_delta(items, timedelta(days=7))
     if not date_filter:
-        filtered = _filter_news_by_recent_delta(items, timedelta(hours=24))
-        return filtered or items
-    filtered = [item for item in items if item.get("date") == date_filter]
-    return filtered or items
+        return _filter_news_by_recent_delta(items, timedelta(hours=24))
+    return [item for item in items if item.get("date") == date_filter]
 
 
 def first_text_value(item: dict[str, object], fields: list[str]) -> str:

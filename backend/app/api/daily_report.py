@@ -11,6 +11,10 @@ from app.services.daily_report_store import (
     list_daily_reports,
     save_daily_report,
 )
+from app.services.daily_report_subscription_service import (
+    get_daily_report_subscription,
+    set_daily_report_subscription,
+)
 from app.services.portfolio_service import DEFAULT_USER_ID
 
 
@@ -19,6 +23,10 @@ router = APIRouter(prefix="/api/daily-report", tags=["personal-daily-report"])
 
 class DailyReportGenerateRequest(BaseModel):
     date: str | None = "24h"
+
+
+class DailyReportSubscriptionRequest(BaseModel):
+    enabled: bool
 
 
 def _normalize_date(date: str | None) -> str:
@@ -50,6 +58,23 @@ def personal_daily_report_history(
 ):
     user_id, _ = _resolve_user(cryptorisk_session)
     return list_daily_reports(user_id, _normalize_date(date) if date else None)
+
+
+@router.get("/subscription")
+def personal_daily_report_subscription(
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    user_id, _ = _resolve_user(cryptorisk_session)
+    return get_daily_report_subscription(user_id)
+
+
+@router.patch("/subscription")
+def update_personal_daily_report_subscription(
+    payload: DailyReportSubscriptionRequest,
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    user_id, _ = _resolve_user(cryptorisk_session)
+    return set_daily_report_subscription(user_id, payload.enabled)
 
 
 @router.post("/generate")

@@ -41,6 +41,7 @@ from app.services.analysis_audit_service import (
 )
 from app.services.auth_service import get_user_by_session
 from app.services.csrf_service import csrf_request_allowed
+from app.services.daily_scheduler_service import start_daily_scheduler_thread, stop_daily_scheduler_thread
 from app.services.error_response_service import (
     PUBLIC_AGENT_ERROR_DETAIL,
     PUBLIC_INTERNAL_ERROR_DETAIL,
@@ -197,6 +198,16 @@ app.include_router(account_router)
 app.include_router(favorites_router)
 app.include_router(daily_report_router)
 app.include_router(user_assets_router)
+
+
+@app.on_event("startup")
+def start_background_services() -> None:
+    start_daily_scheduler_thread()
+
+
+@app.on_event("shutdown")
+def stop_background_services() -> None:
+    stop_daily_scheduler_thread()
 
 
 @app.get("/")

@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.schemas_auth import AuthUser
 from app.services.analysis_report_service import delete_analysis_reports_for_user
 from app.services.auth_service import delete_user_account
+from app.services.daily_report_subscription_service import delete_daily_report_subscription
 from app.services.daily_report_store import delete_daily_reports_for_user
 from app.services.portfolio_watchlist_store import delete_watchlist_records_for_user
 from app.services.sim_engine import sim_engine
@@ -13,6 +14,7 @@ def delete_account_data(user: AuthUser) -> dict[str, int]:
     analysis_reports_deleted = delete_analysis_reports_for_user(user.id)
     portfolio_watchlist_deleted = delete_watchlist_records_for_user(user.id)
     daily_reports_deleted = delete_daily_reports_for_user(user.id)
+    daily_report_subscriptions_deleted = delete_daily_report_subscription(user.id)
     sim_accounts_deleted = sim_engine.delete_account(user.id)
     audit_events_deleted = delete_task_events_for_user(user.id)
     auth_deleted = delete_user_account(user.id)
@@ -20,6 +22,7 @@ def delete_account_data(user: AuthUser) -> dict[str, int]:
         "analysis_reports_deleted": analysis_reports_deleted,
         "portfolio_watchlist_deleted": portfolio_watchlist_deleted,
         "daily_reports_deleted": daily_reports_deleted,
+        "daily_report_subscriptions_deleted": daily_report_subscriptions_deleted,
         "sim_accounts_deleted": sim_accounts_deleted,
         "audit_events_deleted": audit_events_deleted,
         "favorites_deleted": auth_deleted["favorites"],
