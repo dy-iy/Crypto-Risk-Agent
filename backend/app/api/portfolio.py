@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from os import getenv
+from pathlib import Path
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import Lock, Thread
 
 from fastapi import APIRouter, Cookie, HTTPException, Query
@@ -35,11 +36,15 @@ from app.services.portfolio_service import (
 )
 from app.services.portfolio_impact_service import get_portfolio_impact_for_user
 from app.services.auth_service import get_user_by_session
+from app.services.runtime_json_store import load_runtime_json_or_quarantine, write_runtime_json_atomic
+from app.services.task_audit_service import record_task_event
 
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio-risk-radar"])
+PORTFOLIO_REFRESH_JOBS_PATH = Path(__file__).resolve().parents[1] / "data" / "portfolio_refresh_jobs.json"
 _refresh_jobs: dict[str, PortfolioRefreshJob] = {}
 _refresh_lock = Lock()
+_refresh_jobs_lock = Lock()
 _latest_job_by_user: dict[str, str] = {}
 
 
@@ -47,26 +52,125 @@ def _now_text() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _parse_job_time(value: object) -> datetime:
+    try:
+        return datetime.strptime(str(value or ""), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return datetime.min
+
+
+def _load_refresh_jobs() -> None:
+    raw = load_runtime_json_or_quarantine(PORTFOLIO_REFRESH_JOBS_PATH)
+    if not isinstance(raw, dict):
+        return
+    for job_id, payload in raw.items():
+        if not isinstance(payload, dict):
+            continue
+        try:
+            job = PortfolioRefreshJob.model_validate(payload)
+        except Exception:
+            continue
+        _refresh_jobs[str(job_id)] = job
+        _latest_job_by_user[job.user_id] = job.job_id
+
+
+def _persist_refresh_jobs() -> None:
+    write_runtime_json_atomic(
+        PORTFOLIO_REFRESH_JOBS_PATH,
+        {job_id: job.model_dump(mode="json") for job_id, job in _refresh_jobs.items()},
+    )
+
+
+_load_refresh_jobs()
+
+
 def _store_refresh_job(job: PortfolioRefreshJob) -> PortfolioRefreshJob:
-    job.updated_at = _now_text()
-    _refresh_jobs[job.job_id] = job
-    _latest_job_by_user[job.user_id] = job.job_id
+    with _refresh_jobs_lock:
+        job.updated_at = _now_text()
+        _refresh_jobs[job.job_id] = job
+        _latest_job_by_user[job.user_id] = job.job_id
+        _persist_refresh_jobs()
+    record_task_event(
+        job_kind="portfolio_refresh",
+        job_id=job.job_id,
+        event_type="state_update",
+        status=job.status,
+        stage=job.stage,
+        message=job.message,
+        user_id=job.user_id,
+        payload={"error": job.error, "has_result": job.result is not None},
+    )
     return job
 
 
 def _active_refresh_job(user_id: str) -> PortfolioRefreshJob | None:
-    job_id = _latest_job_by_user.get(user_id)
-    if not job_id:
-        return None
-    job = _refresh_jobs.get(job_id)
+    with _refresh_jobs_lock:
+        job_id = _latest_job_by_user.get(user_id)
+        if not job_id:
+            return None
+        job = _refresh_jobs.get(job_id)
     if job and job.status in {"queued", "running"}:
         return job
     return None
 
 
+def _rebuild_latest_refresh_jobs_unlocked() -> None:
+    _latest_job_by_user.clear()
+    for job in sorted(_refresh_jobs.values(), key=lambda item: _parse_job_time(item.updated_at)):
+        _latest_job_by_user[job.user_id] = job.job_id
+
+
+def prune_portfolio_refresh_jobs(retention_days: int = 14, max_jobs: int = 100) -> dict[str, int]:
+    safe_days = max(1, min(3650, int(retention_days or 14)))
+    safe_max_jobs = max(1, min(100_000, int(max_jobs or 100)))
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=safe_days)
+    active_statuses = {"queued", "running"}
+    deleted_by_age = 0
+    deleted_by_count = 0
+
+    with _refresh_jobs_lock:
+        inactive_ids = [
+            job_id
+            for job_id, job in _refresh_jobs.items()
+            if job.status not in active_statuses
+        ]
+        for job_id in inactive_ids:
+            job = _refresh_jobs.get(job_id)
+            if not job:
+                continue
+            updated_at = _parse_job_time(job.finished_at or job.updated_at)
+            if updated_at < cutoff:
+                _refresh_jobs.pop(job_id, None)
+                deleted_by_age += 1
+
+        overflow = max(0, len(_refresh_jobs) - safe_max_jobs)
+        if overflow:
+            removable = [
+                (job_id, _parse_job_time(job.finished_at or job.updated_at))
+                for job_id, job in _refresh_jobs.items()
+                if job.status not in active_statuses
+            ]
+            for job_id, _updated_at in sorted(removable, key=lambda item: item[1])[:overflow]:
+                if _refresh_jobs.pop(job_id, None) is not None:
+                    deleted_by_count += 1
+
+        _rebuild_latest_refresh_jobs_unlocked()
+        remaining = len(_refresh_jobs)
+        _persist_refresh_jobs()
+
+    return {
+        "deleted_by_age": deleted_by_age,
+        "deleted_by_count": deleted_by_count,
+        "remaining_jobs": remaining,
+        "retention_days": safe_days,
+        "max_jobs": safe_max_jobs,
+    }
+
+
 def _run_refresh_job(job_id: str, user_id: str) -> None:
     with _refresh_lock:
-        job = _refresh_jobs.get(job_id)
+        with _refresh_jobs_lock:
+            job = _refresh_jobs.get(job_id)
         if not job:
             return
         _store_refresh_job(job.model_copy(update={
@@ -240,6 +344,15 @@ def start_portfolio_refresh_job(
         updated_at=_now_text(),
     )
     _store_refresh_job(job)
+    record_task_event(
+        job_kind="portfolio_refresh",
+        job_id=job.job_id,
+        event_type="created",
+        status=job.status,
+        stage=job.stage,
+        message=job.message,
+        user_id=job.user_id,
+    )
     Thread(target=_run_refresh_job, args=(job.job_id, resolved_user_id), daemon=True).start()
     return job
 
@@ -250,15 +363,18 @@ def current_portfolio_refresh_job(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
-    job_id = _latest_job_by_user.get(resolved_user_id)
-    if not job_id or job_id not in _refresh_jobs:
+    with _refresh_jobs_lock:
+        job_id = _latest_job_by_user.get(resolved_user_id)
+        job = _refresh_jobs.get(job_id or "")
+    if not job:
         raise HTTPException(status_code=404, detail="No portfolio refresh job")
-    return _refresh_jobs[job_id]
+    return job
 
 
 @router.get("/refresh/jobs/{job_id}", response_model=PortfolioRefreshJob)
 def get_portfolio_refresh_job(job_id: str):
-    job = _refresh_jobs.get(job_id)
+    with _refresh_jobs_lock:
+        job = _refresh_jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Portfolio refresh job not found")
     return job

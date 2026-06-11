@@ -1,6 +1,5 @@
 from copy import deepcopy
-from datetime import datetime
-import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock, Thread
 from uuid import uuid4
@@ -10,7 +9,10 @@ from fastapi import APIRouter, HTTPException, Query
 from app.agents.ranking_agent.graph import run_ranking_agent
 from app.data.update_news import update_news_dataset
 from app.services.data_loader import load_normalized_news, load_scored_news, read_raw_news_records, save_scored_news
+from app.services.error_response_service import PUBLIC_NEWS_UPDATE_ERROR_DETAIL
 from app.services.ranking_aggregation_service import filter_news_by_date
+from app.services.runtime_json_store import load_runtime_json_or_quarantine, write_runtime_json_atomic
+from app.services.task_audit_service import record_task_event
 from app.tools.ranking_tools import attach_coin_entities
 
 
@@ -26,13 +28,15 @@ def _now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _load_update_jobs() -> None:
-    if not UPDATE_JOBS_PATH.exists():
-        return
+def _parse_job_time(value: object) -> datetime:
     try:
-        raw = json.loads(UPDATE_JOBS_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return
+        return datetime.strptime(str(value or ""), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return datetime.min
+
+
+def _load_update_jobs() -> None:
+    raw = load_runtime_json_or_quarantine(UPDATE_JOBS_PATH)
     if not isinstance(raw, dict):
         return
     _update_jobs.update({
@@ -43,14 +47,7 @@ def _load_update_jobs() -> None:
 
 
 def _persist_update_jobs() -> None:
-    try:
-        UPDATE_JOBS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        UPDATE_JOBS_PATH.write_text(
-            json.dumps(_update_jobs, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except OSError:
-        return
+    write_runtime_json_atomic(UPDATE_JOBS_PATH, _update_jobs)
 
 
 _load_update_jobs()
@@ -93,6 +90,7 @@ def _progress_percent(current: int, total: int) -> int:
 
 
 def _update_job(job_id: str, **updates: object) -> None:
+    audit_payload: dict[str, object] | None = None
     with _jobs_lock:
         job = _update_jobs.get(job_id)
         if not job:
@@ -110,6 +108,20 @@ def _update_job(job_id: str, **updates: object) -> None:
                 job[key] = value
         job["updated_at"] = _now_text()
         _persist_update_jobs()
+        audit_payload = deepcopy(job)
+    if audit_payload:
+        record_task_event(
+            job_kind="news_update",
+            job_id=job_id,
+            event_type="state_update",
+            status=str(audit_payload.get("status") or ""),
+            stage=str(audit_payload.get("stage") or ""),
+            message=str(audit_payload.get("message") or ""),
+            payload={
+                "updated_keys": sorted(updates.keys()),
+                "error": audit_payload.get("error") or "",
+            },
+        )
 
 
 def _get_job(job_id: str) -> dict[str, object] | None:
@@ -133,6 +145,52 @@ def _get_current_update_job() -> dict[str, object] | None:
             return None
         latest_job = max(_update_jobs.values(), key=lambda item: str(item.get("updated_at") or ""))
         return deepcopy(latest_job)
+
+
+def prune_update_jobs(retention_days: int = 14, max_jobs: int = 100) -> dict[str, int]:
+    safe_days = max(1, min(3650, int(retention_days or 14)))
+    safe_max_jobs = max(1, min(100_000, int(max_jobs or 100)))
+    cutoff = datetime.now() - timedelta(days=safe_days)
+    active_statuses = {"queued", "running"}
+    deleted_by_age = 0
+    deleted_by_count = 0
+
+    with _jobs_lock:
+        inactive_ids = [
+            job_id
+            for job_id, job in _update_jobs.items()
+            if str(job.get("status") or "") not in active_statuses
+        ]
+        for job_id in inactive_ids:
+            job = _update_jobs.get(job_id)
+            if not job:
+                continue
+            updated_at = _parse_job_time(job.get("finished_at") or job.get("updated_at"))
+            if updated_at < cutoff:
+                _update_jobs.pop(job_id, None)
+                deleted_by_age += 1
+
+        overflow = max(0, len(_update_jobs) - safe_max_jobs)
+        if overflow:
+            removable = [
+                (job_id, _parse_job_time(job.get("finished_at") or job.get("updated_at")))
+                for job_id, job in _update_jobs.items()
+                if str(job.get("status") or "") not in active_statuses
+            ]
+            for job_id, _updated_at in sorted(removable, key=lambda item: item[1])[:overflow]:
+                if _update_jobs.pop(job_id, None) is not None:
+                    deleted_by_count += 1
+
+        remaining = len(_update_jobs)
+        _persist_update_jobs()
+
+    return {
+        "deleted_by_age": deleted_by_age,
+        "deleted_by_count": deleted_by_count,
+        "remaining_jobs": remaining,
+        "retention_days": safe_days,
+        "max_jobs": safe_max_jobs,
+    }
 
 
 def _csv_order(item: dict[str, object]) -> int:
@@ -365,6 +423,94 @@ def _coins(date: str | None, limit: int):
     return run_ranking_agent("coins", date_filter=date, limit=limit, score_missing=False)
 
 
+def _compact_text(value: object, max_chars: int) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= max_chars:
+        return text
+    return f"{text[:max(0, max_chars - 3)]}..."
+
+
+def _compact_news_item(item: dict[str, object]) -> dict[str, object]:
+    return {
+        **item,
+        "content": "",
+        "evidence": _compact_text(item.get("evidence"), 180),
+        "summary": _compact_text(item.get("summary"), 160),
+    }
+
+
+MAX_COMPACT_COIN_RELATED_NEWS = 6
+PUBLIC_NEWS_RANKING_FALLBACK_LIMIT = 80
+PUBLIC_COIN_RANKING_FALLBACK_LIMIT = 500
+
+
+def _compact_coin_item(item: dict[str, object]) -> dict[str, object]:
+    related_news = item.get("related_news")
+    if not isinstance(related_news, list):
+        return item
+    return {
+        **item,
+        "related_news": [
+            _compact_news_item(news_item) if isinstance(news_item, dict) else news_item
+            for news_item in related_news[:MAX_COMPACT_COIN_RELATED_NEWS]
+        ],
+    }
+
+
+def _compact_overview_response(response: dict[str, object]) -> dict[str, object]:
+    compacted = {**response}
+    for key in ("top_news", "top_news_preview"):
+        value = compacted.get(key)
+        if isinstance(value, dict):
+            compacted[key] = _compact_news_item(value)
+        elif isinstance(value, list):
+            compacted[key] = [
+                _compact_news_item(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+
+    for key in ("top_coin", "top_coin_preview"):
+        value = compacted.get(key)
+        if isinstance(value, dict):
+            compacted[key] = _compact_coin_item(value)
+        elif isinstance(value, list):
+            compacted[key] = [
+                _compact_coin_item(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+    return compacted
+
+
+def _compact_news_response(response: dict[str, object], limit: int) -> dict[str, object]:
+    if limit <= 0:
+        return response
+    items = response.get("items")
+    if not isinstance(items, list):
+        return response
+    return {
+        **response,
+        "items": [
+            _compact_news_item(item) if isinstance(item, dict) else item
+            for item in items[:limit]
+        ],
+    }
+
+
+def _compact_coin_response(response: dict[str, object], limit: int) -> dict[str, object]:
+    if limit <= 0:
+        return response
+    items = response.get("items")
+    if not isinstance(items, list):
+        return response
+    return {
+        **response,
+        "items": [
+            _compact_coin_item(item) if isinstance(item, dict) else item
+            for item in items[:limit]
+        ],
+    }
+
+
 def _is_complete_scored_item(item: dict[str, object]) -> bool:
     if item.get("llm_source") == "rule_fallback":
         return False
@@ -392,7 +538,7 @@ def _count_unprocessed_news(date_filter: str | None = None) -> int:
 
 @router.get("/overview")
 def ranking_overview(date: str | None = Query(default=None)):
-    return _overview(date)
+    return _compact_overview_response(_overview(date))
 
 
 @router.post("/update-news")
@@ -424,7 +570,7 @@ def update_today_news():
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"News update failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail=PUBLIC_NEWS_UPDATE_ERROR_DETAIL) from exc
     finally:
         _update_lock.release()
 
@@ -440,6 +586,15 @@ def start_update_today_news_job():
     with _jobs_lock:
         _update_jobs[job_id] = job
         _persist_update_jobs()
+    record_task_event(
+        job_kind="news_update",
+        job_id=job_id,
+        event_type="created",
+        status=str(job.get("status") or "queued"),
+        stage=str(job.get("stage") or "queued"),
+        message=str(job.get("message") or ""),
+        payload={"crawler": job.get("crawler"), "agent": job.get("agent"), "ranking": job.get("ranking")},
+    )
 
     thread = Thread(target=_run_update_job, args=(job_id,), daemon=True)
     thread.start()
@@ -467,7 +622,8 @@ def news_ranking(
     date: str | None = Query(default=None),
     limit: int = Query(default=10, ge=0, le=5000),
 ):
-    return _news(date, limit)
+    effective_limit = limit or PUBLIC_NEWS_RANKING_FALLBACK_LIMIT
+    return _compact_news_response(_news(date, effective_limit), effective_limit)
 
 
 @router.get("/news/{news_id}")
@@ -492,7 +648,8 @@ def coin_ranking(
     date: str | None = Query(default=None),
     limit: int = Query(default=10, ge=0, le=5000),
 ):
-    return _coins(date, limit)
+    effective_limit = limit or PUBLIC_COIN_RANKING_FALLBACK_LIMIT
+    return _compact_coin_response(_coins(date, effective_limit), effective_limit)
 
 
 @router.get("/coins/{symbol}")

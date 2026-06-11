@@ -6,6 +6,8 @@ from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
 
+from app.services.llm_config_service import get_deepseek_config
+
 try:
     from openai import AsyncOpenAI, OpenAI
 except ImportError:
@@ -20,10 +22,6 @@ for env_path in [
     APP_DIR / ".env",
 ]:
     load_dotenv(env_path)
-
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-
 
 def _extract_json(text: str) -> dict[str, object]:
     cleaned = text.strip()
@@ -56,15 +54,16 @@ def call_llm_json(prompt: str, temperature: float = 0.2) -> dict[str, object]:
     if OpenAI is None:
         return {"_llm_error": "openai package is not installed"}
 
+    config = get_deepseek_config()
     client = OpenAI(
         api_key=api_key,
-        base_url=DEEPSEEK_BASE_URL,
-        timeout=float(os.getenv("DEEPSEEK_TIMEOUT", "30")),
+        base_url=config.base_url,
+        timeout=config.timeout,
     )
 
     try:
         response = client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
+            model=config.model,
             messages=[
                 {
                     "role": "system",
@@ -94,15 +93,16 @@ def call_llm_text(
     if OpenAI is None:
         return "openai package is not installed"
 
+    config = get_deepseek_config()
     client = OpenAI(
         api_key=api_key,
-        base_url=DEEPSEEK_BASE_URL,
-        timeout=float(os.getenv("DEEPSEEK_TIMEOUT", "30")),
+        base_url=config.base_url,
+        timeout=config.timeout,
     )
 
     try:
         response = client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
+            model=config.model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
@@ -124,15 +124,16 @@ async def call_llm_json_async(prompt: str, temperature: float = 0.2) -> dict[str
     if AsyncOpenAI is None:
         return {"_llm_error": "openai package is not installed"}
 
+    config = get_deepseek_config()
     client = AsyncOpenAI(
         api_key=api_key,
-        base_url=DEEPSEEK_BASE_URL,
-        timeout=float(os.getenv("DEEPSEEK_TIMEOUT", "30")),
+        base_url=config.base_url,
+        timeout=config.timeout,
     )
 
     try:
         response = await client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
+            model=config.model,
             messages=[
                 {
                     "role": "system",
@@ -167,15 +168,16 @@ async def stream_llm_text(
         yield "openai package is not installed"
         return
 
+    config = get_deepseek_config()
     client = AsyncOpenAI(
         api_key=api_key,
-        base_url=DEEPSEEK_BASE_URL,
-        timeout=float(os.getenv("DEEPSEEK_TIMEOUT", "30")),
+        base_url=config.base_url,
+        timeout=config.timeout,
     )
 
     try:
         stream = await client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
+            model=config.model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},

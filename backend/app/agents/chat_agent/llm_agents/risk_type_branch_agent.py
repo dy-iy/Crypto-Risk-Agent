@@ -13,7 +13,7 @@ from app.agents.chat_agent.schemas import (
     RiskCaseInput,
     SignalScanResult,
 )
-from app.agents.chat_agent.tools.risk_scanner import RISK_NAME_MAP, RISK_SCENARIO_MAP, RISK_TYPE_ORDER
+from app.agents.chat_agent.tools.risk_scanner import DIRECT_HIGH_RISK_TYPES, RISK_NAME_MAP, RISK_SCENARIO_MAP, RISK_TYPE_ORDER
 from app.llm import call_llm_json
 
 
@@ -90,6 +90,27 @@ def _hit_risk_types(signal_scan: SignalScanResult) -> list[str]:
 def _fallback_branch(case_input: RiskCaseInput, signal_scan: SignalScanResult, risk_type: str, error: str) -> dict[str, object]:
     del case_input
     rule_score = int(round(float(signal_scan.raw_rule_scores.get(risk_type, 0.0)) * 100))
+    established = rule_score >= 45 or (risk_type in DIRECT_HIGH_RISK_TYPES and rule_score >= 30)
+    if rule_score >= 76:
+        severity_score = rule_score
+        evidence_strength = 55
+        confidence = 0.58
+        branch_score = min(rule_score, 88)
+    elif rule_score >= 61:
+        severity_score = rule_score
+        evidence_strength = 48
+        confidence = 0.52
+        branch_score = min(rule_score, 70)
+    elif established:
+        severity_score = min(rule_score, 55)
+        evidence_strength = 40
+        confidence = 0.46
+        branch_score = min(rule_score, 50)
+    else:
+        severity_score = min(rule_score, 25)
+        evidence_strength = 25
+        confidence = 0.35
+        branch_score = min(rule_score, 35)
     evidence_text = (
         f"规则命中{RISK_NAME_MAP[risk_type]}，但 LLM 证据审核不可用"
         if rule_score > 0
@@ -100,11 +121,11 @@ def _fallback_branch(case_input: RiskCaseInput, signal_scan: SignalScanResult, r
         "risk_name": RISK_NAME_MAP[risk_type],
         "scenario": RISK_SCENARIO_MAP[risk_type],
         "rule_score": rule_score,
-        "established": rule_score >= 45,
-        "severity_score": min(rule_score, 45),
-        "evidence_strength": 25,
-        "confidence": 0.35,
-        "branch_score": min(rule_score, 35),
+        "established": established,
+        "severity_score": severity_score,
+        "evidence_strength": evidence_strength,
+        "confidence": confidence,
+        "branch_score": branch_score,
         "evidence_summary": [_trim_text(evidence_text)],
         "missing_evidence": ["LLM 分支证据审核未完成"],
         "reasoning": error,

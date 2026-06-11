@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import math
 import re
@@ -7,7 +8,10 @@ import uuid
 from functools import lru_cache
 from pathlib import Path
 
-import pandas as pd
+try:
+    import pandas as pd
+except ModuleNotFoundError:
+    pd = None
 
 
 MASTERED_NEWS_PATH = Path(__file__).resolve().parents[1] / "data" / "mastered_news.csv"
@@ -54,9 +58,15 @@ def _read_csv(path: Path) -> list[dict[str, object]]:
     last_error: Exception | None = None
     for encoding in ["utf-8-sig", "utf-8", "gbk"]:
         try:
-            dataframe = pd.read_csv(path, encoding=encoding)
-            dataframe = dataframe.fillna("")
-            return dataframe.to_dict(orient="records")
+            if pd is not None:
+                dataframe = pd.read_csv(path, encoding=encoding)
+                dataframe = dataframe.fillna("")
+                return dataframe.to_dict(orient="records")
+            with path.open("r", encoding=encoding, newline="") as file:
+                return [
+                    {key: value or "" for key, value in row.items()}
+                    for row in csv.DictReader(file)
+                ]
         except Exception as exc:
             last_error = exc
     if last_error:

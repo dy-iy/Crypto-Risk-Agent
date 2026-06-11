@@ -13,6 +13,8 @@ SCENARIO_CATEGORY_MAP = {
     "S6_MARKET_LIQUIDATION": "爆仓 / 清算风险",
     "S7_FRAUD_GOVERNANCE": "诈骗 / 跑路 / Rug Pull 风险",
     "S8_WHALE_ONCHAIN_FLOW": "大额转账 / 巨鲸行为风险",
+    "S9_TOKEN_ISSUANCE_ANOMALY": "代币发行 / 异常增发风险",
+    "S10_BRIDGE_CROSS_CHAIN_RISK": "跨链桥 / 跨链资金风险",
 }
 
 
@@ -80,6 +82,10 @@ def _impact(decision_score: int, category: str) -> list[str]:
         return ["可能影响稳定币锚定、赎回预期和 DeFi 交易对流动性。"]
     if "基础设施" in category:
         return ["可能影响链上交易确认、协议可用性、跨链/预言机依赖和用户操作连续性。"]
+    if "代币发行" in category or "异常增发" in category:
+        return ["可能影响代币供应可信度、二级市场抛压、协议储备和用户资产价值稳定性。"]
+    if "跨链桥" in category or "跨链资金" in category:
+        return ["可能影响跨链资产兑付、桥接流动性、相关链和协议的资金安全。"]
     if "诈骗" in category or "治理" in category:
         return ["可能导致用户授权、钱包资产或项目流动性受损，并引发社区信任下降。"]
     if "巨鲸" in category:
@@ -170,6 +176,55 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
     risk_type_branches = result.signal_scan.debug.get("risk_type_branches", [])
     branch_score_merge = result.signal_scan.debug.get("branch_score_merge", {})
     final_context_agents = result.signal_scan.debug.get("final_context_agents", {})
+    evidence_graph = result.signal_scan.debug.get("evidence_graph", [])
+    risk_hypotheses = result.signal_scan.debug.get("risk_hypotheses", [])
+    scenario_assessments = result.signal_scan.debug.get("scenario_assessments", [])
+    counter_evidence = result.signal_scan.debug.get("counter_evidence", [])
+    missing_evidence_by_scenario = result.signal_scan.debug.get("missing_evidence_by_scenario", {})
+    cross_scenario_arbiter = result.signal_scan.debug.get("cross_scenario_arbiter", {})
+    if not isinstance(counter_evidence, list) or not counter_evidence:
+        counter_evidence = [
+            {
+                "atom_id": f"ev-counter-{index + 1:03d}",
+                "scenario": signal.scenario_hint or "S0_GENERAL_UNKNOWN",
+                "text": "、".join(signal.matched_terms) or signal.reason,
+                "meaning": signal.reason or "负向证据",
+                "source": "rule_negative_signal",
+            }
+            for index, signal in enumerate(result.signal_scan.negative_signals)
+        ]
+    if (not isinstance(evidence_graph, list) or not evidence_graph) and counter_evidence:
+        evidence_graph = [
+            {
+                "id": str(item.get("atom_id") or f"ev-counter-{index + 1:03d}"),
+                "scenario": str(item.get("scenario") or "S0_GENERAL_UNKNOWN"),
+                "risk_type": "negative_signal",
+                "risk_name": "反向证据",
+                "polarity": "counter",
+                "field": "negative_signal",
+                "text": str(item.get("text") or ""),
+                "source": str(item.get("source") or "rule_negative_signal"),
+                "confidence": 0.25,
+                "affected_entities": [],
+            }
+            for index, item in enumerate(counter_evidence)
+            if isinstance(item, dict)
+        ]
+    if not isinstance(evidence_graph, list) or not evidence_graph:
+        evidence_graph = [
+            {
+                "id": "ev-low-risk-001",
+                "scenario": decision.primary_scenario,
+                "risk_type": "low_risk_rule_summary",
+                "risk_name": "低风险规则证据",
+                "polarity": "counter",
+                "field": "fast_exit_reason",
+                "text": "规则扫描未发现足以升级到深度风险分析的明确风险信号。",
+                "source": "fast_exit_decision",
+                "confidence": round(decision.confidence, 2),
+                "affected_entities": [],
+            }
+        ]
     final_context_is_dict = isinstance(final_context_agents, dict)
     if isinstance(branch_score_merge, dict) and branch_score_merge.get("primary_risk_name"):
         category = str(branch_score_merge["primary_risk_name"])
@@ -212,6 +267,12 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
         "low_risk_gate": low_risk_gate,
         "risk_type_branches": risk_type_branches,
         "branch_score_merge": branch_score_merge,
+        "evidence_graph": evidence_graph,
+        "risk_hypotheses": risk_hypotheses,
+        "scenario_assessments": scenario_assessments,
+        "counter_evidence": counter_evidence,
+        "missing_evidence_by_scenario": missing_evidence_by_scenario,
+        "cross_scenario_arbiter": cross_scenario_arbiter,
         "impact_analysis": final_context_agents.get("impact_analysis", {}) if final_context_is_dict else {},
         "advice_generation": advice_generation,
         "context_keys": final_context_agents.get("context_keys", []) if final_context_is_dict else [],
@@ -219,6 +280,56 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
         "has_established_risk": final_context_agents.get("has_established_risk") if final_context_is_dict else None,
     }
     evidence_items = _branch_evidence_items(risk_type_branches) if isinstance(risk_type_branches, list) else []
+    decision_trace = {
+        "formula": branch_score_merge.get("formula") if isinstance(branch_score_merge, dict) else "",
+        "pre_cap_score": decision.pre_cap_score,
+        "final_score": decision.risk_score,
+        "risk_level": decision.risk_level,
+        "risk_status": decision.risk_status,
+        "primary_scenario": decision.primary_scenario,
+        "primary_risk_type": branch_score_merge.get("primary_risk_type") if isinstance(branch_score_merge, dict) else "",
+        "primary_risk_name": branch_score_merge.get("primary_risk_name") if isinstance(branch_score_merge, dict) else category,
+        "raw_rule_scores": result.signal_scan.raw_rule_scores,
+        "rule_score": result.signal_scan.raw_rule_scores.get(
+            str(branch_score_merge.get("primary_risk_type") if isinstance(branch_score_merge, dict) else ""),
+            0,
+        ),
+        "primary_branch_score": branch_score_merge.get("primary_branch_score") if isinstance(branch_score_merge, dict) else None,
+        "secondary_bonus": branch_score_merge.get("secondary_bonus") if isinstance(branch_score_merge, dict) else 0,
+        "secondary_risk_types": branch_score_merge.get("secondary_risk_types") if isinstance(branch_score_merge, dict) else [],
+        "high_risk_floors": branch_score_merge.get("high_risk_floors") if isinstance(branch_score_merge, dict) else [],
+        "insufficient_evidence_types": branch_score_merge.get("insufficient_evidence_types") if isinstance(branch_score_merge, dict) else [],
+        "score_caps_applied": decision.score_caps_applied,
+        "hard_caps_applied": decision.hard_caps_applied,
+        "soft_caps_applied": decision.soft_caps_applied,
+        "score_floors_applied": decision.score_floors_applied,
+        "cap_conflicts": decision.cap_conflicts,
+        "cross_scenario_arbiter": cross_scenario_arbiter,
+        "validator": result.validation.model_dump() if result.validation else None,
+        "reason_codes": decision.reason_codes,
+        "steps": [
+            {
+                "stage": "rule_scan",
+                "score": branch_score_merge.get("primary_branch_score") if isinstance(branch_score_merge, dict) else decision.pre_cap_score,
+                "detail": "规则扫描生成候选风险类型和场景分。",
+            },
+            {
+                "stage": "branch_merge",
+                "score": decision.pre_cap_score,
+                "detail": branch_score_merge.get("formula") if isinstance(branch_score_merge, dict) else "分支评分合成为初始风险分。",
+            },
+            {
+                "stage": "cap_floor",
+                "score": decision.risk_score,
+                "detail": "应用反证 cap、高危 floor 与多场景冲突仲裁。",
+            },
+            {
+                "stage": "validation",
+                "score": decision.risk_score,
+                "detail": result.validation.reason if result.validation else "无需额外冲突验证。",
+            },
+        ],
+    }
     report = {
         "summary": _summary(result),
         "input_type": result.case_input.input_type,
@@ -237,6 +348,12 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
         "secondary_categories": categories[1:],
         "risk_signals": decision.reason_codes,
         "non_risk_factors": [signal.reason for signal in result.signal_scan.cap_signals if signal.reason],
+        "evidence_graph": evidence_graph,
+        "risk_hypotheses": risk_hypotheses,
+        "scenario_assessments": scenario_assessments,
+        "counter_evidence": counter_evidence,
+        "missing_evidence_by_scenario": missing_evidence_by_scenario,
+        "decision_trace": decision_trace,
         "evidence": evidence_items,
         "score_breakdown": score_breakdown,
         "impact": _llm_impact(final_context_agents, _impact(decision.risk_score, category)) if final_context_is_dict else _impact(decision.risk_score, category),
@@ -258,6 +375,13 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
             "decision": result.decision.model_dump(),
             "risk_type_branches": risk_type_branches,
             "branch_score_merge": branch_score_merge,
+            "evidence_graph": evidence_graph,
+            "risk_hypotheses": risk_hypotheses,
+            "scenario_assessments": scenario_assessments,
+            "counter_evidence": counter_evidence,
+            "missing_evidence_by_scenario": missing_evidence_by_scenario,
+            "decision_trace": decision_trace,
+            "cross_scenario_arbiter": cross_scenario_arbiter,
             "final_context_agents": final_context_agents,
             "evidence_extraction": {
                 "mode": result.evidence.extraction_mode,

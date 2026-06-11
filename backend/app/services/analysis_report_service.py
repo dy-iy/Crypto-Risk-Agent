@@ -14,9 +14,15 @@ from app.schemas_reports import (
 
 
 REPORT_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "analysis_reports.sqlite3"
+MAX_REPORT_INPUT_CHARS = 12_000
+MAX_REPORT_JSON_BYTES = 200_000
 
 
 class AnalysisReportError(Exception):
+    pass
+
+
+class AnalysisReportTooLargeError(AnalysisReportError):
     pass
 
 
@@ -89,8 +95,12 @@ def list_analysis_reports(user_id: str) -> list[AnalysisReportItem]:
 
 
 def save_analysis_report(user_id: str, payload: AnalysisReportPayload) -> AnalysisReportItem:
+    if len(payload.input or "") > MAX_REPORT_INPUT_CHARS:
+        raise AnalysisReportTooLargeError(f"analysis report input exceeds {MAX_REPORT_INPUT_CHARS} characters")
     now = _now_text()
     report_json = json.dumps(payload.report, ensure_ascii=False)
+    if len(report_json.encode("utf-8")) > MAX_REPORT_JSON_BYTES:
+        raise AnalysisReportTooLargeError(f"analysis report payload exceeds {MAX_REPORT_JSON_BYTES} bytes")
     with _connect() as conn:
         conn.execute(
             """
@@ -157,7 +167,15 @@ def update_analysis_report_disposition(
 
 def delete_analysis_report(user_id: str, report_id: str) -> None:
     with _connect() as conn:
-        conn.execute(
+        cursor = conn.execute(
             "DELETE FROM analysis_reports WHERE user_id = ? AND id = ?",
             (user_id, report_id),
         )
+        if cursor.rowcount == 0:
+            raise AnalysisReportError("analysis report not found")
+
+
+def delete_analysis_reports_for_user(user_id: str) -> int:
+    with _connect() as conn:
+        cursor = conn.execute("DELETE FROM analysis_reports WHERE user_id = ?", (user_id,))
+        return max(0, int(cursor.rowcount or 0))

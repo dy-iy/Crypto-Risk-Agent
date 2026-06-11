@@ -1,5 +1,5 @@
-import RiskDashboard from "@/components/risk-dashboard";
+import RiskDashboardLoader from "@/components/risk-dashboard-loader";
 
 export default function SettingsPage() {
-  return <RiskDashboard initialView="settings" />;
+  return <RiskDashboardLoader initialView="settings" />;
 }

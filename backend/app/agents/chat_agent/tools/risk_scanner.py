@@ -23,7 +23,7 @@ AMT_RE = re.compile(
 TIME_HINTS = ["分钟", "小时", "日内", "短时间", "瞬间", "盘中", "24小时", "24h", "今晨", "今日", "当天"]
 
 # ---------------- 全局排除 / 缓和语义 ----------------
-NEG_FRAUD = ["反欺诈", "防欺诈", "反诈骗宣传", "欺诈检测", "反洗钱", "AML", "合规体系", "风控系统"]
+NEG_FRAUD = ["反欺诈", "防欺诈", "反诈骗宣传", "反诈骗教育", "欺诈检测", "反洗钱", "AML", "合规体系", "风控系统"]
 NEG_REG_ONLY_TALK = ["呼吁", "建议", "提议", "敦促", "讨论", "区分", "澄清", "拟", "草案", "征求意见"]
 NEG_TICKER_COLLISION = ["BTC原油", "原油出口", "杰伊汉港", "阿塞拜疆"]
 
@@ -33,7 +33,9 @@ NEG_NO_RISK = [
     "不涉及资产安全", "未涉及资产安全",
     "不影响用户资产", "用户资金未受影响", "未造成资金损失",
     "无资金损失", "未造成损失", "已修复", "完成修复",
-    "已恢复", "恢复正常", "误报", "并非攻击", "并非被盗",
+    "已恢复", "恢复正常", "误报", "传闻不实", "并非攻击", "并非被盗",
+    "资金不受影响", "用户资金安全", "未发现资产外流", "未造成用户损失",
+    "未造成代币超发", "未出现供应量异常",
     "不存在被盗风险", "并不存在被盗风险", "并非漏洞",
     "并非安全事故", "非安全事故",
     "安全运营", "平安", "安全无虞", "未受影响", "安然无恙"
@@ -41,7 +43,7 @@ NEG_NO_RISK = [
 
 NEG_PLANNED_MAINT = [
     "例行维护", "计划内维护", "系统升级", "例行升级",
-    "例行系统升级", "按计划推进", "常规维护"
+    "例行系统升级", "按计划推进", "常规维护", "升级维护", "计划内升级维护"
 ]
 
 NEG_INTERNAL_TRANSFER = [
@@ -63,12 +65,12 @@ NEG_NON_CRYPTO_HACK = ["医疗机构", "医疗数据", "AI", "人工智能", "�
 # score_hack 否定语境（已修复/无损失等）改为减权列表，不再完全阻断
 NEG_HACK_DOWNWEIGHT = ["追回", "已修复", "完成修复", "报告漏洞", "漏洞赏金", "不受影响", "未受影响", "安然无恙",
                        "无资产损失", "未造成损失", "无资金损失", "已经恢复", "误报", "用户资金未受影响",
-                       "不涉及用户资产", "未影响用户", "资金安全"]
+                       "不涉及用户资产", "未影响用户", "资金安全", "未造成用户损失", "未造成代币超发"]
 
 # score_hack 防御/澄清/防范语境——出现时分数上限0.3
 NEG_HACK_MITIGATION = ["冻结", "防范", "不受影响", "不会用于", "不涉及", "未受影响", "未涉及", "否认", "澄清",
                        "安全措施", "防范措施", "保护措施", "防御", "不会遭", "不会受到", "未发现损失",
-                       "安全运营", "平安", "安全无虞", "未受", "不会影响"]
+                       "安全运营", "平安", "安全无虞", "未受", "不会影响", "未造成用户损失", "未造成代币超发"]
 
 # score_hack 商业/金融无关新闻排除（收购、信贷等非攻击事件）
 NEG_HACK_BUSINESS_EXCLUDE = ["收购", "信贷基金", "私人信贷", "贷款协议", "发放贷款", "借贷协议"]
@@ -88,7 +90,8 @@ NEG_HACK_NON_ATTACK = ["增持", "增持了", "买入", "购买", "建仓", "ATM
 
 # score_hack 新增：强烈否定（安全运营/无损失等）——出现且无实际损失时直接返回0
 NEG_HACK_STRONG_NO_RISK = ["无资金损失", "未造成损失", "安全运营", "平安无事", "安然无恙", "未受影响",
-                           "安全无虞", "未遭攻击", "未发现损失", "一切正常", "正常运行"]
+                           "安全无虞", "未遭攻击", "未发现损失", "未造成用户损失", "未造成代币超发",
+                           "一切正常", "正常运行"]
 
 # score_hack v3 新增：安全产品/讨论/非攻击语境，直接阻断或强力降权
 NEG_HACK_SAFETY = ["安全产品", "安全服务", "安全合作", "安全响应", "安全提升", "安全公告", "安全运营", "安全无虞",
@@ -185,6 +188,7 @@ NEG_REGULATORY_DISCUSS = ["质疑", "反对", "不会影响", "不采取行动",
 
 # 负面执法动作词（用于 score_regulatory）—— 强负面
 REG_STRONG_NEGATIVE = ["罚款", "指控", "起诉", "逮捕", "禁令", "禁止", "冻结", "查封", "判刑", "监禁", "处罚", "制裁", "宣判", "裁决"]
+NEG_REG_NO_ENFORCEMENT = ["暂无起诉", "暂无罚款", "暂无禁令", "尚未采取执法行动", "未采取执法行动", "没有采取执法行动"]
 # 中等负面/弱信号
 REG_MODERATE_SIGNALS = ["调查", "审查", "警告", "批评", "听证会", "关注", "担忧", "压力", "监管阻力", "国会批评", "监管调查"]
 # 立法/政策讨论
@@ -302,6 +306,11 @@ def smooth_strength(x, x0, scale):
 
 # 1) 合约/链上漏洞攻击 (v3.1 强化安全语境抑制，提升漏洞与事后处理信号)
 def score_hack(text):
+    if has_any(text, ["未造成用户损失", "未造成代币超发"]) and not has_any(text, ["攻击者", "被盗", "盗取", "资金丢失", "资金外流"]):
+        return 0.0
+    if has_illicit_fund_flow(text) and not has_any(text, ["漏洞利用", "利用漏洞", "私钥泄露", "热钱包私钥", "遭受攻击", "损失约"]):
+        return 0.55
+
     # 强烈否定词（安全运营、无任何损失）且无实际损失描述，直接返回0
     if has_any(text, NEG_HACK_STRONG_NO_RISK) and not has_any(text, ["损失", "被盗", "盗取", "资金丢失", "资金消失", "仍受损"]):
         return 0.0
@@ -423,6 +432,10 @@ def score_fraud(text):
     if has_any(text, NEG_FRAUD):
         return 0.0
     if has_any(text, KW_FRAUD):
+        confirmed_loss = has_any(text, ["资产被盗", "资金被盗", "钱包资产被转走", "用户损失", "损失约", "无法取回", "卷走资金"])
+        lure_only = has_any(text, ["诱导用户", "提醒", "警告", "暂未发现用户损失"]) and not confirmed_loss
+        if lure_only:
+            return 0.68
         if has_any(text, FRAUD_POST_EVENT):
             return 0.35
         return 0.88
@@ -432,7 +445,7 @@ def score_fraud(text):
 
 
 # 3) 监管/法律风险 (v3.1 进一步降低讨论和中性的得分)
-REG_ACTORS = ["SEC", "CFTC", "司法部", "检察", "法院", "监管", "执法", "警察", "法官", "审计", "调查机构", "税务",
+REG_ACTORS = ["SEC", "CFTC", "司法部", "检察", "检方", "法院", "监管", "执法", "警察", "法官", "审计", "调查机构", "税务",
               "央行", "中央银行", "联邦储备", "财政部长", "参议员", "众议员", "国会", "金融监管局", "FSB", "FCA"]
 
 REG_WEAK_ACTIONS = ["申请不采取行动", "不采取行动函", "银行家协会质疑稳定币", "监管机构批准", "监管放行",
@@ -442,9 +455,10 @@ REG_WEAK_ACTIONS = ["申请不采取行动", "不采取行动函", "银行家协
 def score_regulatory(text):
     if has_any(text, NEG_REG_FALSE):
         return 0.0
+    no_enforcement = has_any(text, NEG_REG_NO_ENFORCEMENT)
 
     # 纯讨论/提议语境，且无任何强负面行动，直接归零
-    if has_any(text, NEG_REG_ONLY_TALK) and not has_any(text, REG_STRONG_NEGATIVE):
+    if has_any(text, NEG_REG_ONLY_TALK) and (no_enforcement or not has_any(text, REG_STRONG_NEGATIVE)):
         return 0.0
 
     # 有利结果/驳回等，若无强负面行动，降为极低分
@@ -453,7 +467,7 @@ def score_regulatory(text):
             return 0.05
         return 0.20
 
-    has_strong = has_any(text, REG_STRONG_NEGATIVE)
+    has_strong = has_any(text, REG_STRONG_NEGATIVE) and not no_enforcement
     discuss_discount = has_any(text, NEG_REGULATORY_DISCUSS)
 
     # 中性推动表述，且无强负面行动 — 直接给极低分
@@ -504,11 +518,14 @@ def score_regulatory(text):
 
 
 # 4) 交易所/链/钱包运维风险 (保持)
-KW_OUTAGE = ["暂停提现", "暂停充提", "暂停充值", "提现暂停", "充值暂停", "维护", "钱包维护", "宕机", "系统故障", "无法交易", "停止充提", "网络拥堵"]
-KW_OUTAGE_EXTRA = ["冷钱包无法访问", "私钥未移交", "资产无法访问", "提款异常", "提现延迟", "充值延迟", "无法提现", "无法充值", "访问异常", "登录异常", "API异常"]
+KW_OUTAGE = ["暂停提现", "暂停充提", "暂停充值", "提现暂停", "充值暂停", "维护", "钱包维护", "宕机", "系统故障", "系统异常", "无法交易", "停止充提", "网络拥堵"]
+KW_OUTAGE_EXTRA = ["冷钱包无法访问", "私钥未移交", "资产无法访问", "提款异常", "提现延迟", "充值延迟", "无法提现", "无法充值", "提款失败", "访问异常", "登录异常", "API异常", "API 故障", "下单失败", "冻结全部提现"]
 
 
 def score_outage(text):
+    if has_any(text, ["跨链桥", "桥接服务", "桥接"]) and not has_any(text, ["交易所", "中心化交易平台"]):
+        return 0.0
+
     outage_keywords = KW_OUTAGE + KW_OUTAGE_EXTRA
     if not has_any(text, outage_keywords):
         return 0.0
@@ -518,13 +535,18 @@ def score_outage(text):
             return 0.35
         return 0.20
 
+    if has_any(text, ["冻结全部提现", "全部提现", "无法给出恢复时间", "提款失败"]):
+        return 0.82
+
     if has_any(text, ["暂停提现", "暂停充提", "停止充提", "提现暂停", "充值暂停", "无法提现", "无法充值"]):
         return 0.72
 
-    if has_any(text, ["宕机", "系统故障", "无法交易"]):
+    if has_any(text, ["宕机", "系统故障", "系统异常", "API 故障", "下单失败", "无法交易"]):
+        if has_any(text, ["紧急修复", "大量用户", "多个用户", "官方确认"]):
+            return 0.78
         return 0.68
 
-    if has_any(text, ["提现延迟", "充值延迟", "访问异常", "登录异常", "API异常"]):
+    if has_any(text, ["提现延迟", "充值延迟", "访问异常", "登录异常", "API异常", "API 故障"]):
         return 0.45
 
     return 0.55
@@ -539,6 +561,14 @@ STABLE_NUM = re.compile(r'\b0\.9\d\b|\b1\.0\d\b')
 def score_stablecoin(text):
     if not has_any(text, STABLES):
         return 0.0
+    if has_any(text, ["覆盖全部流通供应", "储备证明", "现金和国债覆盖", "未出现赎回暂停"]):
+        return 0.30
+    if has_any(text, ["储备资产存在缺口", "准备金率低于", "储备不足", "储备缺口"]):
+        return 0.78
+    if has_any(text, ["稳定币池", "池出现严重倾斜", "占比超过", "兑换滑点扩大"]):
+        return 0.62
+    if has_any(text, ["恢复锚定", "回到1美元", "回到 1 美元"]) and not has_any(text, ["暂停赎回", "储备不足", "挤兑"]):
+        return 0.35
     if has_any(text, STABLE_HINTS) or STABLE_NUM.search(text or ""):
         return 0.85
     return 0.0
@@ -579,8 +609,8 @@ def score_liquidation(text):
             elif usd < 5_000_000:
                 score_val = clip01(0.45 + 0.20 * smooth_strength(usd, 500_000, 5_000_000))
             else:
-                score_val = clip01(0.50 + 0.30 * smooth_strength(usd, 5_000_000, 20_000_000))
-            return min(score_val, 0.65)
+                score_val = clip01(0.62 + 0.28 * smooth_strength(usd, 5_000_000, 20_000_000))
+            return min(score_val, 0.88)
         if has_strong_liq:
             return 0.55
         return 0.40
@@ -595,7 +625,7 @@ KW_WHALE = ["巨鲸", "whale", "转入", "转出", "转入交易所", "转出交
             "巨额转移", "大额交易", "大额资金", "大额资产", "持仓变动", "大户头寸",
             "大额转入", "大额转出", "未知钱包", "unknown wallet", "大量抛售", "巨量抛售",
             "链上异动", "异常转账"]
-KW_WHALE_BEHAVIOUR = ["准备出售", "抛售", "清仓", "接近清仓", "大量解锁", "巨量的卖单", "巨量的买单", "大户出售", "大额卖单", "代币解锁", "巨额解锁",
+KW_WHALE_BEHAVIOUR = ["准备出售", "抛售", "抛压", "卖压", "抛售压力", "清仓", "接近清仓", "大量解锁", "巨量的卖单", "巨量的买单", "大户出售", "大额卖单", "代币解锁", "巨额解锁",
                        "巨鲸开仓", "大户开仓", "大户头寸", "准备减持", "出售", "减持", "鲸鱼减持", "仓位转移", "持仓转移",
                        "大型持有者准备出售", "鲸鱼持有", "持有者准备出售", "大额砸盘"]
 
@@ -613,7 +643,7 @@ def score_whale(text):
     if not has_any(text, whale_keywords):
         return 0.0
 
-    if not has_any(text, ["转入", "转出", "转移", "发送", "从地址", "链上", "地址", "巨鲸", "whale", "大户", "鲸鱼", "持仓变动"] + KW_WHALE_BEHAVIOUR):
+    if not has_any(text, ["转入", "转出", "转移", "发送", "从地址", "链上", "地址", "巨鲸", "whale", "大户", "鲸鱼", "持仓变动", "向交易所"] + KW_WHALE_BEHAVIOUR):
         return 0.0
 
     if has_any(text, NEG_WHALE_PRODUCT_DESC) and not has_any(text, ["地址", "交易哈希", "txid", "TXID"]):
@@ -640,7 +670,7 @@ def score_whale(text):
 
     # 行为触发：基础分0.45，金额门槛1M
     if has_any(text, KW_WHALE_BEHAVIOUR):
-        base = 0.45
+        base = 0.50 if has_any(text, ["交易所", "抛压", "卖压", "抛售压力"]) else 0.45
         if usd > 1_000_000:
             base = clip01(0.45 + 0.15 * smooth_strength(usd, 1_000_000, 20_000_000))
         elif usd > 0:
@@ -804,6 +834,8 @@ KW_SOLV = [
 
 
 def score_solvency(text):
+    if has_any(text, ["未出现赎回暂停", "覆盖全部流通供应", "没有坏账", "无坏账"]):
+        return 0.0
     # 排除代币化/增持等中性上下文，除非出现强危机词
     if has_any(text, NEG_SOLVENCY_NON_CRISIS):
         if not has_any(text, ["挤兑", "资不抵债", "储备不足", "无法提取", "违约", "偿付危机"]):
@@ -838,6 +870,16 @@ KW_INFRA_WEAK = ["网络延迟", "Gas飙升", "节点响应慢", "状态不同�
 
 
 def score_infra(text):
+    if has_any(text, ["Shutdown 提案", "指定区块高度"]):
+        return 0.70
+    if has_any(text, ["未停止出块", "网络仍正常出块"]) and not has_any(text, ["资金风险", "坏账", "攻击"]):
+        if has_any(text, KW_INFRA_WEAK) or has_any(text, ["Gas 费短时飙升", "Gas费短时飙升"]):
+            return 0.30
+        return 0.15
+    if has_any(text, ["共识失败", "停止出块", "网络分区", "验证者离线", "交易无法确认"]):
+        return 0.80
+    if has_any(text, ["预言机异常", "交易失败", "借贷市场"]) and not has_any(text, NEG_NO_RISK):
+        return 0.80
     if has_any(text, KW_INFRA):
         if has_any(text, NEG_NO_RISK):
             return 0.25
@@ -847,7 +889,65 @@ def score_infra(text):
     return 0.0
 
 
-# 12) 宏观 / 政策冲击风险 (v3.1 加强观点抑制，弱信号降级)
+# 12) 代币发行 / 异常增发风险
+KW_TOKEN_ISSUANCE = [
+    "未授权铸造", "异常增发", "无限铸币", "无限铸造", "非法铸造", "异常铸造",
+    "供应量异常", "代币供应异常", "增发异常", "铸造漏洞", "mint 漏洞",
+    "铸造权限被滥用", "超发", "异常 mint", "unauthorized mint", "infinite mint",
+    "滥用铸造权限", "新增供应来源", "新增 1 亿枚代币", "转入做市地址",
+]
+NEG_TOKEN_ISSUANCE = [
+    "治理通过", "社区投票通过", "按计划解锁", "代币解锁", "通胀模型",
+    "常规增发", "经济模型调整", "白皮书计划", "供应计划",
+]
+
+
+def score_token_issuance(text):
+    if not has_any(text, KW_TOKEN_ISSUANCE):
+        return 0.0
+    if has_any(text, ["未造成代币超发", "未造成用户损失", "未出现供应量异常"]) and not has_any(text, ["未授权", "攻击者", "非法铸造", "被利用"]):
+        return 0.25
+    if has_any(text, NEG_TOKEN_ISSUANCE) and not has_any(text, ["未授权", "漏洞", "非法", "攻击", "被利用"]):
+        return 0.15
+    if has_any(text, NEG_NO_RISK) or has_any(text, NEG_HACK_MITIGATION):
+        return 0.35
+    usd = extract_usd_equiv(text)
+    if has_any(text, ["未授权", "非法", "无限", "漏洞", "被利用", "攻击者", "滥用铸造权限", "多签地址"]):
+        return clip01(0.98 + 0.02 * smooth_strength(usd, 1_000_000, 30_000_000))
+    if has_any(text, ["供应量异常", "超发", "异常增发", "异常铸造"]):
+        return 0.62
+    return 0.45
+
+
+# 13) 跨链桥 / 跨链资金风险
+KW_BRIDGE = [
+    "跨链桥攻击", "跨链桥被攻击", "桥接被攻击", "跨链桥漏洞", "桥漏洞",
+    "跨链桥暂停", "跨链桥异常", "桥暂停", "跨链资产被盗", "跨链资金转移",
+    "桥接资产异常", "桥合约暂停", "bridge exploit", "bridge hack", "bridge paused",
+    "跨链桥", "桥接服务", "通过跨链桥", "桥池子", "桥合约", "bridge",
+]
+
+
+def score_bridge(text):
+    if not has_any(text, KW_BRIDGE):
+        return 0.0
+    usd = extract_usd_equiv(text)
+    if has_any(text, ["私钥泄露", "热钱包私钥"]) and has_any(text, ["通过跨链桥"]):
+        return 0.55
+    if has_any(text, NEG_PLANNED_MAINT) and not has_any(text, ["攻击", "被攻击", "漏洞", "资产流出", "被盗", "exploit", "hack"]):
+        return 0.20
+    if has_any(text, NEG_NO_RISK) or has_any(text, ["已恢复", "完成修复"]):
+        return 0.35
+    if has_any(text, ["未发现漏洞攻击", "未发生攻击"]):
+        return 0.45
+    if has_any(text, ["攻击", "被攻击", "漏洞", "被盗", "攻击者", "错误释放资产", "资产流出异常", "exploit", "hack"]):
+        return clip01(0.99 + 0.01 * smooth_strength(usd, 1_000_000, 50_000_000))
+    if has_any(text, ["暂停", "异常", "资产异常", "资金转移", "资产流出", "桥接服务"]):
+        return 0.72 if has_any(text, ["紧急", "损失仍在统计", "资产流出"]) else 0.50
+    return 0.45
+
+
+# 14) 宏观 / 政策冲击风险 (v3.1 加强观点抑制，弱信号降级)
 MACRO_ALL = KW_MACRO_STRONG + KW_MACRO_WEAK
 
 
@@ -913,6 +1013,8 @@ RISK_SCORERS = {
     "score_team": score_team,
     "score_solvency": score_solvency,
     "score_infra": score_infra,
+    "score_token_issuance": score_token_issuance,
+    "score_bridge": score_bridge,
     "score_macro": score_macro,
 }
 
@@ -928,6 +1030,8 @@ RISK_NAME_MAP = {
     "score_team": "项目治理 / 团队异常风险",
     "score_solvency": "偿付能力 / 储备 / 流动性风险",
     "score_infra": "基础设施 / 协议层异常风险",
+    "score_token_issuance": "代币发行 / 异常增发风险",
+    "score_bridge": "跨链桥 / 跨链资金风险",
     "score_macro": "宏观 / 政策冲击风险",
 }
 
@@ -939,6 +1043,8 @@ RISK_SCENARIO_MAP: dict[str, ScenarioId] = {
     "score_solvency": "S3_STABLECOIN_RESERVE",
     "score_team": "S7_FRAUD_GOVERNANCE",
     "score_infra": "S4_INFRASTRUCTURE_FAILURE",
+    "score_token_issuance": "S9_TOKEN_ISSUANCE_ANOMALY",
+    "score_bridge": "S10_BRIDGE_CROSS_CHAIN_RISK",
     "score_whale": "S8_WHALE_ONCHAIN_FLOW",
     "score_volatility": "S6_MARKET_LIQUIDATION",
     "score_macro": "S0_GENERAL_UNKNOWN",
@@ -954,6 +1060,8 @@ SIGNAL_TYPES = {
     "score_solvency": "solvency_signal",
     "score_team": "governance_signal",
     "score_infra": "infrastructure_signal",
+    "score_token_issuance": "token_issuance_anomaly_signal",
+    "score_bridge": "bridge_cross_chain_signal",
     "score_whale": "whale_onchain_signal",
     "score_volatility": "market_volatility_signal",
     "score_macro": "macro_signal",
@@ -969,6 +1077,8 @@ DIRECT_HIGH_RISK_TYPES = {
     "score_solvency",
     "score_team",
     "score_infra",
+    "score_token_issuance",
+    "score_bridge",
 }
 
 THRESHOLD_HIGH_RISK_TYPES = {
@@ -1011,7 +1121,7 @@ HIGH_RISK_FLOOR_RULES = {
     },
     "score_outage": {
         "floor": 65,
-        "trigger_score": 0.0,
+        "trigger_score": 0.45,
         "groups": {
             "withdrawal": ["暂停提现", "停止提现", "无法提现", "提现关闭", "提款冻结"],
             "platform": ["交易所", "平台", "钱包系统", "账户冻结"],
@@ -1063,6 +1173,28 @@ HIGH_RISK_FLOOR_RULES = {
             "official": ["官方确认", "官方提醒", "安全团队", "紧急修复"],
         },
         "reason": "基础设施/协议层强信号组合",
+    },
+    "score_token_issuance": {
+        "floor": 76,
+        "trigger_score": 0.60,
+        "groups": {
+            "mint": ["未授权铸造", "异常增发", "无限铸币", "无限铸造", "非法铸造", "异常铸造"],
+            "supply": ["供应量异常", "代币供应异常", "超发", "大量增发", "新增供应"],
+            "exploit": ["漏洞", "被利用", "攻击者", "权限被滥用", "铸造权限"],
+            "impact": ["抛售", "价格暴跌", "市场冲击", "储备受损", "可变现"],
+        },
+        "reason": "代币异常增发/未授权铸造强信号组合",
+    },
+    "score_bridge": {
+        "floor": 76,
+        "trigger_score": 0.65,
+        "groups": {
+            "bridge": ["跨链桥", "桥接", "bridge"],
+            "attack": ["攻击", "被攻击", "漏洞", "被盗", "exploit", "hack"],
+            "flow": ["跨链资金", "资金转移", "资产被盗", "异常转出", "流出"],
+            "pause": ["暂停", "桥暂停", "合约暂停", "停止跨链"],
+        },
+        "reason": "跨链桥攻击/跨链资金异常强信号组合",
     },
     "score_liquidation": {
         "floor": 61,
@@ -1129,6 +1261,8 @@ RISK_TYPE_ORDER = [
     "score_solvency",
     "score_team",
     "score_infra",
+    "score_token_issuance",
+    "score_bridge",
     "score_whale",
     "score_volatility",
     "score_macro",
@@ -1137,8 +1271,8 @@ RISK_TYPE_ORDER = [
 ]
 
 NEGATIVE_PATTERNS = {
-    "planned_maintenance": ["例行维护", "计划内维护", "系统升级", "常规维护"],
-    "resolved_or_repaired": ["已恢复", "恢复正常", "已修复", "完成修复", "已解决"],
+    "planned_maintenance": ["例行维护", "计划内维护", "计划内钱包维护", "钱包维护", "系统升级", "常规维护", "升级维护", "计划内升级维护"],
+    "resolved_or_repaired": ["已恢复", "恢复正常", "已修复", "完成修复", "已解决", "后恢复"],
     "no_loss_or_no_impact": ["无资金损失", "未造成损失", "用户资金未受影响", "未受影响"],
     "discussion_only": ["讨论", "草案", "征求意见", "咨询", "监管框架", "呼吁", "建议", "观点", "分析称"],
     "security_research_only": ["安全研究", "漏洞披露", "审计报告", "漏洞赏金", "白帽"],
@@ -1169,6 +1303,7 @@ NEGATIVE_SCENARIO_HINTS: dict[str, ScenarioId] = {
     "positive_regulatory_clarity": "S5_REGULATORY_ENFORCEMENT",
     "normal_market_commentary": "S6_MARKET_LIQUIDATION",
     "ordinary_team_change": "S7_FRAUD_GOVERNANCE",
+    "internal_transfer": "S8_WHALE_ONCHAIN_FLOW",
 }
 
 # 命中阈值：用于 rule_types
@@ -1240,6 +1375,24 @@ def _negative_signals(text: str) -> list[Signal]:
         hits = _matched_terms(text, terms)
         if hits:
             scenario = NEGATIVE_SCENARIO_HINTS.get(signal_type)
+            if signal_type == "discussion_only" and not (
+                has_any(text, REG_ACTORS + REG_CRYPTO_DOMAIN + REG_WEAK_SIGNALS + REG_MODERATE_SIGNALS)
+                and has_any(text, ["监管", "法规", "政策", "咨询", "草案", "指引", "法院", "SEC", "CFTC"])
+            ):
+                scenario = None
+            if signal_type == "security_research_only" and has_any(text, ["稳定币", "储备", "准备金率", "储备证明"]):
+                continue
+            if signal_type == "resolved_or_repaired":
+                if has_any(text, ["交易所", "提现", "充值", "登录异常", "钱包维护"]):
+                    scenario = "S2_EXCHANGE_ABNORMALITY"
+                elif has_any(text, ["RPC", "预言机", "网络", "出块"]):
+                    scenario = "S4_INFRASTRUCTURE_FAILURE"
+                elif has_any(text, ["跨链桥", "桥接"]):
+                    scenario = "S10_BRIDGE_CROSS_CHAIN_RISK"
+                elif has_any(text, ["漏洞", "攻击", "被黑", "合约"]):
+                    scenario = "S1_ATTACK_EXPLOIT"
+            if signal_type == "planned_maintenance" and has_any(text, ["跨链桥", "桥接"]):
+                scenario = "S10_BRIDGE_CROSS_CHAIN_RISK"
             signals.append(
                 Signal(
                     type=signal_type,

@@ -15,12 +15,15 @@ ScenarioId = Literal[
     "S6_MARKET_LIQUIDATION",
     "S7_FRAUD_GOVERNANCE",
     "S8_WHALE_ONCHAIN_FLOW",
+    "S9_TOKEN_ISSUANCE_ANOMALY",
+    "S10_BRIDGE_CROSS_CHAIN_RISK",
 ]
 
 EvidenceStatus = Literal["confirmed", "denied", "missing", "uncertain", "not_applicable"]
 EvidenceExtractionMode = Literal["llm", "heuristic_fallback", "fast_exit"]
 AnalysisPath = Literal["fast_exit", "deep_analysis"]
 CapType = Literal["hard_cap", "soft_cap"]
+EvidencePolarity = Literal["support", "counter", "missing"]
 RiskStatus = Literal[
     "low_risk",
     "potential_risk",
@@ -110,6 +113,54 @@ class EvidenceExtractionResult(BaseModel):
             for item in self.items
             if item.scenario == scenario
         }
+
+
+class EvidenceAtom(BaseModel):
+    id: str
+    scenario: ScenarioId
+    risk_type: str = ""
+    risk_name: str = ""
+    polarity: EvidencePolarity = "support"
+    field: str = ""
+    text: str = ""
+    source: str = ""
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    affected_entities: list[str] = Field(default_factory=list)
+
+
+class RiskHypothesis(BaseModel):
+    scenario: ScenarioId
+    risk_type: str = ""
+    risk_name: str = ""
+    established: bool = False
+    rule_score: int = Field(0, ge=0, le=100)
+    branch_score: int = Field(0, ge=0, le=100)
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    support_atom_ids: list[str] = Field(default_factory=list)
+    counter_atom_ids: list[str] = Field(default_factory=list)
+    missing_atom_ids: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+class ScenarioAssessment(BaseModel):
+    scenario: ScenarioId
+    risk_type: str = ""
+    risk_name: str = ""
+    status: str = "not_assessed"
+    rule_score: int = Field(0, ge=0, le=100)
+    branch_score: int = Field(0, ge=0, le=100)
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    support_evidence_count: int = 0
+    counter_evidence_count: int = 0
+    missing_evidence: list[str] = Field(default_factory=list)
+
+
+class EvidenceGraphResult(BaseModel):
+    evidence_graph: list[EvidenceAtom] = Field(default_factory=list)
+    risk_hypotheses: list[RiskHypothesis] = Field(default_factory=list)
+    scenario_assessments: list[ScenarioAssessment] = Field(default_factory=list)
+    counter_evidence: list[dict[str, str]] = Field(default_factory=list)
+    missing_evidence_by_scenario: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class ValidationSuggestion(BaseModel):

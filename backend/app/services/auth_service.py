@@ -11,8 +11,9 @@ from datetime import datetime, timedelta, timezone
 from os import getenv
 from pathlib import Path
 
-from app.schemas_auth import AuthUser
+from app.schemas_auth import AuthSessionItem, AuthUser
 from app.schemas_favorites import FavoriteCreate, FavoriteItem, FavoriteType
+from app.services.request_security_service import client_ip_hash, safe_user_agent
 
 
 AUTH_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "auth.sqlite3"
@@ -103,10 +104,14 @@ def _init_db(conn: sqlite3.Connection) -> None:
             user_id TEXT NOT NULL,
             created_at TEXT NOT NULL,
             expires_at TEXT NOT NULL,
+            client_ip_hash TEXT NOT NULL DEFAULT '',
+            user_agent TEXT NOT NULL DEFAULT '',
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
         """
     )
+    _ensure_column(conn, "sessions", "client_ip_hash", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "sessions", "user_agent", "TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
     conn.execute(
@@ -166,12 +171,36 @@ def _validate_password_strength(username: str, password: str) -> None:
         raise AuthError("密码需要包含大小写字母、数字、符号中的至少 3 类")
 
 
+def _env_csv_set(name: str) -> set[str]:
+    return {
+        item.strip().lower()
+        for item in getenv(name, "").split(",")
+        if item.strip()
+    }
+
+
+def _is_admin_user(user_id: str, username: str) -> bool:
+    admin_usernames = _env_csv_set("SYSTEM_ADMIN_USERNAMES")
+    admin_user_ids = _env_csv_set("SYSTEM_ADMIN_USER_IDS")
+    return username.lower() in admin_usernames or user_id.lower() in admin_user_ids
+
+
+def _admin_username_registration_allowed() -> bool:
+    return getenv("ALLOW_ADMIN_USERNAME_REGISTRATION", "").strip() == "1"
+
+
+def _ensure_username_can_register(normalized_username: str) -> None:
+    if normalized_username in _env_csv_set("SYSTEM_ADMIN_USERNAMES") and not _admin_username_registration_allowed():
+        raise AuthError("管理员用户名已保留，请先注册普通账号后通过 SYSTEM_ADMIN_USER_IDS 授权")
+
+
 def _row_to_user(row: sqlite3.Row) -> AuthUser:
     return AuthUser(
         id=row["id"],
         username=row["username"],
         display_name=row["display_name"],
         created_at=row["created_at"],
+        is_admin=_is_admin_user(row["id"], row["username"]),
     )
 
 
@@ -191,8 +220,25 @@ def _row_to_favorite(row: sqlite3.Row) -> FavoriteItem:
     )
 
 
+def _session_public_id(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+
+
+def _row_to_session(row: sqlite3.Row, current_token: str | None = None) -> AuthSessionItem:
+    token = str(row["token"])
+    return AuthSessionItem(
+        session_id=_session_public_id(token),
+        created_at=row["created_at"],
+        expires_at=row["expires_at"],
+        client_ip_hash=row["client_ip_hash"] or "",
+        user_agent=row["user_agent"] or "",
+        is_current=bool(current_token and hmac.compare_digest(token, current_token)),
+    )
+
+
 def create_user(username: str, password: str) -> AuthUser:
     normalized = _normalize_username(username)
+    _ensure_username_can_register(normalized)
     _validate_password_strength(normalized, password)
 
     salt, password_hash = _hash_password(password)
@@ -250,22 +296,109 @@ def verify_user(username: str, password: str) -> AuthUser:
         return _row_to_user(row)
 
 
-def create_session(user_id: str) -> tuple[str, datetime]:
+def verify_user_password(user_id: str, password: str) -> None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise AuthError("用户不存在")
+        iterations = int(row["password_iterations"] or LEGACY_PASSWORD_HASH_ITERATIONS)
+        _, password_hash = _hash_password(password, row["password_salt"], iterations)
+        if not hmac.compare_digest(password_hash, row["password_hash"]):
+            raise AuthError("当前密码错误")
+
+
+def change_user_password(
+    user_id: str,
+    current_password: str,
+    new_password: str,
+    keep_session_token: str | None = None,
+) -> dict[str, int]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise AuthError("用户不存在")
+
+        iterations = int(row["password_iterations"] or LEGACY_PASSWORD_HASH_ITERATIONS)
+        _, current_hash = _hash_password(current_password, row["password_salt"], iterations)
+        if not hmac.compare_digest(current_hash, row["password_hash"]):
+            raise AuthError("当前密码错误")
+
+        _, next_hash_for_compare = _hash_password(new_password, row["password_salt"], iterations)
+        if hmac.compare_digest(next_hash_for_compare, row["password_hash"]):
+            raise AuthError("新密码不能与当前密码相同")
+
+        _validate_password_strength(row["username"], new_password)
+        salt, password_hash = _hash_password(new_password)
+        conn.execute(
+            """
+            UPDATE users
+            SET password_salt = ?, password_hash = ?, password_scheme = ?, password_iterations = ?
+            WHERE id = ?
+            """,
+            (salt, password_hash, PASSWORD_HASH_SCHEME, PASSWORD_HASH_ITERATIONS, user_id),
+        )
+        if keep_session_token:
+            sessions_revoked = conn.execute(
+                "DELETE FROM sessions WHERE user_id = ? AND token != ?",
+                (user_id, keep_session_token),
+            ).rowcount
+        else:
+            sessions_revoked = conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,)).rowcount
+    return {"sessions_revoked": max(0, int(sessions_revoked or 0))}
+
+
+def create_session(
+    user_id: str,
+    *,
+    client_ip: str | None = None,
+    user_agent: str | None = None,
+) -> tuple[str, datetime]:
     token = secrets.token_urlsafe(32)
     expires_at = _now() + timedelta(days=SESSION_TTL_DAYS)
     with _connect() as conn:
+        _prune_expired_sessions(conn, _now_text())
         conn.execute(
-            "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (token, user_id, _now_text(), expires_at.strftime("%Y-%m-%d %H:%M:%S")),
+            """
+            INSERT INTO sessions (
+                token, user_id, created_at, expires_at, client_ip_hash, user_agent
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                token,
+                user_id,
+                _now_text(),
+                expires_at.strftime("%Y-%m-%d %H:%M:%S"),
+                client_ip_hash(client_ip),
+                safe_user_agent(user_agent),
+            ),
         )
     return token, expires_at
+
+
+def _prune_expired_sessions(conn: sqlite3.Connection, now_text: str) -> int:
+    deleted = conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_text,)).rowcount
+    return max(0, int(deleted or 0))
+
+
+def prune_expired_sessions() -> dict[str, int | str]:
+    now = _now_text()
+    with _connect() as conn:
+        deleted = _prune_expired_sessions(conn, now)
+        remaining = conn.execute("SELECT COUNT(*) AS count FROM sessions").fetchone()["count"]
+    return {
+        "deleted_sessions": deleted,
+        "remaining_sessions": max(0, int(remaining or 0)),
+        "pruned_at": now,
+    }
 
 
 def get_user_by_session(token: str | None) -> AuthUser | None:
     if not token:
         return None
     with _connect() as conn:
-        conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (_now_text(),))
+        now = _now_text()
+        _prune_expired_sessions(conn, now)
         row = conn.execute(
             """
             SELECT users.*
@@ -273,7 +406,7 @@ def get_user_by_session(token: str | None) -> AuthUser | None:
             JOIN users ON users.id = sessions.user_id
             WHERE sessions.token = ? AND sessions.expires_at > ?
             """,
-            (token, _now_text()),
+            (token, now),
         ).fetchone()
         return _row_to_user(row) if row else None
 
@@ -283,6 +416,45 @@ def delete_session(token: str | None) -> None:
         return
     with _connect() as conn:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+
+
+def list_user_sessions(user_id: str, current_token: str | None = None) -> list[AuthSessionItem]:
+    with _connect() as conn:
+        now = _now_text()
+        _prune_expired_sessions(conn, now)
+        rows = conn.execute(
+            """
+            SELECT token, created_at, expires_at, client_ip_hash, user_agent
+            FROM sessions
+            WHERE user_id = ? AND expires_at > ?
+            ORDER BY created_at DESC
+            """,
+            (user_id, now),
+        ).fetchall()
+        return [_row_to_session(row, current_token) for row in rows]
+
+
+def revoke_other_sessions(user_id: str, keep_session_token: str | None) -> int:
+    if not keep_session_token:
+        return 0
+    with _connect() as conn:
+        deleted = conn.execute(
+            "DELETE FROM sessions WHERE user_id = ? AND token != ?",
+            (user_id, keep_session_token),
+        ).rowcount
+    return max(0, int(deleted or 0))
+
+
+def delete_user_account(user_id: str) -> dict[str, int]:
+    with _connect() as conn:
+        sessions_deleted = conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,)).rowcount
+        favorites_deleted = conn.execute("DELETE FROM favorites WHERE user_id = ?", (user_id,)).rowcount
+        users_deleted = conn.execute("DELETE FROM users WHERE id = ?", (user_id,)).rowcount
+    return {
+        "sessions": max(0, int(sessions_deleted or 0)),
+        "favorites": max(0, int(favorites_deleted or 0)),
+        "users": max(0, int(users_deleted or 0)),
+    }
 
 
 def list_favorites(user_id: str, item_type: FavoriteType | None = None) -> list[FavoriteItem]:

@@ -22,3 +22,67 @@
 {"id":"resolved_rpc","text":"某 L2 网络 RPC 故障导致交易短暂失败，目前服务已恢复正常，未发现资金风险。","expected_scenario":"S4_INFRASTRUCTURE_FAILURE","expected_min_score":0,"expected_max_score":45,"expected_high_risk":false}
 {"id":"whale_to_exchange","text":"链上监测显示，一巨鲸地址向 Binance 转入价值 1.2 亿美元 BTC，市场担忧短期抛压。","expected_scenario":"S8_WHALE_ONCHAIN_FLOW","expected_min_score":55,"expected_max_score":85,"expected_high_risk":false}
 {"id":"internal_wallet_transfer","text":"交易所公告称进行冷钱包内部调拨，链上出现大额转账，属于钱包归集，用户资产不受影响。","expected_scenario":"S8_WHALE_ONCHAIN_FLOW","expected_min_score":0,"expected_max_score":30,"expected_high_risk":false}
+{"id":"attack_private_key_leak","text":"某 DeFi 项目热钱包私钥泄露，攻击者转走约 500 万美元 USDC，并已通过跨链桥分散资金。","expected_scenario":"S1_ATTACK_EXPLOIT","expected_min_score":76,"expected_max_score":100,"expected_high_risk":true}
+{"id":"attack_oracle_manipulation","text":"某借贷协议遭预言机操纵攻击，攻击者利用价格异常借出资产，协议确认损失约 900 万美元。","expected_scenario":"S1_ATTACK_EXPLOIT","expected_min_score":76,"expected_max_score":100,"expected_high_risk":true}
+{"id":"attack_contract_paused_no_loss","text":"安全团队发现合约交互异常，项目方暂停合约并表示未发现资金损失，正在排查根因。","expected_scenario":"S1_ATTACK_EXPLOIT","expected_min_score":20,"expected_max_score":55,"expected_high_risk":false}
+{"id":"attack_historical_postmortem","text":"项目发布去年攻击事件复盘，说明当时漏洞已修复，当前版本未受影响。","expected_scenario":"S1_ATTACK_EXPLOIT","expected_min_score":0,"expected_max_score":35,"expected_high_risk":false}
+{"id":"attack_social_engineering","text":"团队成员遭社会工程攻击，攻击者取得部署权限并转移部分协议收入，损失约 150 万美元。","expected_scenario":"S1_ATTACK_EXPLOIT","expected_min_score":70,"expected_max_score":95,"expected_high_risk":true}
+{"id":"attack_false_alarm","text":"社区误传某协议被黑，官方和链上监测均确认没有异常转账，用户资金未受影响。","expected_scenario":"S1_ATTACK_EXPLOIT","expected_min_score":0,"expected_max_score":30,"expected_high_risk":false}
+{"id":"exchange_all_withdrawals_frozen","text":"某中心化交易平台突然冻结全部提现，客服称无法给出恢复时间，多个用户反馈提款失败。","expected_scenario":"S2_EXCHANGE_ABNORMALITY","expected_min_score":68,"expected_max_score":95,"expected_high_risk":true}
+{"id":"exchange_api_outage","text":"交易所 API 故障导致现货和合约下单失败，官方确认系统异常并正在紧急修复。","expected_scenario":"S2_EXCHANGE_ABNORMALITY","expected_min_score":55,"expected_max_score":85,"expected_high_risk":true}
+{"id":"exchange_deposit_delay","text":"某交易所出现充值延迟，官方公告称部分网络确认缓慢，预计 30 分钟内恢复。","expected_scenario":"S2_EXCHANGE_ABNORMALITY","expected_min_score":20,"expected_max_score":50,"expected_high_risk":false}
+{"id":"exchange_login_issue_resolved","text":"交易所登录异常持续 15 分钟，目前服务已恢复正常，公告称交易和资金安全未受影响。","expected_scenario":"S2_EXCHANGE_ABNORMALITY","expected_min_score":0,"expected_max_score":40,"expected_high_risk":false}
+{"id":"stablecoin_redemption_pause","text":"某稳定币发行方宣布暂停赎回，二级市场价格跌至 0.91 美元，市场担忧储备不足。","expected_scenario":"S3_STABLECOIN_RESERVE","expected_min_score":76,"expected_max_score":100,"expected_high_risk":true}
+{"id":"stablecoin_reserve_gap","text":"审计报告显示某稳定币储备资产存在缺口，准备金率低于 80%，赎回压力上升。","expected_scenario":"S3_STABLECOIN_RESERVE","expected_min_score":70,"expected_max_score":95,"expected_high_risk":true}
+{"id":"stablecoin_liquidity_pool_imbalance","text":"Curve 稳定币池出现严重倾斜，某稳定币占比超过 85%，兑换滑点扩大。","expected_scenario":"S3_STABLECOIN_RESERVE","expected_min_score":55,"expected_max_score":85,"expected_high_risk":false}
+{"id":"stablecoin_attestation_normal","text":"稳定币发行方发布月度储备证明，显示现金和国债覆盖全部流通供应，未出现赎回暂停。","expected_scenario":"S3_STABLECOIN_RESERVE","expected_min_score":0,"expected_max_score":25,"expected_high_risk":false}
+{"id":"stablecoin_minor_deviation","text":"某稳定币短时跌至 0.995 美元后恢复锚定，发行方称市场流动性正常。","expected_scenario":"S3_STABLECOIN_RESERVE","expected_min_score":20,"expected_max_score":50,"expected_high_risk":false}
+{"id":"stablecoin_rumor_no_data","text":"社群传闻某稳定币储备不足，但发行方未暂停赎回，也没有链上挤兑证据。","expected_scenario":"S3_STABLECOIN_RESERVE","expected_min_score":15,"expected_max_score":55,"expected_high_risk":false}
+{"id":"infra_chain_halt","text":"某公链因共识失败停止出块 3 小时，交易无法确认，官方正在协调验证者修复。","expected_scenario":"S4_INFRASTRUCTURE_FAILURE","expected_min_score":65,"expected_max_score":95,"expected_high_risk":true}
+{"id":"infra_rpc_slow","text":"某 L2 RPC 响应变慢，部分用户交易提交延迟，官方称核心网络未停止出块。","expected_scenario":"S4_INFRASTRUCTURE_FAILURE","expected_min_score":20,"expected_max_score":55,"expected_high_risk":false}
+{"id":"infra_oracle_resolved","text":"预言机价格推送短暂异常，目前已恢复，协议称没有坏账或用户资金损失。","expected_scenario":"S4_INFRASTRUCTURE_FAILURE","expected_min_score":0,"expected_max_score":45,"expected_high_risk":false}
+{"id":"infra_validator_offline","text":"多名验证者离线导致网络分区风险上升，区块确认明显变慢，官方发布紧急协调公告。","expected_scenario":"S4_INFRASTRUCTURE_FAILURE","expected_min_score":55,"expected_max_score":85,"expected_high_risk":true}
+{"id":"infra_gas_spike","text":"以太坊 Gas 费短时飙升，部分 DApp 交易成本增加，但网络仍正常出块。","expected_scenario":"S4_INFRASTRUCTURE_FAILURE","expected_min_score":15,"expected_max_score":45,"expected_high_risk":false}
+{"id":"reg_exchange_fine","text":"美国 CFTC 对某加密交易所处以巨额罚款，并要求其停止向部分地区用户提供服务。","expected_scenario":"S5_REGULATORY_ENFORCEMENT","expected_min_score":65,"expected_max_score":95,"expected_high_risk":true}
+{"id":"reg_founder_arrest","text":"检方逮捕某稳定币项目创始人，指控其挪用客户资金并违反反洗钱法规。","expected_scenario":"S5_REGULATORY_ENFORCEMENT","expected_min_score":70,"expected_max_score":100,"expected_high_risk":true}
+{"id":"reg_policy_draft","text":"监管机构发布加密资产托管规则草案，向行业征求意见，尚未采取执法行动。","expected_scenario":"S5_REGULATORY_ENFORCEMENT","expected_min_score":0,"expected_max_score":35,"expected_high_risk":false}
+{"id":"reg_license_approval","text":"某交易平台获得当地数字资产牌照，监管机构表示其满足合规要求。","expected_scenario":"S5_REGULATORY_ENFORCEMENT","expected_min_score":0,"expected_max_score":25,"expected_high_risk":false}
+{"id":"reg_investigation_weak","text":"媒体称监管机构正在关注某 DeFi 协议的 KYC 问题，但暂无起诉、罚款或禁令。","expected_scenario":"S5_REGULATORY_ENFORCEMENT","expected_min_score":10,"expected_max_score":45,"expected_high_risk":false}
+{"id":"liq_cascade","text":"BTC 1 小时内暴跌 12%，全网爆仓超过 12 亿美元，多家交易所流动性明显恶化。","expected_scenario":"S6_MARKET_LIQUIDATION","expected_min_score":70,"expected_max_score":100,"expected_high_risk":true}
+{"id":"liq_altcoin_flash_crash","text":"某主流山寨币日内闪崩 45%，合约强平金额超过 8000 万美元，滑点快速扩大。","expected_scenario":"S6_MARKET_LIQUIDATION","expected_min_score":65,"expected_max_score":95,"expected_high_risk":true}
+{"id":"liq_options_expiry","text":"分析师称本周期权到期可能带来波动，但目前尚未发生大规模清算。","expected_scenario":"S6_MARKET_LIQUIDATION","expected_min_score":0,"expected_max_score":35,"expected_high_risk":false}
+{"id":"liq_small_price_move","text":"BTC 24 小时下跌 1.8%，市场成交量平稳，未出现明显爆仓压力。","expected_scenario":"S6_MARKET_LIQUIDATION","expected_min_score":0,"expected_max_score":30,"expected_high_risk":false}
+{"id":"liq_short_squeeze","text":"ETH 短时拉升 16%，空头挤压导致合约清算金额超过 4 亿美元。","expected_scenario":"S6_MARKET_LIQUIDATION","expected_min_score":65,"expected_max_score":95,"expected_high_risk":true}
+{"id":"liq_technical_analysis","text":"技术分析认为 SOL 若跌破支撑位可能触发清算风险，但当前价格仍在区间内。","expected_scenario":"S6_MARKET_LIQUIDATION","expected_min_score":0,"expected_max_score":35,"expected_high_risk":false}
+{"id":"fraud_fake_support","text":"诈骗者冒充交易所客服诱导用户导入助记词，多名用户反馈钱包资产被转走。","expected_scenario":"S7_FRAUD_GOVERNANCE","expected_min_score":65,"expected_max_score":95,"expected_high_risk":true}
+{"id":"fraud_ponzi_collapse","text":"某高收益链游项目被曝庞氏骗局，团队关闭提现并删除官方群，用户资金无法取回。","expected_scenario":"S7_FRAUD_GOVERNANCE","expected_min_score":76,"expected_max_score":100,"expected_high_risk":true}
+{"id":"fraud_warning_no_loss","text":"安全团队提醒出现假冒官网钓鱼链接，暂未发现用户损失，建议不要连接钱包。","expected_scenario":"S7_FRAUD_GOVERNANCE","expected_min_score":35,"expected_max_score":65,"expected_high_risk":false}
+{"id":"whale_multiple_exchange_inflows","text":"链上监测显示多个巨鲸地址连续向 Binance 和 OKX 转入总计 2.4 亿美元 BTC，市场担忧抛售压力。","expected_scenario":"S8_WHALE_ONCHAIN_FLOW","expected_min_score":55,"expected_max_score":85,"expected_high_risk":false}
+{"id":"whale_from_exchange_accumulation","text":"巨鲸从交易所转出价值 9000 万美元 ETH 至冷钱包，市场解读为长期持有。","expected_scenario":"S8_WHALE_ONCHAIN_FLOW","expected_min_score":20,"expected_max_score":55,"expected_high_risk":false}
+{"id":"whale_hacker_funds","text":"链上监测显示疑似黑客地址将 2300 万美元被盗资金转入交易所，可能形成抛压。","expected_scenario":"S8_WHALE_ONCHAIN_FLOW","expected_min_score":61,"expected_max_score":90,"expected_high_risk":true}
+{"id":"whale_etf_holdings","text":"某 ETF 披露持有大量 BTC，属于基金净资产披露，没有链上转入交易所行为。","expected_scenario":"S8_WHALE_ONCHAIN_FLOW","expected_min_score":0,"expected_max_score":25,"expected_high_risk":false}
+{"id":"whale_unknown_wallet_small","text":"未知钱包转移价值 50 万美元 DOGE，未流入交易所，也未提及抛售压力。","expected_scenario":"S8_WHALE_ONCHAIN_FLOW","expected_min_score":0,"expected_max_score":30,"expected_high_risk":false}
+{"id":"whale_unlock_sell_pressure","text":"某项目早期投资人地址解锁后向交易所转入大量代币，社区担忧短期卖压。","expected_scenario":"S8_WHALE_ONCHAIN_FLOW","expected_min_score":45,"expected_max_score":75,"expected_high_risk":false}
+{"id":"token_unauthorized_mint_large","text":"某协议发现未授权铸造漏洞，攻击者异常铸造价值 2500 万美元代币并抛售。","expected_scenario":"S9_TOKEN_ISSUANCE_ANOMALY","expected_min_score":76,"expected_max_score":100,"expected_high_risk":true}
+{"id":"token_infinite_mint","text":"安全团队确认代币合约存在无限铸币漏洞，攻击者已利用该漏洞生成大量代币。","expected_scenario":"S9_TOKEN_ISSUANCE_ANOMALY","expected_min_score":76,"expected_max_score":100,"expected_high_risk":true}
+{"id":"token_supply_abnormal","text":"链上数据显示某代币供应量异常增加 30%，项目方尚未解释新增供应来源。","expected_scenario":"S9_TOKEN_ISSUANCE_ANOMALY","expected_min_score":55,"expected_max_score":85,"expected_high_risk":true}
+{"id":"token_governance_approved","text":"社区治理投票通过常规增发方案，用于生态激励，白皮书此前已披露供应计划。","expected_scenario":"S9_TOKEN_ISSUANCE_ANOMALY","expected_min_score":0,"expected_max_score":35,"expected_high_risk":false}
+{"id":"token_unlock_normal","text":"项目按计划完成代币解锁，解锁比例和地址均与公告一致，未出现供应量异常。","expected_scenario":"S9_TOKEN_ISSUANCE_ANOMALY","expected_min_score":0,"expected_max_score":30,"expected_high_risk":false}
+{"id":"token_mint_paused_no_loss","text":"项目方发现铸造权限配置异常后暂停 mint 功能，公告称未造成代币超发和用户损失。","expected_scenario":"S9_TOKEN_ISSUANCE_ANOMALY","expected_min_score":15,"expected_max_score":45,"expected_high_risk":false}
+{"id":"token_privileged_actor","text":"多签地址疑似滥用铸造权限，新增 1 亿枚代币并转入做市地址。","expected_scenario":"S9_TOKEN_ISSUANCE_ANOMALY","expected_min_score":65,"expected_max_score":95,"expected_high_risk":true}
+{"id":"token_rumor_no_chain","text":"社群传闻某代币被异常增发，但链上浏览器未显示供应量变化，官方称传闻不实。","expected_scenario":"S9_TOKEN_ISSUANCE_ANOMALY","expected_min_score":0,"expected_max_score":35,"expected_high_risk":false}
+{"id":"bridge_exploit_loss","text":"某跨链桥遭攻击，攻击者利用桥合约漏洞转出约 6000 万美元资产。","expected_scenario":"S10_BRIDGE_CROSS_CHAIN_RISK","expected_min_score":76,"expected_max_score":100,"expected_high_risk":true}
+{"id":"bridge_paused_uncertain","text":"跨链桥官方紧急暂停桥接服务，称发现资产流出异常，具体损失仍在统计。","expected_scenario":"S10_BRIDGE_CROSS_CHAIN_RISK","expected_min_score":65,"expected_max_score":95,"expected_high_risk":true}
+{"id":"bridge_resolved_no_loss","text":"某跨链桥短暂暂停服务后恢复，官方称未发现资产外流，用户资金安全。","expected_scenario":"S10_BRIDGE_CROSS_CHAIN_RISK","expected_min_score":0,"expected_max_score":45,"expected_high_risk":false}
+{"id":"bridge_maintenance","text":"跨链桥将进行计划内升级维护，期间暂停桥接 1 小时，资金不受影响。","expected_scenario":"S10_BRIDGE_CROSS_CHAIN_RISK","expected_min_score":0,"expected_max_score":40,"expected_high_risk":false}
+{"id":"bridge_hacker_transfer","text":"链上监测显示攻击者将被盗资产通过跨链桥转移至另一条链，并分散到多个地址。","expected_scenario":"S10_BRIDGE_CROSS_CHAIN_RISK","expected_min_score":61,"expected_max_score":90,"expected_high_risk":true}
+{"id":"bridge_liquidity_imbalance","text":"某跨链桥池子流动性失衡，用户大额桥接可能出现较高滑点，但未发现漏洞攻击。","expected_scenario":"S10_BRIDGE_CROSS_CHAIN_RISK","expected_min_score":30,"expected_max_score":60,"expected_high_risk":false}
+{"id":"bridge_audit_report","text":"审计报告披露跨链桥合约存在潜在风险，项目方称漏洞已修复且未发生攻击。","expected_scenario":"S10_BRIDGE_CROSS_CHAIN_RISK","expected_min_score":0,"expected_max_score":45,"expected_high_risk":false}
+{"id":"bridge_oracle_attack","text":"跨链桥预言机被操纵导致错误释放资产，攻击者获利约 700 万美元。","expected_scenario":"S10_BRIDGE_CROSS_CHAIN_RISK","expected_min_score":76,"expected_max_score":100,"expected_high_risk":true}
+{"id":"general_product_launch","text":"某钱包发布新版资产看板，支持多账户切换和收益统计，未涉及资金异常。","expected_scenario":"S0_GENERAL_UNKNOWN","expected_min_score":0,"expected_max_score":20,"expected_high_risk":false}
+{"id":"general_partnership","text":"两家区块链基础设施公司宣布战略合作，将共同建设开发者工具。","expected_scenario":"S0_GENERAL_UNKNOWN","expected_min_score":0,"expected_max_score":20,"expected_high_risk":false}
+{"id":"general_education","text":"交易所发布反诈骗教育文章，提醒用户不要泄露助记词。","expected_scenario":"S0_GENERAL_UNKNOWN","expected_min_score":0,"expected_max_score":25,"expected_high_risk":false}
+{"id":"general_market_opinion","text":"分析师认为加密市场长期采用率仍会上升，这是一篇观点文章。","expected_scenario":"S0_GENERAL_UNKNOWN","expected_min_score":0,"expected_max_score":25,"expected_high_risk":false}
+{"id":"general_token_listing","text":"某交易所上线新代币现货交易对，公告未提及提现、储备或安全异常。","expected_scenario":"S0_GENERAL_UNKNOWN","expected_min_score":0,"expected_max_score":25,"expected_high_risk":false}
+{"id":"general_developer_update","text":"公链发布开发者周报，介绍 SDK 升级和文档改进，网络运行正常。","expected_scenario":"S0_GENERAL_UNKNOWN","expected_min_score":0,"expected_max_score":20,"expected_high_risk":false}
+{"id":"general_macro_no_crypto_link","text":"某国央行讨论通胀走势和就业数据，新闻未提及加密资产或数字货币市场。","expected_scenario":"S0_GENERAL_UNKNOWN","expected_min_score":0,"expected_max_score":20,"expected_high_risk":false}

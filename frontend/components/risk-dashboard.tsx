@@ -1,10 +1,9 @@
 "use client";
 
-import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import PortfolioRiskRadar from "@/components/portfolio-risk-radar";
-import SimTradingPanel from "@/components/sim-trading-panel";
 import { AgentProgress, LoadingDots } from "@/components/ui/loading-states";
 import {
   buildNewsAnalysisInput,
@@ -20,6 +19,7 @@ import {
   fetchCoinLibrary,
   fetchDailyRiskReport,
   fetchCurrentNewsUpdateJob,
+  fetchNewsDetail,
   fetchNewsUpdateJob,
   fetchNewsRanking,
   fetchRiskOverview,
@@ -42,23 +42,51 @@ import {
   startNewsUpdateJob,
   streamChatMessage,
   streamRiskAssistant,
+  AccountSecurityEvent,
+  AuthSessionItem,
   AuthUser,
   FavoriteItem,
+  FavoriteType,
   AnalysisDisposition,
+  ApiRequestError,
+  AuditPruneResult,
+  AuditSummary,
   addFavorite,
+  changePassword,
   createUserAsset,
+  deleteAccountData,
   deleteAnalysisReport,
   deleteFavorite,
+  exportAccountData,
+  fetchAuditSummary,
   fetchAnalysisReports,
+  fetchAccountSecurityEvents,
   fetchCurrentUser,
   fetchFavorites,
+  fetchAuthSessions,
+  fetchBackupManifest,
+  fetchRateLimitStatus,
+  fetchStorageInventory,
+  fetchSystemReadiness,
+  fetchSystemTaskEvents,
   fetchUserAssets,
   generateDailyRiskReport,
   loginUser,
   logoutUser,
   PortfolioWatchlistItem,
+  pruneExpiredAuthSessions,
+  pruneGuestSimAccounts,
+  pruneInvalidJsonBackups,
+  pruneRuntimeJobs,
+  pruneTaskEvents,
+  RateLimitStatus,
   registerUser,
+  revokeOtherAuthSessions,
   saveAnalysisReport,
+  BackupManifest,
+  StorageInventory,
+  SystemReadiness,
+  SystemTaskEvent,
   updateAnalysisReportDisposition,
   updateUserAsset,
 } from "@/lib/api";
@@ -149,6 +177,16 @@ type AnalysisRecord = {
   disposition?: AnalysisDisposition;
   dispositionNote?: string;
 };
+
+const PortfolioRiskRadar = dynamic(() => import("@/components/portfolio-risk-radar"), {
+  loading: () => <DeferredPanelLoader title="组合风险雷达加载中" />,
+  ssr: false,
+});
+
+const SimTradingPanel = dynamic(() => import("@/components/sim-trading-panel"), {
+  loading: () => <DeferredPanelLoader title="模拟交易面板加载中" />,
+  ssr: false,
+});
 
 type RankingDataStatus = {
   mode: "real" | "demo";
@@ -363,6 +401,11 @@ const newsUpdateJobStorageKey = "cryptorisk.newsUpdateJobId";
 const authUsernameStorageKey = "cryptorisk.auth.username";
 const reportCreatedEventName = "cryptorisk:analysis-record-created";
 const userAssetsUpdatedEventName = "cryptorisk:user-assets-updated";
+const maxStoredAnalysisRecords = 80;
+const maxStoredChatMessages = 120;
+const maxRankingTableRows = 60;
+const newsRankingFetchLimit = 80;
+const storageWriteDelayMs = 250;
 const defaultUserAssetForm: UserAssetFormState = {
   alertThreshold: "70",
   isHolding: false,
@@ -392,7 +435,8 @@ function readStoredAnalysisRecords() {
 
   try {
     const raw = window.localStorage.getItem(analysisRecordsStorageKey);
-    return raw ? (JSON.parse(raw) as AnalysisRecord[]) : [];
+    const parsed = raw ? (JSON.parse(raw) as AnalysisRecord[]) : [];
+    return Array.isArray(parsed) ? trimAnalysisRecords(parsed) : [];
   } catch {
     return [];
   }
@@ -410,21 +454,66 @@ function readStoredChatMessages() {
 
   try {
     const raw = window.localStorage.getItem(chatMessagesStorageKey);
-    return raw ? (JSON.parse(raw) as ChatMessage[]) : initialChatMessages;
+    const parsed = raw ? JSON.parse(raw) : initialChatMessages;
+    return Array.isArray(parsed) ? trimChatMessages(parsed as ChatMessage[]) : initialChatMessages;
   } catch {
     return initialChatMessages;
   }
 }
 
+function trimChatMessages(messages: ChatMessage[]) {
+  if (messages.length <= maxStoredChatMessages) return messages;
+  return messages.slice(-maxStoredChatMessages);
+}
+
+function trimAnalysisRecords(records: AnalysisRecord[]) {
+  const normalized = records.map(normalizeAnalysisRecord);
+  if (normalized.length <= maxStoredAnalysisRecords) return normalized;
+  return normalized
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, maxStoredAnalysisRecords);
+}
+
+function compactContextText(value: string | undefined, maxLength = 160) {
+  const text = (value || "").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 3)}...`;
+}
+
+function buildNewsTableAIContext(item: NewsRankingItem) {
+  return JSON.stringify({
+    type: "news",
+    id: item.news_id,
+    coin: item.coins,
+    title: compactContextText(item.title),
+    riskLevel: item.risk_level,
+    riskScore: item.risk_score,
+    riskType: item.risk_type,
+    time: item.published_at,
+  });
+}
+
+function buildCoinTableAIContext(item: CoinRankingItem) {
+  return JSON.stringify({
+    type: "coin",
+    coin: item.symbol,
+    title: compactContextText(item.top_news_title),
+    riskLevel: item.risk_level,
+    riskScore: item.final_score,
+    riskType: item.main_risk_type,
+  });
+}
+
 function writeStoredChatMessages(messages: ChatMessage[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(chatMessagesStorageKey, JSON.stringify(messages));
+  window.localStorage.setItem(chatMessagesStorageKey, JSON.stringify(trimChatMessages(messages)));
 }
 
 function writeStoredAnalysisRecords(records: AnalysisRecord[]) {
   if (typeof window === "undefined") return;
-  if (records.length) {
-    window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify(records));
+  const trimmed = trimAnalysisRecords(records);
+  if (trimmed.length) {
+    window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify(trimmed));
   } else {
     window.localStorage.removeItem(analysisRecordsStorageKey);
   }
@@ -444,7 +533,7 @@ function mergeAnalysisRecords(localRecords: AnalysisRecord[], remoteRecords: Ana
     const existing = byId.get(record.id);
     byId.set(record.id, normalizeAnalysisRecord(existing ? { ...existing, ...record } : record));
   });
-  return Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return trimAnalysisRecords(Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
 }
 
 function toAnalysisReportPayload(record: AnalysisRecord) {
@@ -690,20 +779,90 @@ function clearStoredNewsUpdateJobId() {
   window.sessionStorage.removeItem(newsUpdateJobStorageKey);
 }
 
-function readCachedOverview() {
-  return readCachedRiskOverview(readRankingRange());
+type InitialDashboardSnapshot = {
+  analysisRecords: AnalysisRecord[];
+  chatMessages: ChatMessage[];
+  coinRanking: CoinRankingItem[];
+  dailyReport: DailyRiskReport | null;
+  overview: RiskOverview | null;
+  rankingLoading: boolean;
+  rankingRange: RankingRange;
+  newsRanking: NewsRankingItem[];
+};
+
+function shouldLoadRankingsForView(view: ActiveView) {
+  return view === "home" || view === "news" || view === "coin";
 }
 
-function readCachedNewsItems() {
-  return readCachedNewsRanking(10, readRankingRange())?.items || [];
+function getRankingFetchLimitForView(view: ActiveView) {
+  if (view === "home") return 10;
+  if (view === "news") return newsRankingFetchLimit;
+  if (view === "coin") return 500;
+  return 10;
 }
 
-function readCachedCoinItems() {
-  return readCachedCoinRanking(10, readRankingRange())?.items || [];
+function shouldFetchNewsRankingForView(view: ActiveView) {
+  return view === "home" || view === "news";
 }
 
-function readCachedDailyReport() {
-  return readCachedDailyRiskReport(readRankingRange());
+function shouldFetchCoinRankingForView(view: ActiveView) {
+  return view === "coin";
+}
+
+function shouldLoadFavoritesForView(view: ActiveView) {
+  return view === "home" || view === "news" || view === "reports" || view === "favoriteNews" || view === "favoriteReports" || view === "my";
+}
+
+function favoriteTypesForView(view: ActiveView): FavoriteType[] {
+  if (view === "home" || view === "news" || view === "favoriteNews") return ["news"];
+  if (view === "reports" || view === "favoriteReports") return ["report"];
+  if (view === "my") return ["report", "news"];
+  return [];
+}
+
+function shouldSyncReportsForView(view: ActiveView) {
+  return view === "chat" || view === "reports" || view === "favoriteReports" || view === "my";
+}
+
+function shouldLoadAccountAssetsForView(view: ActiveView) {
+  return view === "daily" || view === "my";
+}
+
+function shouldReadChatHistoryForView(view: ActiveView) {
+  return view === "chat";
+}
+
+function shouldReadAnalysisRecordsForView(view: ActiveView) {
+  return view === "chat" || view === "reports" || view === "favoriteReports" || view === "my";
+}
+
+function readInitialDashboardSnapshot(view: ActiveView): InitialDashboardSnapshot {
+  const rankingRange = readRankingRange();
+  const shouldPrimeRankings = shouldLoadRankingsForView(view);
+  const shouldPrimeNews = shouldFetchNewsRankingForView(view);
+  const shouldPrimeCoins = shouldFetchCoinRankingForView(view);
+  const overview = shouldPrimeRankings ? readCachedRiskOverview(rankingRange) : null;
+  const newsRanking = shouldPrimeRankings && shouldPrimeNews ? readCachedNewsRanking(10, rankingRange)?.items || [] : [];
+  const coinRanking = shouldPrimeRankings && shouldPrimeCoins ? readCachedCoinRanking(10, rankingRange)?.items || [] : [];
+
+  return {
+    analysisRecords: shouldReadAnalysisRecordsForView(view) ? readStoredAnalysisRecords() : [],
+    chatMessages: shouldReadChatHistoryForView(view) ? readStoredChatMessages() : initialChatMessages,
+    coinRanking,
+    dailyReport: view === "daily" ? readCachedDailyRiskReport(rankingRange) : null,
+    overview,
+    rankingLoading: shouldPrimeRankings && !overview && !newsRanking.length && !coinRanking.length,
+    rankingRange,
+    newsRanking,
+  };
+}
+
+function DeferredPanelLoader({ title }: { title: string }) {
+  return (
+    <section className="risk-card rounded-lg p-6">
+      <LoadingDots label={title} />
+    </section>
+  );
 }
 
 export default function RiskDashboard({ initialView = "home" }: { initialView?: ActiveView }) {
@@ -712,26 +871,48 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [currentSearch, setCurrentSearch] = useState(() => getWindowSearch());
   const recordIdFromUrl = useMemo(() => new URLSearchParams(currentSearch).get("record") || "", [currentSearch]);
   const activeView = resolveViewFromPathname(pathname, initialView);
-  const [rankingRange, setRankingRange] = useState<RankingRange>(() => readRankingRange());
-  const [overview, setOverview] = useState<RiskOverview | null>(() => readCachedOverview());
-  const [newsRanking, setNewsRanking] = useState<NewsRankingItem[]>(() => readCachedNewsItems());
-  const [coinRanking, setCoinRanking] = useState<CoinRankingItem[]>(() => readCachedCoinItems());
-  const [dailyReport, setDailyReport] = useState<DailyRiskReport | null>(() => readCachedDailyReport());
+  const [initialSnapshot] = useState(() => readInitialDashboardSnapshot(activeView));
+  const [rankingRange, setRankingRange] = useState<RankingRange>(initialSnapshot.rankingRange);
+  const [overview, setOverview] = useState<RiskOverview | null>(initialSnapshot.overview);
+  const [newsRanking, setNewsRanking] = useState<NewsRankingItem[]>(initialSnapshot.newsRanking);
+  const [coinRanking, setCoinRanking] = useState<CoinRankingItem[]>(initialSnapshot.coinRanking);
+  const [dailyReport, setDailyReport] = useState<DailyRiskReport | null>(initialSnapshot.dailyReport);
   const [rankingDataStatus, setRankingDataStatus] = useState<RankingDataStatus>(initialRankingDataStatus);
   const [dailyReportFetching, setDailyReportFetching] = useState(false);
   const [dailyReportLoading, setDailyReportLoading] = useState(false);
   const [dailyReportError, setDailyReportError] = useState("");
-  const [rankingLoading, setRankingLoading] = useState(() => !readCachedOverview() && !readCachedNewsItems().length && !readCachedCoinItems().length);
+  const [rankingLoading, setRankingLoading] = useState(initialSnapshot.rankingLoading);
   const [rankingError, setRankingError] = useState("");
   const [newsUpdateLoading, setNewsUpdateLoading] = useState(false);
   const [newsUpdateError, setNewsUpdateError] = useState("");
   const [newsUpdateResult, setNewsUpdateResult] = useState<NewsUpdateResponse | null>(null);
   const [newsUpdateJob, setNewsUpdateJob] = useState<NewsUpdateJob | null>(null);
+  const [systemReadiness, setSystemReadiness] = useState<SystemReadiness | null>(null);
+  const [auditSummary, setAuditSummary] = useState<AuditSummary | null>(null);
+  const [systemTaskEvents, setSystemTaskEvents] = useState<SystemTaskEvent[]>([]);
+  const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus | null>(null);
+  const [storageInventory, setStorageInventory] = useState<StorageInventory | null>(null);
+  const [backupManifest, setBackupManifest] = useState<BackupManifest | null>(null);
+  const [systemStatusLoading, setSystemStatusLoading] = useState(false);
+  const [systemStatusError, setSystemStatusError] = useState("");
+  const [auditPruneLoading, setAuditPruneLoading] = useState(false);
+  const [auditPruneResult, setAuditPruneResult] = useState<AuditPruneResult | null>(null);
+  const [simPruneLoading, setSimPruneLoading] = useState(false);
+  const [simPruneMessage, setSimPruneMessage] = useState("");
+  const [sessionPruneLoading, setSessionPruneLoading] = useState(false);
+  const [sessionPruneMessage, setSessionPruneMessage] = useState("");
+  const [runtimeJobPruneLoading, setRuntimeJobPruneLoading] = useState(false);
+  const [runtimeJobPruneMessage, setRuntimeJobPruneMessage] = useState("");
+  const [invalidBackupPruneLoading, setInvalidBackupPruneLoading] = useState(false);
+  const [invalidBackupPruneMessage, setInvalidBackupPruneMessage] = useState("");
+  const [accountExportLoading, setAccountExportLoading] = useState(false);
+  const [accountExportMessage, setAccountExportMessage] = useState("");
+  const [accountDeleteLoading, setAccountDeleteLoading] = useState(false);
   const updatePollGenerationRef = useRef(0);
 
   const [message, setMessage] = useState(examplePrompts[0]);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => readStoredChatMessages());
-  const [analysisRecords, setAnalysisRecords] = useState<AnalysisRecord[]>(() => readStoredAnalysisRecords());
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialSnapshot.chatMessages);
+  const [analysisRecords, setAnalysisRecords] = useState<AnalysisRecord[]>(initialSnapshot.analysisRecords);
   const [storedSelectedRecordId, setStoredSelectedRecordId] = useState(() => readStoredSelectedRecordId());
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -743,7 +924,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [favoriteNews, setFavoriteNews] = useState<FavoriteItem[]>([]);
   const [favoriteActionLoadingId, setFavoriteActionLoadingId] = useState("");
   const [accountAssets, setAccountAssets] = useState<PortfolioWatchlistItem[]>([]);
-  const [accountAssetsLoading, setAccountAssetsLoading] = useState(true);
+  const [accountAssetsLoading, setAccountAssetsLoading] = useState(false);
   const [reportSidebarCollapsed, setReportSidebarCollapsed] = useState(false);
   const reportSyncUserRef = useRef("");
   const [chatLoading, setChatLoading] = useState(() => getActiveAnalysisTaskSnapshot()?.status === "running");
@@ -756,28 +937,36 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
   useEffect(() => {
     let ignore = false;
+    if (!shouldLoadRankingsForView(activeView)) {
+      return;
+    }
 
     async function loadRankings() {
+      const rankingLimit = getRankingFetchLimitForView(activeView);
+      const shouldFetchNews = shouldFetchNewsRankingForView(activeView);
+      const shouldFetchCoins = shouldFetchCoinRankingForView(activeView);
       const hasCachedData = Boolean(
         readCachedRiskOverview(rankingRange)
-          || readCachedNewsRanking(0, rankingRange)?.items.length
-          || readCachedCoinRanking(0, rankingRange)?.items.length
+          || (shouldFetchNews && readCachedNewsRanking(rankingLimit, rankingRange)?.items.length)
+          || (shouldFetchCoins && readCachedCoinRanking(rankingLimit, rankingRange)?.items.length)
       );
       if (!hasCachedData) setRankingLoading(true);
       setRankingError("");
       try {
         const [overviewData, newsData, coinData] = await Promise.all([
           fetchRiskOverview(rankingRange),
-          fetchNewsRanking(0, rankingRange),
-          fetchCoinRanking(0, rankingRange),
+          shouldFetchNews ? fetchNewsRanking(rankingLimit, rankingRange) : Promise.resolve(null),
+          shouldFetchCoins ? fetchCoinRanking(rankingLimit, rankingRange) : Promise.resolve(null),
         ]);
         if (ignore) return;
+        const overviewNews = overviewData.top_news_preview?.length ? overviewData.top_news_preview : overviewData.top_news ? [overviewData.top_news] : [];
+        const overviewCoins = overviewData.top_coin_preview?.length ? overviewData.top_coin_preview : overviewData.top_coin ? [overviewData.top_coin] : [];
         setOverview(overviewData);
-        setNewsRanking(newsData.items);
-        setCoinRanking(coinData.items);
+        setNewsRanking(newsData?.items || overviewNews);
+        setCoinRanking(coinData?.items || overviewCoins);
         setRankingDataStatus({
           mode: "real",
-          updatedAt: overviewData.date || newsData.date || coinData.date || formatTimestamp(new Date()),
+          updatedAt: overviewData.date || newsData?.date || coinData?.date || formatTimestamp(new Date()),
           newsSourceStatus: "connected",
           agentStatus: "ready",
           message: "已连接后端风险排行榜，展示真实新闻标注结果",
@@ -795,12 +984,12 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       }
     }
 
-    loadRankings();
+    void loadRankings();
 
     return () => {
       ignore = true;
     };
-  }, [rankingRange]);
+  }, [activeView, rankingRange]);
 
   useEffect(() => {
     let ignore = false;
@@ -836,7 +1025,24 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }, []);
 
   useEffect(() => {
+    if (!shouldReadChatHistoryForView(activeView)) return;
+    const timer = window.setTimeout(() => {
+      setChatMessages(readStoredChatMessages());
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeView]);
+
+  useEffect(() => {
+    if (!shouldReadAnalysisRecordsForView(activeView)) return;
+    const timer = window.setTimeout(() => {
+      setAnalysisRecords(readStoredAnalysisRecords());
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeView]);
+
+  useEffect(() => {
     function handleReportCreated(event: Event) {
+      if (!shouldReadAnalysisRecordsForView(activeView)) return;
       const detail = (event as CustomEvent<{ recordId?: string }>).detail;
       const records = readStoredAnalysisRecords();
       const recordId = detail?.recordId || records[0]?.id || "";
@@ -850,7 +1056,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
     window.addEventListener(reportCreatedEventName, handleReportCreated);
     return () => window.removeEventListener(reportCreatedEventName, handleReportCreated);
-  }, [pathname]);
+  }, [activeView, pathname]);
 
   useEffect(() => {
     let ignore = false;
@@ -865,35 +1071,46 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       }
     }
 
-    void loadCurrentUser();
+    const timer = window.setTimeout(() => {
+      void loadCurrentUser();
+    }, 250);
     return () => {
       ignore = true;
+      window.clearTimeout(timer);
     };
   }, []);
 
   useEffect(() => {
     let ignore = false;
-    if (!authUser) return;
+    if (!authUser || !shouldLoadFavoritesForView(activeView)) return;
+    const favoriteTypes = favoriteTypesForView(activeView);
+    if (!favoriteTypes.length) return;
 
     async function loadFavoriteReports() {
       try {
-        const [reportFavorites, newsFavorites] = await Promise.all([
-          fetchFavorites("report"),
-          fetchFavorites("news"),
-        ]);
+        const results = await Promise.all(favoriteTypes.map(async (type) => [type, await fetchFavorites(type)] as const));
         if (!ignore) {
-          setFavoriteReports(reportFavorites);
-          setFavoriteNews(newsFavorites);
-          setFavoriteReportIds(new Set(reportFavorites.map((item) => item.item_id)));
-          setFavoriteNewsIds(new Set(newsFavorites.map((item) => item.item_id)));
+          for (const [type, items] of results) {
+            if (type === "report") {
+              setFavoriteReports(items);
+              setFavoriteReportIds(new Set(items.map((item) => item.item_id)));
+            } else {
+              setFavoriteNews(items);
+              setFavoriteNewsIds(new Set(items.map((item) => item.item_id)));
+            }
+          }
         }
       } catch (error) {
         console.error(error);
         if (!ignore) {
-          setFavoriteReports([]);
-          setFavoriteNews([]);
-          setFavoriteReportIds(new Set());
-          setFavoriteNewsIds(new Set());
+          if (favoriteTypes.includes("report")) {
+            setFavoriteReports([]);
+            setFavoriteReportIds(new Set());
+          }
+          if (favoriteTypes.includes("news")) {
+            setFavoriteNews([]);
+            setFavoriteNewsIds(new Set());
+          }
         }
       }
     }
@@ -902,7 +1119,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     return () => {
       ignore = true;
     };
-  }, [authUser]);
+  }, [activeView, authUser]);
 
   useEffect(() => {
     let ignore = false;
@@ -910,6 +1127,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       reportSyncUserRef.current = "";
       return;
     }
+    if (!shouldSyncReportsForView(activeView)) return;
     const currentUser = authUser;
 
     async function syncReports() {
@@ -934,10 +1152,13 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     return () => {
       ignore = true;
     };
-  }, [authUser]);
+  }, [activeView, authUser]);
 
   useEffect(() => {
     let ignore = false;
+    if (!authUser || !shouldLoadAccountAssetsForView(activeView)) {
+      return;
+    }
 
     async function loadAccountAssets(showLoading = true) {
       if (showLoading) setAccountAssetsLoading(true);
@@ -962,7 +1183,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       ignore = true;
       window.removeEventListener(userAssetsUpdatedEventName, handleUserAssetsUpdated);
     };
-  }, [authUser?.id]);
+  }, [activeView, authUser]);
 
   useEffect(() => {
     if (pathname !== "/reports" || !recordIdFromUrl) return;
@@ -970,9 +1191,12 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }, [pathname, recordIdFromUrl]);
 
   useEffect(() => {
-    if (!analysisRecords.length) return;
-    window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify(analysisRecords));
-  }, [analysisRecords]);
+    if (!shouldReadAnalysisRecordsForView(activeView)) return;
+    const timer = window.setTimeout(() => {
+      writeStoredAnalysisRecords(analysisRecords);
+    }, storageWriteDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [activeView, analysisRecords]);
 
   useEffect(() => {
     if (!storedSelectedRecordId) return;
@@ -980,24 +1204,32 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }, [storedSelectedRecordId]);
 
   useEffect(() => {
-    window.localStorage.setItem(chatMessagesStorageKey, JSON.stringify(chatMessages));
-  }, [chatMessages]);
+    if (!shouldReadChatHistoryForView(activeView)) return;
+    const timer = window.setTimeout(() => {
+      writeStoredChatMessages(chatMessages);
+    }, storageWriteDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [activeView, chatMessages]);
 
   useEffect(() => {
     return subscribeAnalysisTask((task) => {
-      const records = readStoredAnalysisRecords();
       setChatLoading(task?.status === "running");
       setChatProgressStage(task?.stage || initialChatProgressStage);
       setChatError(task?.status === "error" ? `分析失败：${task.error || "请求后端失败"}` : "");
-      setChatMessages(readStoredChatMessages());
-      setAnalysisRecords(records);
+      if (!task) return;
+      if (shouldReadChatHistoryForView(activeView)) {
+        setChatMessages(readStoredChatMessages());
+      }
+      if (shouldReadAnalysisRecordsForView(activeView)) {
+        setAnalysisRecords(readStoredAnalysisRecords());
+      }
 
       if (task?.recordId) {
         setStoredSelectedRecordId(task.recordId);
         return;
       }
     });
-  }, []);
+  }, [activeView]);
 
   useEffect(() => {
     if (activeView !== "chat" || chatLoading) return;
@@ -1019,17 +1251,24 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const topCoin = displayCoins[0] || emptyCoinItem;
   const reportRecords = analysisRecords;
   const selectedRecordId = recordIdFromUrl || storedSelectedRecordId;
-  const selectedRecord = reportRecords.find((record) => record.id === selectedRecordId)
-    || (!selectedRecordId ? reportRecords[0] || null : null);
+  const selectedRecord = useMemo(
+    () => reportRecords.find((record) => record.id === selectedRecordId)
+      || (!selectedRecordId ? reportRecords[0] || null : null),
+    [reportRecords, selectedRecordId],
+  );
   const selectedVaultTab = parseMyVaultTab(new URLSearchParams(currentSearch).get("tab"));
-  const accountStats: AccountCenterStats = {
-    favoriteNews: favoriteNews.length,
-    favoriteReports: favoriteReports.length,
-    highRiskAssets: accountAssets.filter((item) => item.risk_score >= 80 || ["high", "critical"].includes(item.risk_level)).length,
-    loadingAssets: accountAssetsLoading,
-    pendingAlerts: accountAssets.filter((item) => item.risk_score >= item.alert_threshold || ["high", "critical"].includes(item.risk_level)).length,
-    watchedAssets: accountAssets.length,
-  };
+  const accountStats = useMemo<AccountCenterStats>(() => {
+    const riskyAssets = accountAssets.filter((item) => item.risk_score >= 80 || ["high", "critical"].includes(item.risk_level));
+    const pendingAssets = accountAssets.filter((item) => item.risk_score >= item.alert_threshold || ["high", "critical"].includes(item.risk_level));
+    return {
+      favoriteNews: favoriteNews.length,
+      favoriteReports: favoriteReports.length,
+      highRiskAssets: riskyAssets.length,
+      loadingAssets: accountAssetsLoading || Boolean(authUser && !shouldLoadAccountAssetsForView(activeView) && accountAssets.length === 0),
+      pendingAlerts: pendingAssets.length,
+      watchedAssets: accountAssets.length,
+    };
+  }, [accountAssets, accountAssetsLoading, activeView, authUser, favoriteNews.length, favoriteReports.length]);
 
   const pageMeta = getPageMeta(activeView);
 
@@ -1093,17 +1332,22 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     setRankingError("");
     try {
       clearApiCache();
+      const rankingLimit = getRankingFetchLimitForView(activeView);
+      const shouldFetchNews = shouldFetchNewsRankingForView(activeView);
+      const shouldFetchCoins = shouldFetchCoinRankingForView(activeView);
       const [overviewData, newsData, coinData] = await Promise.all([
         fetchRiskOverview(rankingRange),
-        fetchNewsRanking(0, rankingRange),
-        fetchCoinRanking(0, rankingRange),
+        shouldFetchNews ? fetchNewsRanking(rankingLimit, rankingRange) : Promise.resolve(null),
+        shouldFetchCoins ? fetchCoinRanking(rankingLimit, rankingRange) : Promise.resolve(null),
       ]);
+      const overviewNews = overviewData.top_news_preview?.length ? overviewData.top_news_preview : overviewData.top_news ? [overviewData.top_news] : [];
+      const overviewCoins = overviewData.top_coin_preview?.length ? overviewData.top_coin_preview : overviewData.top_coin ? [overviewData.top_coin] : [];
       setOverview(overviewData);
-      setNewsRanking(newsData.items);
-      setCoinRanking(coinData.items);
+      setNewsRanking(newsData?.items || overviewNews);
+      setCoinRanking(coinData?.items || overviewCoins);
       setRankingDataStatus({
         mode: "real",
-        updatedAt: overviewData.date || newsData.date || coinData.date || formatTimestamp(new Date()),
+        updatedAt: overviewData.date || newsData?.date || coinData?.date || formatTimestamp(new Date()),
         newsSourceStatus: "connected",
         agentStatus: "ready",
         message: "新闻更新后排行榜已刷新",
@@ -1114,7 +1358,234 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     } finally {
       if (!silent) setRankingLoading(false);
     }
-  }, [rankingRange]);
+  }, [activeView, rankingRange]);
+
+  const loadSystemStatus = useCallback(async () => {
+    setSystemStatusLoading(true);
+    setSystemStatusError("");
+    try {
+      const readiness = await fetchSystemReadiness();
+      setSystemReadiness(readiness);
+      const [auditResult, taskEventsResult, rateLimitResult, storageResult, backupResult] = await Promise.allSettled([
+        fetchAuditSummary(24),
+        fetchSystemTaskEvents(12),
+        fetchRateLimitStatus(),
+        fetchStorageInventory(),
+        fetchBackupManifest(),
+      ]);
+      const protectedErrors = [auditResult, taskEventsResult, rateLimitResult, storageResult, backupResult]
+        .filter((item): item is PromiseRejectedResult => item.status === "rejected")
+        .map((item) => item.reason);
+
+      if (auditResult.status === "fulfilled") setAuditSummary(auditResult.value);
+      else setAuditSummary(null);
+      if (taskEventsResult.status === "fulfilled") setSystemTaskEvents(taskEventsResult.value.items);
+      else setSystemTaskEvents([]);
+      if (rateLimitResult.status === "fulfilled") setRateLimitStatus(rateLimitResult.value);
+      else setRateLimitStatus(null);
+      if (storageResult.status === "fulfilled") setStorageInventory(storageResult.value);
+      else setStorageInventory(null);
+      if (backupResult.status === "fulfilled") setBackupManifest(backupResult.value);
+      else setBackupManifest(null);
+
+      if (protectedErrors.some((error) => error instanceof ApiRequestError && error.status === 401)) {
+        setSystemStatusError("管理员登录后可查看审计汇总和限流状态；公开健康检查已显示。");
+      } else if (protectedErrors.some((error) => error instanceof ApiRequestError && error.status === 403)) {
+        setSystemStatusError("当前账号没有管理员权限；公开健康检查已显示。");
+      } else if (protectedErrors.length) {
+        setSystemStatusError("部分系统运行状态读取失败，请稍后重试。");
+      }
+    } catch (error) {
+      console.error(error);
+      setSystemStatusError("系统运行状态读取失败，请稍后重试。");
+    } finally {
+      setSystemStatusLoading(false);
+    }
+  }, []);
+
+  const handlePruneAuditEvents = useCallback(async () => {
+    setAuditPruneLoading(true);
+    setSystemStatusError("");
+    try {
+      const result = await pruneTaskEvents();
+      setAuditPruneResult(result);
+      await loadSystemStatus();
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("管理员登录后才能清理审计账本。");
+      } else if (error instanceof ApiRequestError && error.status === 403) {
+        setSystemStatusError("当前账号没有管理员权限，无法清理审计账本。");
+      } else {
+        setSystemStatusError("审计账本清理失败，请稍后重试。");
+      }
+    } finally {
+      setAuditPruneLoading(false);
+    }
+  }, [loadSystemStatus]);
+
+  const handlePruneGuestSimAccounts = useCallback(async () => {
+    setSimPruneLoading(true);
+    setSimPruneMessage("");
+    setSystemStatusError("");
+    try {
+      const result = await pruneGuestSimAccounts(14);
+      setSimPruneMessage(`游客模拟账户已清理：删除 ${result.deleted_accounts} 个，剩余 ${result.remaining_accounts} 个，保留窗口 ${result.retention_days} 天。`);
+      await loadSystemStatus();
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("管理员登录后才能清理游客模拟账户。");
+      } else if (error instanceof ApiRequestError && error.status === 403) {
+        setSystemStatusError("当前账号没有管理员权限，无法清理游客模拟账户。");
+      } else {
+        setSystemStatusError("游客模拟账户清理失败，请稍后重试。");
+      }
+    } finally {
+      setSimPruneLoading(false);
+    }
+  }, [loadSystemStatus]);
+
+  const handlePruneExpiredAuthSessions = useCallback(async () => {
+    setSessionPruneLoading(true);
+    setSessionPruneMessage("");
+    setSystemStatusError("");
+    try {
+      const result = await pruneExpiredAuthSessions();
+      setSessionPruneMessage(`过期登录会话已清理：删除 ${result.deleted_sessions} 个，剩余 ${result.remaining_sessions} 个。`);
+      await loadSystemStatus();
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("管理员登录后才能清理过期登录会话。");
+      } else if (error instanceof ApiRequestError && error.status === 403) {
+        setSystemStatusError("当前账号没有管理员权限，无法清理过期登录会话。");
+      } else {
+        setSystemStatusError("过期登录会话清理失败，请稍后重试。");
+      }
+    } finally {
+      setSessionPruneLoading(false);
+    }
+  }, [loadSystemStatus]);
+
+  const handlePruneRuntimeJobs = useCallback(async () => {
+    setRuntimeJobPruneLoading(true);
+    setRuntimeJobPruneMessage("");
+    setSystemStatusError("");
+    try {
+      const result = await pruneRuntimeJobs(14, 100);
+      const deletedNews = result.news_update.deleted_by_age + result.news_update.deleted_by_count;
+      const deletedPortfolio = result.portfolio_refresh.deleted_by_age + result.portfolio_refresh.deleted_by_count;
+      setRuntimeJobPruneMessage(
+        `运行态任务状态已清理：新闻更新删除 ${deletedNews} 个，组合刷新删除 ${deletedPortfolio} 个，保留上限 ${result.max_jobs} 个。`
+      );
+      await loadSystemStatus();
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("管理员登录后才能清理运行态任务状态。");
+      } else if (error instanceof ApiRequestError && error.status === 403) {
+        setSystemStatusError("当前账号没有管理员权限，无法清理运行态任务状态。");
+      } else {
+        setSystemStatusError("运行态任务状态清理失败，请稍后重试。");
+      }
+    } finally {
+      setRuntimeJobPruneLoading(false);
+    }
+  }, [loadSystemStatus]);
+
+  const handlePruneInvalidJsonBackups = useCallback(async () => {
+    setInvalidBackupPruneLoading(true);
+    setInvalidBackupPruneMessage("");
+    setSystemStatusError("");
+    try {
+      const result = await pruneInvalidJsonBackups(30);
+      setInvalidBackupPruneMessage(
+        `损坏 JSON 隔离备份已清理：删除 ${result.deleted_files} 个（${formatBytes(result.deleted_bytes)}），剩余 ${result.remaining_files} 个，保留窗口 ${result.retention_days} 天。`
+      );
+      await loadSystemStatus();
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("管理员登录后才能清理损坏 JSON 隔离备份。");
+      } else if (error instanceof ApiRequestError && error.status === 403) {
+        setSystemStatusError("当前账号没有管理员权限，无法清理损坏 JSON 隔离备份。");
+      } else {
+        setSystemStatusError("损坏 JSON 隔离备份清理失败，请稍后重试。");
+      }
+    } finally {
+      setInvalidBackupPruneLoading(false);
+    }
+  }, [loadSystemStatus]);
+
+  const handleExportAccountData = useCallback(async () => {
+    setAccountExportLoading(true);
+    setAccountExportMessage("");
+    setSystemStatusError("");
+    try {
+      const payload = await exportAccountData();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `cryptorisk-account-export-${payload.user.username}-${payload.exported_at.slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setAccountExportMessage(
+        `已导出：报告 ${payload.summary.analysis_reports}，收藏 ${payload.summary.favorites}，资产 ${payload.summary.portfolio_watchlist}，日报 ${payload.summary.daily_reports}，模拟交易 ${payload.summary.sim_account || 0} 个，会话 ${payload.summary.auth_sessions || 0} 个，安全事件 ${payload.summary.account_security_events || 0} 条。`
+      );
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("登录后才能导出账号数据。");
+      } else {
+        setSystemStatusError("账号数据导出失败，请稍后重试。");
+      }
+    } finally {
+      setAccountExportLoading(false);
+    }
+  }, []);
+
+  const handleDeleteAccountData = useCallback(async (currentPassword: string) => {
+    if (accountDeleteLoading) return;
+    if (!currentPassword) {
+      setSystemStatusError("请输入当前密码后再删除账号数据。");
+      return;
+    }
+    setAccountDeleteLoading(true);
+    setSystemStatusError("");
+    try {
+      const result = await deleteAccountData(currentPassword);
+      clearApiCache();
+      setAuthUser(null);
+      setFavoriteReports([]);
+      setFavoriteNews([]);
+      setFavoriteReportIds(new Set());
+      setFavoriteNewsIds(new Set());
+      setAnalysisRecords([]);
+      setStoredSelectedRecordId("");
+      window.localStorage.removeItem(analysisRecordsStorageKey);
+      window.localStorage.removeItem(selectedRecordStorageKey);
+      window.localStorage.removeItem(chatMessagesStorageKey);
+      setChatMessages(initialChatMessages);
+      setAccountExportMessage(
+        `账号数据已删除：报告 ${result.summary.analysis_reports_deleted}，收藏 ${result.summary.favorites_deleted}，资产 ${result.summary.portfolio_watchlist_deleted}，日报 ${result.summary.daily_reports_deleted}，模拟交易 ${result.summary.sim_accounts_deleted || 0}，审计事件 ${result.summary.audit_events_deleted || 0}。`
+      );
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSystemStatusError("登录后才能删除账号数据。");
+      } else if (error instanceof ApiRequestError && error.status === 403) {
+        setSystemStatusError(error.detail || "当前密码错误，账号数据未删除。");
+      } else {
+        setSystemStatusError("账号数据删除失败，请稍后重试。");
+      }
+    } finally {
+      setAccountDeleteLoading(false);
+    }
+  }, [accountDeleteLoading]);
 
   async function handleUpdateTodayNews() {
     if (newsUpdateLoading) return;
@@ -1170,6 +1641,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }, [refreshRankingsAfterUpdate]);
 
   useEffect(() => {
+    if (activeView !== "settings") return;
     let ignore = false;
 
     async function resumeNewsUpdateJob() {
@@ -1215,7 +1687,15 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       ignore = true;
       updatePollGenerationRef.current += 1;
     };
-  }, [pollNewsUpdateJob]);
+  }, [activeView, pollNewsUpdateJob]);
+
+  useEffect(() => {
+    if (activeView !== "settings") return;
+    const timer = window.setTimeout(() => {
+      void loadSystemStatus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeView, authUser?.id, loadSystemStatus]);
 
   function runAnalysis(input: string) {
     const trimmed = input.trim();
@@ -1239,14 +1719,15 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     runAnalysis(input);
   }
 
-  function handleDeepAnalyzeNews(item: NewsRankingItem) {
-    const input = buildNewsAnalysisInput(item);
+  async function handleDeepAnalyzeNews(item: NewsRankingItem) {
+    const detail = await fetchNewsDetail(String(item.news_id), rankingRange).catch(() => item);
+    const input = buildNewsAnalysisInput(detail);
     window.dispatchEvent(new CustomEvent("cryptorisk:open-risk-assistant", {
       detail: {
         mode: "deep_analysis",
-        selectedText: item.content || item.summary || item.title,
+        selectedText: detail.content || detail.summary || detail.title,
         sourceInput: input,
-        news: item,
+        news: detail,
       },
     }));
   }
@@ -1263,7 +1744,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
   function handleClearChatHistory() {
     setChatMessages(initialChatMessages);
-    window.localStorage.setItem(chatMessagesStorageKey, JSON.stringify(initialChatMessages));
+    writeStoredChatMessages(initialChatMessages);
   }
 
   async function handleAuthSubmit(mode: "login" | "register", username: string, password: string) {
@@ -1372,22 +1853,23 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
           return next;
         });
       } else {
+        const detail = await fetchNewsDetail(itemId, rankingRange).catch(() => item);
         const favorite = await addFavorite({
           item_type: "news",
           item_id: itemId,
-          title: item.title,
+          title: detail.title,
           payload: {
-            news_id: item.news_id,
-            title: item.title,
-            content: item.content,
-            published_at: item.published_at || item.date,
-            risk_score: item.risk_score,
-            risk_level: item.risk_level,
-            risk_type: item.risk_type,
-            coins: item.coins,
-            summary: item.summary,
-            evidence: item.evidence,
-            source_url: item.source_url,
+            news_id: detail.news_id,
+            title: detail.title,
+            content: detail.content,
+            published_at: detail.published_at || detail.date,
+            risk_score: detail.risk_score,
+            risk_level: detail.risk_level,
+            risk_type: detail.risk_type,
+            coins: detail.coins,
+            summary: detail.summary,
+            evidence: detail.evidence,
+            source_url: detail.source_url,
           },
         });
         setFavoriteNews((items) => [favorite, ...items.filter((existing) => existing.item_id !== favorite.item_id)]);
@@ -1406,7 +1888,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     setAnalysisRecords((items) => {
       const nextRecords = items.filter((item) => item.id !== id);
       if (nextRecords.length) {
-        window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify(nextRecords));
+        writeStoredAnalysisRecords(nextRecords);
         const selectedStillExists = nextRecords.some((record) => record.id === selectedRecordId);
         const nextSelected = selectedStillExists ? selectedRecordId : nextRecords[0].id;
         window.localStorage.setItem(selectedRecordStorageKey, nextSelected);
@@ -1476,8 +1958,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
           <div className="px-3 py-4 sm:px-6 sm:py-5 2xl:px-8">
             <div className="min-w-0 space-y-5">
-              {rankingError && <Notice tone="amber" text={rankingError} />}
-              {["home", "news", "coin"].includes(activeView) && (
+              {shouldLoadRankingsForView(activeView) && rankingError && <Notice tone="amber" text={rankingError} />}
+              {shouldLoadRankingsForView(activeView) && (
                 <RankingDataStatusBar status={rankingDataStatus} />
               )}
 
@@ -1612,6 +2094,35 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
               )}
               {activeView === "settings" && (
                 <SettingsView
+                  accountExportLoading={accountExportLoading}
+                  accountExportMessage={accountExportMessage}
+                  accountDeleteLoading={accountDeleteLoading}
+                  auditSummary={auditSummary}
+                  backupManifest={backupManifest}
+                  auditPruneLoading={auditPruneLoading}
+                  auditPruneResult={auditPruneResult}
+                  onExportAccountData={handleExportAccountData}
+                  onDeleteAccountData={handleDeleteAccountData}
+                  onPruneAuditEvents={handlePruneAuditEvents}
+                  onPruneExpiredAuthSessions={handlePruneExpiredAuthSessions}
+                  onPruneGuestSimAccounts={handlePruneGuestSimAccounts}
+                  onPruneInvalidJsonBackups={handlePruneInvalidJsonBackups}
+                  onPruneRuntimeJobs={handlePruneRuntimeJobs}
+                  onRefreshSystemStatus={loadSystemStatus}
+                  rateLimitStatus={rateLimitStatus}
+                  storageInventory={storageInventory}
+                  systemTaskEvents={systemTaskEvents}
+                  systemReadiness={systemReadiness}
+                  systemStatusError={systemStatusError}
+                  systemStatusLoading={systemStatusLoading}
+                  sessionPruneLoading={sessionPruneLoading}
+                  sessionPruneMessage={sessionPruneMessage}
+                  runtimeJobPruneLoading={runtimeJobPruneLoading}
+                  runtimeJobPruneMessage={runtimeJobPruneMessage}
+                  invalidBackupPruneLoading={invalidBackupPruneLoading}
+                  invalidBackupPruneMessage={invalidBackupPruneMessage}
+                  simPruneLoading={simPruneLoading}
+                  simPruneMessage={simPruneMessage}
                   updateJob={newsUpdateJob}
                   updateError={newsUpdateError}
                   updateLoading={newsUpdateLoading}
@@ -2262,7 +2773,12 @@ function MetricGrid({
   topCoin: CoinRankingItem;
   topNews: NewsRankingItem;
 }) {
-  const metrics = getMetrics(activeView, overview, topNews, topCoin, loading, newsItems, coinItems);
+  const deferredNewsItems = useDeferredValue(newsItems);
+  const deferredCoinItems = useDeferredValue(coinItems);
+  const metrics = useMemo(
+    () => getMetrics(activeView, overview, topNews, topCoin, loading, deferredNewsItems, deferredCoinItems),
+    [activeView, deferredCoinItems, deferredNewsItems, loading, overview, topCoin, topNews],
+  );
 
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-onboarding-id="home-metrics">
@@ -2547,10 +3063,11 @@ function ChatView({
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messageLength = message.trim().length;
+  const visibleChatMessages = useMemo(() => trimChatMessages(chatMessages), [chatMessages]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [chatMessages, chatLoading]);
+  }, [visibleChatMessages, chatLoading]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -2582,7 +3099,7 @@ function ChatView({
 
           <div className="risk-scroll min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(37,99,235,0.035)_1px,transparent_1px)] bg-[size:40px_40px] px-3 py-5 sm:px-8 sm:py-6 lg:px-10">
             <div className="mx-auto max-w-5xl space-y-5">
-              {chatMessages.map((item) => (
+              {visibleChatMessages.map((item) => (
                 <div key={item.id} className={`flex items-end gap-3 ${item.role === "user" ? "justify-end" : "justify-start"}`}>
                   {item.role === "assistant" && (
                     <div className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
@@ -2757,8 +3274,11 @@ function NewsView({
 }) {
   const [filter, setFilter] = useState<NewsFilter>(() => readRankingFilter("news", "filter", "top10", isNewsFilter));
   const [sort, setSort] = useState<NewsSort>(() => readRankingFilter("news", "sort", "score_desc", isNewsSort));
-  const visibleItems = useMemo(() => getVisibleNewsItems(items, filter, sort), [filter, items, sort]);
-  const distribution = useMemo(() => getNewsDistribution(items), [items]);
+  const deferredItems = useDeferredValue(items);
+  const deferredFilter = useDeferredValue(filter);
+  const deferredSort = useDeferredValue(sort);
+  const visibleItems = useMemo(() => getVisibleNewsItems(deferredItems, deferredFilter, deferredSort), [deferredFilter, deferredItems, deferredSort]);
+  const distribution = useMemo(() => getNewsDistribution(deferredItems), [deferredItems]);
 
   useEffect(() => {
     syncRankingUrl("news", { filter, sort, range });
@@ -2779,7 +3299,7 @@ function NewsView({
     <>
       <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.4fr)_minmax(0,0.6fr)]">
         <DistributionCard {...distribution} />
-        <NewsRiskOverviewCard items={items} />
+        <NewsRiskOverviewCard items={deferredItems} />
       </div>
       <NewsRankingPanel
         favoriteActionLoadingId={favoriteActionLoadingId}
@@ -2810,8 +3330,11 @@ function CoinView({
 }) {
   const [filter, setFilter] = useState<CoinFilter>(() => readRankingFilter("coin", "filter", "top10", isCoinFilter));
   const [sort, setSort] = useState<CoinSort>(() => readRankingFilter("coin", "sort", "score_desc", isCoinSort));
-  const visibleItems = useMemo(() => getVisibleCoinItems(items, filter, sort), [filter, items, sort]);
-  const distribution = useMemo(() => getCoinDistribution(items), [items]);
+  const deferredItems = useDeferredValue(items);
+  const deferredFilter = useDeferredValue(filter);
+  const deferredSort = useDeferredValue(sort);
+  const visibleItems = useMemo(() => getVisibleCoinItems(deferredItems, deferredFilter, deferredSort), [deferredFilter, deferredItems, deferredSort]);
+  const distribution = useMemo(() => getCoinDistribution(deferredItems), [deferredItems]);
 
   useEffect(() => {
     syncRankingUrl("coin", { filter, sort, range });
@@ -2832,7 +3355,7 @@ function CoinView({
     <>
       <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.4fr)_minmax(0,0.6fr)]">
         <DistributionCard {...distribution} />
-        <CoinRiskTrendCard items={items} range={range} />
+        <CoinRiskTrendCard items={deferredItems} range={range} />
       </div>
       <CoinRankingPanel
         filter={filter}
@@ -3158,6 +3681,7 @@ function CoinRankingPanel({
   sort: CoinSort;
   total: number;
 }) {
+  const renderedCount = Math.min(items.length, maxRankingTableRows);
   const filters: Array<[CoinFilter, string]> = [
     ["all", "全部币种"],
     ["top10", "Top10 风险币种"],
@@ -3220,7 +3744,7 @@ function CoinRankingPanel({
         <div className="risk-scroll max-h-[640px] overflow-auto rounded-lg border border-blue-100">
           <CoinTable items={items} />
         </div>
-        <TableFooter text={`当前显示 ${items.length} 个 / 全部 ${total} 个币种`} />
+        <TableFooter text={`当前显示 ${renderedCount} 个 / 筛选后 ${items.length} 个 / 全部 ${total} 个币种`} />
       </div>
     </section>
   );
@@ -3275,6 +3799,7 @@ function NewsRankingPanel({
       return categoryMatched;
     });
   }, [categoryFilter, items]);
+  const renderedCount = Math.min(panelItems.length, maxRankingTableRows);
 
   return (
     <section className="risk-card rounded-lg">
@@ -3342,7 +3867,7 @@ function NewsRankingPanel({
             onToggleFavorite={onToggleFavorite}
           />
         </div>
-        <TableFooter text={`当前显示 ${panelItems.length} 条 / 全部 ${total} 条`} />
+        <TableFooter text={`当前显示 ${renderedCount} 条 / 筛选后 ${panelItems.length} 条 / 全部 ${total} 条`} />
       </div>
     </section>
   );
@@ -4409,18 +4934,190 @@ function FavoriteVaultShell({
 }
 
 function SettingsView({
+  accountDeleteLoading,
+  accountExportLoading,
+  accountExportMessage,
+  auditPruneLoading,
+  auditPruneResult,
+  auditSummary,
+  backupManifest,
+  onDeleteAccountData,
+  onExportAccountData,
+  onPruneAuditEvents,
+  onPruneExpiredAuthSessions,
+  onPruneGuestSimAccounts,
+  onPruneInvalidJsonBackups,
+  onPruneRuntimeJobs,
+  onRefreshSystemStatus,
   onUpdateTodayNews,
+  rateLimitStatus,
+  storageInventory,
+  systemTaskEvents,
+  systemReadiness,
+  systemStatusError,
+  systemStatusLoading,
+  sessionPruneLoading,
+  sessionPruneMessage,
+  runtimeJobPruneLoading,
+  runtimeJobPruneMessage,
+  invalidBackupPruneLoading,
+  invalidBackupPruneMessage,
+  simPruneLoading,
+  simPruneMessage,
   updateError,
   updateJob,
   updateLoading,
   updateResult,
 }: {
+  accountDeleteLoading: boolean;
+  accountExportLoading: boolean;
+  accountExportMessage: string;
+  auditPruneLoading: boolean;
+  auditPruneResult: AuditPruneResult | null;
+  auditSummary: AuditSummary | null;
+  backupManifest: BackupManifest | null;
+  onDeleteAccountData: (currentPassword: string) => void;
+  onExportAccountData: () => void;
+  onPruneAuditEvents: () => void;
+  onPruneExpiredAuthSessions: () => void;
+  onPruneGuestSimAccounts: () => void;
+  onPruneInvalidJsonBackups: () => void;
+  onPruneRuntimeJobs: () => void;
+  onRefreshSystemStatus: () => void;
   onUpdateTodayNews: () => void;
+  rateLimitStatus: RateLimitStatus | null;
+  storageInventory: StorageInventory | null;
+  systemTaskEvents: SystemTaskEvent[];
+  systemReadiness: SystemReadiness | null;
+  systemStatusError: string;
+  systemStatusLoading: boolean;
+  sessionPruneLoading: boolean;
+  sessionPruneMessage: string;
+  runtimeJobPruneLoading: boolean;
+  runtimeJobPruneMessage: string;
+  invalidBackupPruneLoading: boolean;
+  invalidBackupPruneMessage: string;
+  simPruneLoading: boolean;
+  simPruneMessage: string;
   updateError: string;
   updateJob: NewsUpdateJob | null;
   updateLoading: boolean;
   updateResult: NewsUpdateResponse | null;
 }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [passwordChangeMessage, setPasswordChangeMessage] = useState("");
+  const [passwordChangeError, setPasswordChangeError] = useState("");
+  const [authSessions, setAuthSessions] = useState<AuthSessionItem[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsMessage, setSessionsMessage] = useState("");
+  const [sessionsError, setSessionsError] = useState("");
+  const [securityEvents, setSecurityEvents] = useState<AccountSecurityEvent[]>([]);
+  const [deleteCurrentPassword, setDeleteCurrentPassword] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const passwordStrength = getPasswordStrength(newPassword, "");
+  const canDeleteAccount = Boolean(deleteCurrentPassword) && deleteConfirmation === "DELETE";
+  const invalidJsonBackups = storageInventory?.runtime.invalid_json_backups ?? 0;
+  const storageIssueCount = (storageInventory?.sqlite_errors.length ?? 0) + invalidJsonBackups;
+  const backupInvalidTargetCount = backupManifest?.items.filter((item) => item.kind === "runtime_json_invalid_backup").length ?? 0;
+
+  const loadAuthSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError("");
+    try {
+      const [sessions, events] = await Promise.all([
+        fetchAuthSessions(),
+        fetchAccountSecurityEvents(8),
+      ]);
+      setAuthSessions(sessions);
+      setSecurityEvents(events.items);
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSessionsError("登录后才能查看会话。");
+      } else {
+        setSessionsError("登录会话读取失败。");
+      }
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadAuthSessions();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadAuthSessions]);
+
+  async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (passwordChangeLoading) return;
+    setPasswordChangeMessage("");
+    setPasswordChangeError("");
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeError("两次输入的新密码不一致。");
+      return;
+    }
+    setPasswordChangeLoading(true);
+    try {
+      const result = await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordChangeMessage(`${result.message} 已撤销其他会话 ${result.sessions_revoked} 个。`);
+      await loadAuthSessions();
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setPasswordChangeError("登录后才能修改密码。");
+      } else if (error instanceof ApiRequestError && error.detail) {
+        setPasswordChangeError(error.detail);
+      } else {
+        setPasswordChangeError("密码修改失败，请稍后重试。");
+      }
+    } finally {
+      setPasswordChangeLoading(false);
+    }
+  }
+
+  async function handleRevokeOtherSessions() {
+    if (sessionsLoading) return;
+    setSessionsLoading(true);
+    setSessionsMessage("");
+    setSessionsError("");
+    try {
+      const result = await revokeOtherAuthSessions();
+      setSessionsMessage(`${result.message} 已撤销 ${result.sessions_revoked} 个。`);
+      const [sessions, events] = await Promise.all([
+        fetchAuthSessions(),
+        fetchAccountSecurityEvents(8),
+      ]);
+      setAuthSessions(sessions);
+      setSecurityEvents(events.items);
+    } catch (error) {
+      console.error(error);
+      if (error instanceof ApiRequestError && error.status === 401) {
+        setSessionsError("登录后才能管理会话。");
+      } else if (error instanceof ApiRequestError && error.detail) {
+        setSessionsError(error.detail);
+      } else {
+        setSessionsError("会话撤销失败，请稍后重试。");
+      }
+    } finally {
+      setSessionsLoading(false);
+    }
+  }
+
+  function handleDeleteAccountSubmit() {
+    if (!canDeleteAccount || accountDeleteLoading) return;
+    onDeleteAccountData(deleteCurrentPassword);
+    setDeleteCurrentPassword("");
+    setDeleteConfirmation("");
+  }
+
   const fallbackJob: NewsUpdateJob = updateJob || {
     job_id: "",
     status: updateLoading ? "running" : "queued",
@@ -4469,6 +5166,10 @@ function SettingsView({
   const activeStage = progressItems.find((progress) => progress.status === "running")?.label || "待命";
   const hasWarning = Boolean(updateResult?.crawler.crawler_error || progressItems.some((progress) => progress.status === "warning"));
   const hasError = Boolean(updateError || progressItems.some((progress) => progress.status === "error"));
+  const readinessStatus = systemReadiness?.status || "unknown";
+  const readinessTone = readinessStatus === "ready" ? "emerald" : readinessStatus === "degraded" ? "amber" : readinessStatus === "not_ready" ? "rose" : "slate";
+  const auditErrorCount = auditSummary?.by_kind.reduce((total, item) => total + item.error, 0) || 0;
+  const auditRunningCount = auditSummary?.by_kind.reduce((total, item) => total + item.running + item.queued, 0) || 0;
   const agentStatusText = hasError ? "异常" : hasWarning ? "降级运行" : "正常";
   const agentStatusStyle = hasError
     ? "border-rose-200 bg-rose-50 text-rose-700"
@@ -4509,6 +5210,7 @@ function SettingsView({
       </div>
 
       <div className="bg-gradient-to-br from-white via-slate-50 to-blue-50/70 px-5 py-5 sm:px-6">
+        {systemStatusError && <Notice tone="amber" text={systemStatusError} />}
         {updateError && <Notice tone="red" text={updateError} />}
         {updateResult && (
           <div className="mb-5 rounded-lg border border-emerald-200 bg-white/80 p-4 text-sm leading-6 text-emerald-900 shadow-sm">
@@ -4523,6 +5225,510 @@ function SettingsView({
             )}
           </div>
         )}
+
+        <div className="mb-5 rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Operations</p>
+              <h3 className="mt-1 text-lg font-bold text-slate-950">系统运行概览</h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onExportAccountData}
+                disabled={accountExportLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-800 transition-colors duration-200 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <DownloadIcon />
+                {accountExportLoading ? "导出中" : "导出数据"}
+              </button>
+              <button
+                type="button"
+                onClick={onPruneAuditEvents}
+                disabled={auditPruneLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-bold text-amber-800 transition-colors duration-200 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <TrashIcon />
+                {auditPruneLoading ? "清理中" : "清理审计"}
+              </button>
+              <button
+                type="button"
+                onClick={onPruneGuestSimAccounts}
+                disabled={simPruneLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 text-sm font-bold text-cyan-800 transition-colors duration-200 hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <TrashIcon />
+                {simPruneLoading ? "清理中" : "清理游客模拟"}
+              </button>
+              <button
+                type="button"
+                onClick={onPruneExpiredAuthSessions}
+                disabled={sessionPruneLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 text-sm font-bold text-violet-800 transition-colors duration-200 hover:bg-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <TrashIcon />
+                {sessionPruneLoading ? "清理中" : "清理过期会话"}
+              </button>
+              <button
+                type="button"
+                onClick={onPruneRuntimeJobs}
+                disabled={runtimeJobPruneLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-sm font-bold text-indigo-800 transition-colors duration-200 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <TrashIcon />
+                {runtimeJobPruneLoading ? "清理中" : "清理任务状态"}
+              </button>
+              <button
+                type="button"
+                onClick={onPruneInvalidJsonBackups}
+                disabled={invalidBackupPruneLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 text-sm font-bold text-orange-800 transition-colors duration-200 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <TrashIcon />
+                {invalidBackupPruneLoading ? "清理中" : "清理损坏备份"}
+              </button>
+              <button
+                type="button"
+                onClick={onRefreshSystemStatus}
+                disabled={systemStatusLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshIcon />
+                {systemStatusLoading ? "读取中" : "刷新状态"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <SystemMetricCard
+              label="Readiness"
+              tone={readinessTone}
+              value={formatReadinessStatus(readinessStatus)}
+              detail={systemReadiness ? `失败检查 ${systemReadiness.summary.failed_checks}/${systemReadiness.summary.total_checks}` : "等待读取"}
+            />
+            <SystemMetricCard
+              label="24h Audit"
+              tone={auditErrorCount > 0 ? "rose" : auditRunningCount > 0 ? "blue" : "emerald"}
+              value={auditSummary ? `${auditSummary.window_events} 事件` : "--"}
+              detail={auditSummary ? `失败 ${auditErrorCount}，运行/排队 ${auditRunningCount}` : "等待读取"}
+            />
+            <SystemMetricCard
+              label="Rate Limit"
+              tone={rateLimitStatus?.enabled ? "emerald" : "amber"}
+              value={rateLimitStatus ? (rateLimitStatus.enabled ? "已开启" : "已关闭") : "--"}
+              detail={rateLimitStatus ? `${rateLimitStatus.rules.length} 条规则，${rateLimitStatus.active_buckets} 个活跃桶` : "等待读取"}
+            />
+            <SystemMetricCard
+              label="Storage"
+              tone={storageIssueCount ? "amber" : storageInventory ? "emerald" : "slate"}
+              value={storageInventory ? formatBytes(storageInventory.total_size_bytes) : "--"}
+              detail={storageInventory ? `模拟账户 ${storageInventory.runtime.sim_accounts}，异常 ${storageIssueCount}，损坏备份 ${invalidJsonBackups}` : "管理员可见"}
+            />
+            <SystemMetricCard
+              label="Backup"
+              tone={backupManifest?.warnings.length ? "amber" : backupManifest ? "emerald" : "slate"}
+              value={backupManifest ? `${backupManifest.target_count} 项` : "--"}
+              detail={backupManifest ? `${formatBytes(backupManifest.total_size_bytes)}，缺失 ${backupManifest.missing_expected_targets.length}，隔离 ${backupInvalidTargetCount}` : "管理员可见"}
+            />
+            <SystemMetricCard
+              label="Uptime"
+              tone="slate"
+              value={systemReadiness ? formatDuration(systemReadiness.uptime_seconds) : "--"}
+              detail={systemReadiness ? `版本 ${systemReadiness.version || "local"}` : "等待读取"}
+            />
+          </div>
+
+          {storageInventory ? (
+            <div className="mt-4 overflow-x-auto rounded-lg border border-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">运行时存储盘点</p>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-500">生成时间：{formatCompactDateTime(storageInventory.generated_at)}</p>
+                </div>
+                <span className="rounded-lg border border-blue-100 bg-white px-2.5 py-1 text-xs font-bold text-blue-700">
+                  {storageInventory.datastores.length} data stores
+                </span>
+              </div>
+              <table className="min-w-[760px] w-full text-left text-sm">
+                <thead className="bg-white text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3">数据域</th>
+                    <th className="px-3 py-3">状态</th>
+                    <th className="px-3 py-3 text-right">规模</th>
+                    <th className="px-3 py-3 text-right">大小</th>
+                    <th className="px-3 py-3">明细</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {storageInventory.datastores.map((store) => (
+                    <tr key={store.name} className="bg-white">
+                      <td className="px-3 py-3 font-bold text-slate-800">{formatDatastoreName(store.name)}</td>
+                      <td className="px-3 py-3">
+                        <span className={`rounded-lg border px-2 py-1 text-xs font-bold ${store.error ? "border-amber-200 bg-amber-50 text-amber-800" : store.exists ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                          {store.error ? "读取异常" : store.exists ? "已存在" : "未创建"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-700">{formatDatastoreScale(store)}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-700">{formatBytes(store.size_bytes)}</td>
+                      <td className="px-3 py-3 text-xs font-semibold text-slate-500">{formatDatastoreDetail(store)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-500">
+              管理员登录后可查看运行时存储盘点，包括账号、报告、资产、审计和日报数据规模。
+            </p>
+          )}
+
+          {backupManifest ? (
+            <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">备份清单</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    生成时间：{formatCompactDateTime(backupManifest.generated_at)} · 根目录：{backupManifest.root}
+                  </p>
+                </div>
+                <span className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-700">
+                  {backupManifest.target_count} targets
+                </span>
+              </div>
+              {backupManifest.warnings.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {backupManifest.warnings.map((warning) => (
+                    <p key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                      {warning}
+                    </p>
+                  ))}
+                </div>
+              )}
+              <div className="mt-4 overflow-x-auto rounded-lg border border-emerald-100 bg-white">
+                <table className="min-w-[760px] w-full text-left text-sm">
+                  <thead className="bg-emerald-50 text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">
+                    <tr>
+                      <th className="px-3 py-3">目标</th>
+                      <th className="px-3 py-3">类型</th>
+                      <th className="px-3 py-3">状态</th>
+                      <th className="px-3 py-3 text-right">大小</th>
+                      <th className="px-3 py-3">路径</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-50">
+                    {backupManifest.items.filter((item) => item.backup_required).slice(0, 6).map((item) => (
+                      <tr key={`${item.name}:${item.display_path}`}>
+                        <td className="px-3 py-3 font-bold text-slate-800">{item.name}</td>
+                        <td className="px-3 py-3 text-xs font-bold text-slate-500">{formatBackupKind(item.kind)}</td>
+                        <td className="px-3 py-3">
+                          <span className={`rounded-lg border px-2 py-1 text-xs font-bold ${item.exists ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                            {item.exists ? "已发现" : "未创建"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-slate-700">{formatBytes(item.size_bytes)}</td>
+                        <td className="px-3 py-3 text-xs font-semibold text-slate-500">{item.display_path}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 rounded-lg border border-dashed border-emerald-200 bg-emerald-50/40 px-3 py-3 text-sm font-semibold text-emerald-700">
+              管理员登录后可查看备份清单，确认 SQLite、日报目录和运行态 JSON 是否纳入持久化备份。
+            </p>
+          )}
+
+          {auditSummary?.by_kind.length ? (
+            <div className="mt-4 overflow-x-auto rounded-lg border border-slate-100">
+              <table className="min-w-[760px] w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3">类型</th>
+                    <th className="px-3 py-3 text-right">总数</th>
+                    <th className="px-3 py-3 text-right">成功</th>
+                    <th className="px-3 py-3 text-right">失败</th>
+                    <th className="px-3 py-3 text-right">错误率</th>
+                    <th className="px-3 py-3">最近事件</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {auditSummary.by_kind.map((item) => (
+                    <tr key={item.job_kind} className="bg-white">
+                      <td className="px-3 py-3 font-bold text-slate-800">{formatJobKind(item.job_kind)}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-700">{item.total}</td>
+                      <td className="px-3 py-3 text-right font-mono text-emerald-700">{item.success}</td>
+                      <td className="px-3 py-3 text-right font-mono text-rose-700">{item.error}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-700">{Math.round(item.error_rate * 100)}%</td>
+                      <td className="px-3 py-3 text-xs font-semibold text-slate-500">
+                        {item.latest_event ? `${formatAuditStatus(item.latest_event.status)} · ${item.latest_event.message || item.latest_event.stage}` : "暂无"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-500">
+              暂无审计事件，运行 Chat 分析、风险助手或新闻更新后会在这里汇总。
+            </p>
+          )}
+
+          {systemTaskEvents.length ? (
+            <div className="mt-4 overflow-x-auto rounded-lg border border-blue-100">
+              <table className="min-w-[860px] w-full text-left text-sm">
+                <thead className="bg-blue-50 text-xs font-bold uppercase tracking-[0.12em] text-blue-700">
+                  <tr>
+                    <th className="px-3 py-3">最近事件</th>
+                    <th className="px-3 py-3">状态</th>
+                    <th className="px-3 py-3">阶段</th>
+                    <th className="px-3 py-3">用户</th>
+                    <th className="px-3 py-3">计数摘要</th>
+                    <th className="px-3 py-3 text-right">时间</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-blue-50 bg-white">
+                  {systemTaskEvents.map((event) => (
+                    <tr key={event.id}>
+                      <td className="px-3 py-3">
+                        <p className="font-bold text-slate-800">{formatJobKind(event.job_kind)}</p>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500">{event.message || event.event_type}</p>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`rounded-lg border px-2 py-1 text-xs font-bold ${event.status === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : event.status === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                          {formatAuditStatus(event.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-xs font-semibold text-slate-500">{event.stage || event.event_type}</td>
+                      <td className="px-3 py-3 font-mono text-xs text-slate-500">{formatAuditUser(event.user_id)}</td>
+                      <td className="px-3 py-3 text-xs font-semibold text-slate-500">{formatAuditPayloadSummary(event.payload)}</td>
+                      <td className="px-3 py-3 text-right text-xs font-semibold text-slate-500">{formatCompactDateTime(event.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : auditSummary ? (
+            <p className="mt-4 rounded-lg border border-dashed border-blue-100 bg-blue-50/50 px-3 py-3 text-sm font-semibold text-blue-700">
+              暂无最近审计明细。
+            </p>
+          ) : null}
+          {auditPruneResult && (
+            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
+              审计账本已清理：按时间删除 {auditPruneResult.deleted_by_age} 条，按数量上限删除 {auditPruneResult.deleted_by_count} 条，剩余 {auditPruneResult.remaining_events} 条。
+            </p>
+          )}
+          {simPruneMessage && (
+            <p className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-800">
+              {simPruneMessage}
+            </p>
+          )}
+          {sessionPruneMessage && (
+            <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-800">
+              {sessionPruneMessage}
+            </p>
+          )}
+          {runtimeJobPruneMessage && (
+            <p className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-800">
+              {runtimeJobPruneMessage}
+            </p>
+          )}
+          {invalidBackupPruneMessage && (
+            <p className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-800">
+              {invalidBackupPruneMessage}
+            </p>
+          )}
+          {accountExportMessage && (
+            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
+              {accountExportMessage}
+            </p>
+          )}
+        </div>
+
+        <div className="mb-5 rounded-lg border border-rose-100 bg-rose-50/80 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-rose-600">Danger Zone</p>
+              <h3 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-950">
+                <TrashIcon />
+                删除账号数据
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                删除会清除账号、登录会话、收藏、分析报告、资产 watchlist、日报和模拟交易状态。请输入当前密码并确认 DELETE。
+              </p>
+            </div>
+            <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[minmax(160px,1fr)_150px_auto]">
+              <input
+                value={deleteCurrentPassword}
+                onChange={(event) => setDeleteCurrentPassword(event.target.value)}
+                type="password"
+                autoComplete="current-password"
+                placeholder="当前密码"
+                className="h-10 rounded-lg border border-rose-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition-colors duration-200 placeholder:text-slate-400 focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+              />
+              <input
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                placeholder="输入 DELETE"
+                className="h-10 rounded-lg border border-rose-100 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition-colors duration-200 placeholder:text-slate-400 focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+              />
+              <button
+                type="button"
+                onClick={handleDeleteAccountSubmit}
+                disabled={!canDeleteAccount || accountDeleteLoading}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-rose-600 px-3 text-sm font-bold text-white transition-colors duration-200 hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <TrashIcon />
+                {accountDeleteLoading ? "删除中" : "删除账号"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handlePasswordChange} className="mb-5 rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Account Security</p>
+              <h3 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-950">
+                <KeyIcon />
+                修改登录密码
+              </h3>
+            </div>
+            <button
+              type="submit"
+              disabled={passwordChangeLoading || currentPassword.length < 1 || newPassword.length < 10 || confirmPassword.length < 10}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-bold text-white transition-colors duration-200 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ShieldIcon />
+              {passwordChangeLoading ? "更新中" : "更新密码"}
+            </button>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">当前密码</span>
+              <input
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                type="password"
+                autoComplete="current-password"
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-colors duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">新密码</span>
+              <input
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                type="password"
+                autoComplete="new-password"
+                minLength={10}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-colors duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className={`h-full rounded-full ${passwordStrength.bar}`} style={{ width: `${passwordStrength.percent}%` }} />
+              </div>
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">确认新密码</span>
+              <input
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                type="password"
+                autoComplete="new-password"
+                minLength={10}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition-colors duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-semibold">
+            {newPassword && <span className={passwordStrength.color}>密码强度：{passwordStrength.label}</span>}
+            {passwordChangeError && <span className="text-rose-700">{passwordChangeError}</span>}
+            {passwordChangeMessage && <span className="text-emerald-700">{passwordChangeMessage}</span>}
+          </div>
+        </form>
+
+        <div className="mb-5 rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Sessions</p>
+              <h3 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-950">
+                <UsersIcon />
+                登录会话
+              </h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={loadAuthSessions}
+                disabled={sessionsLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshIcon />
+                {sessionsLoading ? "读取中" : "刷新会话"}
+              </button>
+              <button
+                type="button"
+                onClick={handleRevokeOtherSessions}
+                disabled={sessionsLoading || authSessions.filter((session) => !session.is_current).length === 0}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-bold text-amber-800 transition-colors duration-200 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <ShieldIcon />
+                撤销其他会话
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <SystemMetricCard
+              label="Active Sessions"
+              tone={authSessions.length > 1 ? "amber" : authSessions.length === 1 ? "emerald" : "slate"}
+              value={sessionsLoading ? "--" : String(authSessions.length)}
+              detail={authSessions.length > 1 ? `其他会话 ${authSessions.filter((session) => !session.is_current).length}` : "当前账号会话"}
+            />
+            {authSessions.slice(0, 2).map((session) => (
+              <div key={session.session_id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-mono text-xs font-bold text-slate-700">{session.session_id}</p>
+                  {session.is_current && (
+                    <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                      当前
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-500">创建：{formatCompactDateTime(session.created_at)}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">过期：{formatCompactDateTime(session.expires_at)}</p>
+                <p className="mt-1 truncate text-xs font-semibold text-slate-500">客户端：{formatSessionUserAgent(session.user_agent)}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">IP 摘要：{session.client_ip_hash || "--"}</p>
+              </div>
+            ))}
+          </div>
+          {(sessionsError || sessionsMessage) && (
+            <p className={`mt-3 rounded-lg border px-3 py-2 text-sm font-bold ${sessionsError ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+              {sessionsError || sessionsMessage}
+            </p>
+          )}
+          <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-bold text-slate-900">最近账号安全事件</p>
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">{securityEvents.length} events</span>
+            </div>
+            {securityEvents.length ? (
+              <div className="mt-3 divide-y divide-slate-200">
+                {securityEvents.slice(0, 5).map((event) => (
+                  <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{formatSecurityEventType(event.event_type)}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-slate-500">{event.message || event.stage}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-slate-500">{formatSecurityEventContext(event)}</p>
+                    </div>
+                    <span className="text-xs font-bold text-slate-500">{formatCompactDateTime(event.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm font-semibold text-slate-500">暂无账号安全事件。</p>
+            )}
+          </div>
+        </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.42fr)_minmax(0,0.58fr)]">
           <div className="rounded-lg border border-blue-100 bg-white/90 p-4 shadow-sm">
@@ -4573,6 +5779,172 @@ function SettingsView({
       </div>
     </section>
   );
+}
+
+function SystemMetricCard({
+  detail,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  label: string;
+  tone: "emerald" | "amber" | "rose" | "blue" | "slate";
+  value: string;
+}) {
+  const toneClass = {
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    amber: "border-amber-200 bg-amber-50 text-amber-800",
+    rose: "border-rose-200 bg-rose-50 text-rose-800",
+    blue: "border-blue-200 bg-blue-50 text-blue-800",
+    slate: "border-slate-200 bg-slate-50 text-slate-800",
+  }[tone];
+
+  return (
+    <article className={`min-h-[104px] rounded-lg border p-4 ${toneClass}`}>
+      <p className="text-xs font-bold uppercase tracking-[0.14em] opacity-70">{label}</p>
+      <p className="mt-2 text-xl font-bold tabular-nums">{value}</p>
+      <p className="mt-1 text-xs font-semibold opacity-75">{detail}</p>
+    </article>
+  );
+}
+
+function formatReadinessStatus(status: string) {
+  if (status === "ready") return "Ready";
+  if (status === "degraded") return "Degraded";
+  if (status === "not_ready") return "Not ready";
+  return "Unknown";
+}
+
+function formatJobKind(kind: string) {
+  const labels: Record<string, string> = {
+    chat_analysis: "Chat 分析",
+    risk_assistant: "风险助手",
+    news_update: "新闻更新",
+    portfolio_refresh: "组合刷新",
+    system_admin: "系统运维",
+    account_security: "账号安全",
+    account_export: "账号导出",
+    account_delete: "账号删除",
+  };
+  return labels[kind] || kind;
+}
+
+function formatAuditStatus(status: string) {
+  const labels: Record<string, string> = {
+    success: "成功",
+    error: "失败",
+    queued: "排队",
+    running: "运行中",
+  };
+  return labels[status] || status;
+}
+
+function formatAuditUser(userId: string) {
+  const normalized = String(userId || "").trim();
+  if (!normalized) return "--";
+  return normalized.length > 14 ? `...${normalized.slice(-10)}` : normalized;
+}
+
+function formatAuditPayloadSummary(payload: Record<string, unknown>) {
+  const newsUpdate = typeof payload.news_update === "object" && payload.news_update ? payload.news_update as Record<string, unknown> : null;
+  const portfolioRefresh = typeof payload.portfolio_refresh === "object" && payload.portfolio_refresh ? payload.portfolio_refresh as Record<string, unknown> : null;
+  const nestedParts = [
+    newsUpdate ? `新闻任务 ${Number(newsUpdate.deleted_by_age || 0) + Number(newsUpdate.deleted_by_count || 0)}` : "",
+    portfolioRefresh ? `组合任务 ${Number(portfolioRefresh.deleted_by_age || 0) + Number(portfolioRefresh.deleted_by_count || 0)}` : "",
+  ].filter(Boolean);
+  if (nestedParts.length) return nestedParts.join(" · ");
+
+  const parts = [
+    payload.deleted_by_age !== undefined ? `时间清理 ${payload.deleted_by_age}` : "",
+    payload.deleted_by_count !== undefined ? `数量清理 ${payload.deleted_by_count}` : "",
+    payload.deleted_accounts !== undefined ? `账户 ${payload.deleted_accounts}` : "",
+    payload.deleted_sessions !== undefined ? `会话 ${payload.deleted_sessions}` : "",
+    payload.remaining_events !== undefined ? `剩余事件 ${payload.remaining_events}` : "",
+    payload.remaining_accounts !== undefined ? `剩余账户 ${payload.remaining_accounts}` : "",
+    payload.remaining_sessions !== undefined ? `剩余会话 ${payload.remaining_sessions}` : "",
+    payload.processed_count !== undefined ? `处理 ${payload.processed_count}` : "",
+    payload.risk_score !== undefined ? `风险分 ${payload.risk_score}` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || "--";
+}
+
+function formatDuration(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds || 0));
+  const days = Math.floor(safeSeconds / 86400);
+  const hours = Math.floor((safeSeconds % 86400) / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  if (days > 0) return `${days}天 ${hours}小时`;
+  if (hours > 0) return `${hours}小时 ${minutes}分`;
+  return `${minutes}分钟`;
+}
+
+function formatBytes(bytes: number) {
+  const safeBytes = Math.max(0, Number(bytes) || 0);
+  if (safeBytes < 1024) return `${safeBytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = safeBytes / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unitIndex]}`;
+}
+
+function formatDatastoreName(name: string) {
+  const labels: Record<string, string> = {
+    auth: "账号与收藏",
+    analysis_reports: "分析报告",
+    portfolio: "资产 Watchlist",
+    task_audit: "任务审计",
+    daily_reports: "资产日报",
+    invalid_json_backups: "损坏 JSON 备份",
+    sim_accounts: "模拟账户状态",
+  };
+  return labels[name] || name;
+}
+
+function formatDatastoreScale(store: StorageInventory["datastores"][number]) {
+  if (store.tables) {
+    const totalRows = Object.values(store.tables).reduce((total, value) => total + Number(value || 0), 0);
+    return `${totalRows} 行`;
+  }
+  if (typeof store.file_count === "number") return `${store.file_count} 文件`;
+  if (typeof store.report_files === "number") return `${store.report_files} 报告`;
+  return store.exists ? "已创建" : "--";
+}
+
+function formatDatastoreDetail(store: StorageInventory["datastores"][number]) {
+  if (store.error) return store.error;
+  if (store.tables) {
+    const tableText = Object.entries(store.tables)
+      .map(([table, count]) => `${table}:${count}`)
+      .join(" · ");
+    return tableText || "暂无表";
+  }
+  const details = [
+    typeof store.user_dirs === "number" ? `用户目录:${store.user_dirs}` : "",
+    typeof store.report_files === "number" ? `报告:${store.report_files}` : "",
+    typeof store.index_files === "number" ? `索引:${store.index_files}` : "",
+    typeof store.file_count === "number" ? `文件:${store.file_count}` : "",
+  ].filter(Boolean);
+  const fileNames = store.files?.slice(0, 3).map((item) => item.name).join(" · ");
+  if (fileNames) details.push(fileNames);
+  return details.join(" · ") || "暂无文件";
+}
+
+function formatBackupKind(kind: string) {
+  const labels: Record<string, string> = {
+    directory: "目录",
+    directory_file: "目录文件",
+    json: "JSON",
+    runtime_json_invalid_backup: "损坏 JSON 备份",
+    sqlite: "SQLite",
+    sqlite_sidecar: "SQLite Sidecar",
+    truncated: "截断提示",
+  };
+  return labels[kind] || kind;
 }
 
 function AgentStatusCard({ agent }: { agent: { name: string; detail: string; status: NewsUpdateProgress["status"] } }) {
@@ -4704,6 +6076,7 @@ function NewsTable({
   onToggleFavorite?: (item: NewsRankingItem) => void;
 }) {
   const router = useRouter();
+  const renderedItems = compact ? items : items.slice(0, maxRankingTableRows);
   const headers = [
     { label: "", className: "w-12 px-3 py-3 text-center font-semibold" },
     { label: "#", className: "w-14 px-3 py-3 text-center font-semibold" },
@@ -4727,18 +6100,10 @@ function NewsTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-blue-50">
-          {items.length ? items.map((item, index) => (
+          {renderedItems.length ? renderedItems.map((item, index) => (
             <tr
               key={item.news_id}
-              data-ai-context={JSON.stringify({
-                type: "news",
-                coin: item.coins,
-                title: item.title,
-                riskLevel: item.risk_level,
-                riskScore: item.risk_score,
-                riskType: item.risk_type,
-                time: item.published_at,
-              })}
+              data-ai-context={buildNewsTableAIContext(item)}
               onClick={() => {
                 router.push(withReturnTo(`/news/${encodeURIComponent(item.news_id)}`));
               }}
@@ -4803,6 +6168,7 @@ function NewsTable({
 
 function CoinTable({ compact = false, items }: { compact?: boolean; items: CoinRankingItem[] }) {
   const router = useRouter();
+  const renderedItems = compact ? items : items.slice(0, maxRankingTableRows);
   const headers = [
     { label: "#", className: "w-14 px-3 py-3 text-center font-semibold" },
     { label: "币种", className: "min-w-[150px] px-3 py-3 text-left font-semibold" },
@@ -4828,17 +6194,10 @@ function CoinTable({ compact = false, items }: { compact?: boolean; items: CoinR
           </tr>
         </thead>
         <tbody className="divide-y divide-blue-50">
-          {items.length ? items.map((item) => (
+          {renderedItems.length ? renderedItems.map((item) => (
             <tr
               key={item.symbol}
-              data-ai-context={JSON.stringify({
-                type: "coin",
-                coin: item.symbol,
-                title: item.top_news_title,
-                riskLevel: item.risk_level,
-                riskScore: item.final_score,
-                riskType: item.main_risk_type,
-              })}
+              data-ai-context={buildCoinTableAIContext(item)}
               onClick={() => {
                 router.push(withReturnTo(`/coins/${encodeURIComponent(item.symbol)}`));
               }}
@@ -4944,6 +6303,11 @@ function ReportDocument({
     ? report.evidence
     : [{ risk_category: categories[0], evidence_text: "当前报告尚未抽取到结构化证据。", explanation: "建议补充官方公告、链上交易哈希、社群反馈截图或交易所通知。" }];
   const riskBranches = report.risk_type_branches || chatAgentResult.risk_type_branches || [];
+  const evidenceGraph = report.evidence_graph || chatAgentResult.evidence_graph || [];
+  const scenarioAssessments = report.scenario_assessments || chatAgentResult.scenario_assessments || [];
+  const counterEvidence = report.counter_evidence || chatAgentResult.counter_evidence || [];
+  const missingEvidenceByScenario = report.missing_evidence_by_scenario || chatAgentResult.missing_evidence_by_scenario || {};
+  const decisionTrace = report.decision_trace || chatAgentResult.decision_trace || {};
   const impactAnalysis = report.impact_analysis || chatAgentResult.impact_analysis || {};
   const adviceGeneration = report.advice_generation || chatAgentResult.advice_generation || {};
   const finalContextMeta = report.final_context_agents || {};
@@ -5118,6 +6482,16 @@ function ReportDocument({
             <ScoreBreakdownPanel report={report} />
           </ReportSection>
 
+          <ReportSection title="证据图谱与评分路径" icon={<ShieldIcon />} variant="main">
+            <EvidenceGraphPanel
+              atoms={evidenceGraph}
+              counterEvidence={counterEvidence}
+              decisionTrace={decisionTrace}
+              missingByScenario={missingEvidenceByScenario}
+              scenarioAssessments={scenarioAssessments}
+            />
+          </ReportSection>
+
           <ReportSection title="风险类别与证据" icon={<FileIcon />} variant="main">
             <RiskCategoryEvidence
               branches={riskBranches}
@@ -5228,6 +6602,141 @@ function ScoreBreakdownPanel({ report }: { report: RiskReport }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function EvidenceGraphPanel({
+  atoms,
+  counterEvidence,
+  decisionTrace,
+  missingByScenario,
+  scenarioAssessments,
+}: {
+  atoms: NonNullable<RiskReport["evidence_graph"]>;
+  counterEvidence: NonNullable<RiskReport["counter_evidence"]>;
+  decisionTrace: NonNullable<RiskReport["decision_trace"]>;
+  missingByScenario: NonNullable<RiskReport["missing_evidence_by_scenario"]>;
+  scenarioAssessments: NonNullable<RiskReport["scenario_assessments"]>;
+}) {
+  const supportAtoms = atoms.filter((item) => item.polarity === "support").slice(0, 5);
+  const missingEntries = Object.entries(missingByScenario || {}).flatMap(([scenario, items]) =>
+    asStringList(items).map((item) => ({ scenario, item })),
+  ).slice(0, 6);
+  const traceItems = [
+    ["初始分", decisionTrace.pre_cap_score],
+    ["最终分", decisionTrace.final_score],
+    ["主分支", decisionTrace.primary_branch_score],
+    ["次风险加权", decisionTrace.secondary_bonus],
+  ].filter(([, value]) => value !== undefined && value !== null && value !== "");
+  const caps = [
+    ...asStringList(decisionTrace.hard_caps_applied),
+    ...asStringList(decisionTrace.soft_caps_applied),
+    ...asStringList(decisionTrace.score_caps_applied),
+  ];
+  const floors = asStringList(decisionTrace.score_floors_applied);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 lg:grid-cols-3">
+        {(scenarioAssessments.length ? scenarioAssessments : []).slice(0, 6).map((item) => (
+          <div key={`${item.scenario}-${item.risk_type}`} className="rounded-lg border border-blue-100 bg-slate-50 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-white px-2 py-0.5 text-xs font-bold text-blue-700">{formatScenarioCode(item.scenario)}</span>
+              <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${item.status === "established" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                {formatScenarioStatus(item.status)}
+              </span>
+            </div>
+            <p className="mt-2 text-sm font-bold leading-6 text-slate-900">{formatRiskTypeCode(item.risk_type) || item.risk_name || "综合风险"}</p>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <MiniMetric label="规则" value={clampScore(item.rule_score)} />
+              <MiniMetric label="分支" value={clampScore(item.branch_score)} />
+              <MiniMetric label="置信" value={clampScore(Math.round((item.confidence || 0) * 100))} />
+            </div>
+          </div>
+        ))}
+        {!scenarioAssessments.length && (
+          <div className="rounded-lg border border-blue-100 bg-slate-50 p-3 text-sm font-semibold text-slate-600">
+            当前路径未进入多场景深度评估，按低风险或兜底路径生成报告。
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="rounded-lg border border-blue-100 bg-white p-3">
+          <p className="text-xs font-bold text-slate-500">支持证据节点</p>
+          <div className="mt-2 space-y-2">
+            {(supportAtoms.length ? supportAtoms : atoms.slice(0, 3)).map((item) => (
+              <EvidenceAtomRow key={item.id} atom={item} />
+            ))}
+            {!atoms.length && <p className="text-sm font-semibold leading-6 text-slate-600">暂无结构化证据节点。</p>}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-bold text-amber-800">反向证据 / 缺失证据</p>
+          <div className="mt-2 space-y-2">
+            {counterEvidence.slice(0, 4).map((item, index) => (
+              <p key={`${item.text}-${index}`} className="rounded-md bg-white/80 px-3 py-2 text-sm font-semibold leading-6 text-amber-900">
+                {formatScoreReasonText(item.meaning || item.text)}
+              </p>
+            ))}
+            {missingEntries.map((entry) => (
+              <p key={`${entry.scenario}-${entry.item}`} className="rounded-md bg-white/80 px-3 py-2 text-sm font-semibold leading-6 text-slate-700">
+                {formatScenarioCode(entry.scenario)} 待核验：{formatScoreReasonText(entry.item)}
+              </p>
+            ))}
+            {!counterEvidence.length && !missingEntries.length && (
+              <p className="rounded-md bg-white/80 px-3 py-2 text-sm font-semibold text-slate-600">未发现明确反向证据，仍需继续跟踪来源更新。</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-blue-100 bg-slate-50 p-3">
+        <div className="flex flex-wrap gap-2">
+          {traceItems.map(([label, value]) => (
+            <span key={String(label)} className="rounded-md border border-blue-100 bg-white px-2.5 py-1 text-xs font-bold text-slate-700">
+              {String(label)}：{String(value)}
+            </span>
+          ))}
+          {floors.map((item) => (
+            <span key={`floor-${item}`} className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+              保底：{formatRiskSignalLabel(item)}
+            </span>
+          ))}
+          {caps.map((item) => (
+            <span key={`cap-${item}`} className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700">
+              压分：{formatRiskSignalLabel(item)}
+            </span>
+          ))}
+        </div>
+        {typeof decisionTrace.formula === "string" && decisionTrace.formula.trim() && (
+          <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">{formatScoreReasonText(decisionTrace.formula)}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceAtomRow({ atom }: { atom: NonNullable<RiskReport["evidence_graph"]>[number] }) {
+  return (
+    <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-slate-500">{atom.id}</span>
+        <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">{formatEvidencePolarity(atom.polarity)}</span>
+        <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-slate-600">{formatScenarioCode(atom.scenario)}</span>
+      </div>
+      <p className="mt-2 text-sm font-semibold leading-6 text-slate-800">{formatScoreReasonText(atom.text)}</p>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md bg-white px-2 py-1">
+      <p className="text-[11px] font-bold text-slate-400">{label}</p>
+      <p className={`text-sm font-bold ${riskScoreTextStyle(value, "")}`}>{value}</p>
     </div>
   );
 }
@@ -5485,6 +6994,42 @@ function formatEvidenceSignal(value: string) {
   return labels[normalized] || normalized || "证据类型";
 }
 
+function formatScenarioCode(value: string) {
+  const labels: Record<string, string> = {
+    S0_GENERAL_UNKNOWN: "综合场景",
+    S1_ATTACK_EXPLOIT: "链上攻击",
+    S2_EXCHANGE_ABNORMALITY: "交易所异常",
+    S3_STABLECOIN_RESERVE: "稳定币/储备",
+    S4_INFRASTRUCTURE_FAILURE: "基础设施",
+    S5_REGULATORY_ENFORCEMENT: "监管执法",
+    S6_MARKET_LIQUIDATION: "清算波动",
+    S7_FRAUD_GOVERNANCE: "诈骗治理",
+    S8_WHALE_ONCHAIN_FLOW: "巨鲸流向",
+    S9_TOKEN_ISSUANCE_ANOMALY: "异常增发",
+    S10_BRIDGE_CROSS_CHAIN_RISK: "跨链桥",
+  };
+  return labels[value] || value || "场景";
+}
+
+function formatScenarioStatus(value: string) {
+  const labels: Record<string, string> = {
+    established: "风险成立",
+    insufficient_evidence: "证据不足",
+    not_established: "未成立",
+    not_assessed: "未评估",
+  };
+  return labels[value] || value || "待评估";
+}
+
+function formatEvidencePolarity(value: string) {
+  const labels: Record<string, string> = {
+    support: "支持证据",
+    counter: "反向证据",
+    missing: "缺失证据",
+  };
+  return labels[value] || value || "证据";
+}
+
 function formatRiskTypeCode(value: string) {
   const labels: Record<string, string> = {
     score_hack: "链上漏洞 / 攻击风险",
@@ -5498,6 +7043,8 @@ function formatRiskTypeCode(value: string) {
     score_team: "项目治理 / 团队异常风险",
     score_solvency: "偿付能力 / 储备 / 流动性风险",
     score_infra: "基础设施 / 协议层异常风险",
+    score_token_issuance: "代币发行 / 异常增发风险",
+    score_bridge: "跨链桥 / 跨链资金风险",
     score_macro: "宏观 / 政策冲击风险",
   };
   return labels[value] || value;
@@ -5562,6 +7109,9 @@ function formatRiskSignalLabel(value: string) {
     normal_market_commentary: "普通行情评论",
     positive_regulatory_clarity: "监管利好或澄清",
     ordinary_team_change: "普通团队变动",
+    cross_scenario_planned_or_resolved_ops: "跨场景仲裁：计划维护/已恢复",
+    cross_scenario_security_research_only: "跨场景仲裁：安全研究",
+    cross_scenario_discussion_or_clarity: "跨场景仲裁：讨论或监管澄清",
   };
 
   return labels[normalized] || formatScoreReasonText(formatEvidenceSignal(normalized)) || "风险信号";
@@ -5607,6 +7157,8 @@ function formatScoreReasonText(value?: string) {
     .replace(/score_team/g, "项目治理/团队异常风险")
     .replace(/score_solvency/g, "偿付能力/储备/流动性风险")
     .replace(/score_infra/g, "基础设施/协议层异常风险")
+    .replace(/score_token_issuance/g, "代币发行/异常增发风险")
+    .replace(/score_bridge/g, "跨链桥/跨链资金风险")
     .replace(/score_macro/g, "宏观/政策冲击风险")
     .replace(/Request timed out\./gi, "请求超时。")
     .replace(/request timed out/gi, "请求超时")
@@ -6207,6 +7759,42 @@ function buildHomePriorities(newsItems: NewsRankingItem[], coinItems: CoinRankin
 function formatTimestamp(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatCompactDateTime(value: string): string {
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value || "--";
+  return formatTimestamp(date);
+}
+
+function formatSecurityEventType(value: string): string {
+  const labels: Record<string, string> = {
+    account_delete: "删除账号",
+    account_export: "导出账号数据",
+    login: "登录成功",
+    logout: "退出登录",
+    password_change: "修改密码",
+    register: "注册账号",
+    sessions_revoke_others: "撤销其他会话",
+  };
+  return labels[value] || value || "账号事件";
+}
+
+function formatSessionUserAgent(value?: string): string {
+  const text = (value || "").trim();
+  if (!text) return "--";
+  if (/Edg\//i.test(text)) return "Microsoft Edge";
+  if (/Chrome\//i.test(text) && !/Chromium/i.test(text)) return "Chrome";
+  if (/Firefox\//i.test(text)) return "Firefox";
+  if (/Safari\//i.test(text) && !/Chrome\//i.test(text)) return "Safari";
+  return text.length > 48 ? `${text.slice(0, 48)}...` : text;
+}
+
+function formatSecurityEventContext(event: AccountSecurityEvent): string {
+  const userAgent = typeof event.payload.user_agent === "string" ? formatSessionUserAgent(event.payload.user_agent) : "--";
+  const ipHash = typeof event.payload.client_ip_hash === "string" && event.payload.client_ip_hash ? event.payload.client_ip_hash : "--";
+  return `客户端 ${userAgent} · IP 摘要 ${ipHash}`;
 }
 
 function buildNewsTrendBuckets(items: NewsRankingItem[], range: RankingRange): NewsTrendBucket[] {
@@ -7074,6 +8662,7 @@ function CoinIcon() { return <IconSvg><circle cx="12" cy="12" r="8" /><path d="M
 function FileIcon() { return <IconSvg><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M9 13h6" /><path d="M9 17h6" /></IconSvg>; }
 function UserIcon() { return <IconSvg><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></IconSvg>; }
 function GearIcon() { return <IconSvg><circle cx="12" cy="12" r="3" /><path d="M19.4 15a8 8 0 0 0 .1-2l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L15 5.5h-4l-.4 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a8 8 0 0 0 .1 2l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.4 2.6h4l.4-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.4z" /></IconSvg>; }
+function KeyIcon() { return <IconSvg><circle cx="7.5" cy="14.5" r="3.5" /><path d="M10 12 21 1" /><path d="m16 6 2 2" /><path d="m13 9 2 2" /></IconSvg>; }
 function ShieldIcon() { return <IconSvg><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z" /><path d="m9 12 2 2 4-5" /></IconSvg>; }
 function AlertIcon() { return <IconSvg><path d="m12 3 10 18H2z" /><path d="M12 9v5" /><path d="M12 18h.01" /></IconSvg>; }
 function ClockIcon() { return <IconSvg><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></IconSvg>; }

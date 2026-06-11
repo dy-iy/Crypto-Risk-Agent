@@ -1,5 +1,5 @@
-import RiskDashboard from "@/components/risk-dashboard";
+import RiskDashboardLoader from "@/components/risk-dashboard-loader";
 
 export default function PortfolioPage() {
-  return <RiskDashboard initialView="portfolio" />;
+  return <RiskDashboardLoader initialView="portfolio" />;
 }

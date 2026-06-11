@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from app.agents.chat_agent.core.evidence_utils import is_confirmed, numeric_value
-from app.agents.chat_agent.schemas import DecisionResult, EvidenceExtractionResult, ValidationSuggestion
+from typing import Any
+
+from app.agents.chat_agent.schemas import (
+    DecisionResult,
+    EvidenceExtractionResult,
+    EvidenceGraphResult,
+    ValidationSuggestion,
+)
 
 
 def need_validation(decision: DecisionResult) -> bool:
@@ -14,9 +21,45 @@ def need_validation(decision: DecisionResult) -> bool:
     )
 
 
-def validate_conflicts(decision: DecisionResult, evidence: EvidenceExtractionResult) -> ValidationSuggestion:
+def _graph_context(raw_graph: EvidenceGraphResult | dict[str, Any] | None, scenario: str) -> dict[str, Any]:
+    if raw_graph is None:
+        return {
+            "support_count": 0,
+            "counter_count": 0,
+            "missing": [],
+            "counter_text": "",
+        }
+    graph = raw_graph if isinstance(raw_graph, EvidenceGraphResult) else EvidenceGraphResult.model_validate(raw_graph)
+    support_count = 0
+    counter_count = 0
+    for atom in graph.evidence_graph:
+        if atom.scenario != scenario:
+            continue
+        if atom.polarity == "support":
+            support_count += 1
+        elif atom.polarity == "counter":
+            counter_count += 1
+    counter_items = [
+        str(item.get("meaning") or item.get("text") or "")
+        for item in graph.counter_evidence
+        if str(item.get("scenario") or scenario) == scenario
+    ]
+    return {
+        "support_count": support_count,
+        "counter_count": counter_count,
+        "missing": graph.missing_evidence_by_scenario.get(scenario, []),
+        "counter_text": "；".join(counter_items),
+    }
+
+
+def validate_conflicts(
+    decision: DecisionResult,
+    evidence: EvidenceExtractionResult,
+    evidence_graph: EvidenceGraphResult | dict[str, Any] | None = None,
+) -> ValidationSuggestion:
     scenario = decision.primary_scenario
     fields = evidence.by_scenario(scenario)
+    graph = _graph_context(evidence_graph, scenario)
     answers: dict[str, object] = {}
 
     if scenario == "S1_ATTACK_EXPLOIT":
@@ -55,6 +98,8 @@ def validate_conflicts(decision: DecisionResult, evidence: EvidenceExtractionRes
             "planned_maintenance": planned,
             "recovery_time": recovery,
             "fund_safety_statement": safe,
+            "graph_support_count": graph["support_count"],
+            "graph_counter_count": graph["counter_count"],
         }
         if planned and recovery and decision.risk_score > 45:
             return ValidationSuggestion(
@@ -64,6 +109,13 @@ def validate_conflicts(decision: DecisionResult, evidence: EvidenceExtractionRes
                 answered_questions=answers,
             )
         has_rumor_cap = any("rumor_without_confirmation" in item for item in decision.score_caps_applied)
+        if "计划维护" in str(graph["counter_text"]) and graph["support_count"] <= 1 and decision.risk_score > 45:
+            return ValidationSuggestion(
+                action="cap_score",
+                score_cap=45,
+                reason="证据图谱显示计划维护类反证强于交易所危机证据。",
+                answered_questions=answers,
+            )
         if withdrawal and not recovery and decision.risk_score < 68 and not has_rumor_cap:
             return ValidationSuggestion(
                 action="raise_floor",
@@ -151,6 +203,88 @@ def validate_conflicts(decision: DecisionResult, evidence: EvidenceExtractionRes
                 action="raise_floor",
                 score_floor=55,
                 reason="大额资产流入交易所且文本指向潜在卖压。",
+                answered_questions=answers,
+            )
+
+    if scenario == "S9_TOKEN_ISSUANCE_ANOMALY":
+        unauthorized = is_confirmed(fields, "unauthorized_mint")
+        abnormal_supply = is_confirmed(fields, "abnormal_supply_increase")
+        exploited = is_confirmed(fields, "exploited_vulnerability")
+        governance_approved = is_confirmed(fields, "governance_approved")
+        mitigated = is_confirmed(fields, "mitigation_status")
+        user_fund_affected = is_confirmed(fields, "user_fund_affected")
+        mint_value = numeric_value(fields, "mint_amount_usd")
+        answers = {
+            "unauthorized_mint": unauthorized,
+            "abnormal_supply_increase": abnormal_supply,
+            "exploited_vulnerability": exploited,
+            "governance_approved": governance_approved,
+            "mitigated": mitigated,
+            "user_fund_affected": user_fund_affected,
+            "mint_amount_usd": mint_value,
+            "graph_support_count": graph["support_count"],
+            "graph_counter_count": graph["counter_count"],
+            "graph_missing": graph["missing"],
+        }
+        if governance_approved and not unauthorized and not exploited and decision.risk_score > 45:
+            return ValidationSuggestion(
+                action="cap_score",
+                score_cap=45,
+                reason="文本更像治理批准或计划内供应调整，未确认未授权铸造。",
+                answered_questions=answers,
+            )
+        if mitigated and not user_fund_affected and decision.risk_score > 55:
+            return ValidationSuggestion(
+                action="cap_score",
+                score_cap=55,
+                reason="异常增发已处置且未确认用户资产受损。",
+                answered_questions=answers,
+            )
+        if (unauthorized or exploited) and (abnormal_supply or mint_value >= 1_000_000) and decision.risk_score < 76:
+            return ValidationSuggestion(
+                action="raise_floor",
+                score_floor=76,
+                reason="文本确认未授权铸造/漏洞利用，并存在供应或可变现风险。",
+                answered_questions=answers,
+            )
+
+    if scenario == "S10_BRIDGE_CROSS_CHAIN_RISK":
+        bridge_attack = is_confirmed(fields, "bridge_attack")
+        bridge_paused = is_confirmed(fields, "bridge_paused")
+        asset_outflow = is_confirmed(fields, "asset_outflow")
+        loss = numeric_value(fields, "loss_usd")
+        funds_at_risk = is_confirmed(fields, "funds_at_risk")
+        resolved = is_confirmed(fields, "already_resolved")
+        answers = {
+            "bridge_attack": bridge_attack,
+            "bridge_paused": bridge_paused,
+            "asset_outflow": asset_outflow,
+            "loss_usd": loss,
+            "funds_at_risk": funds_at_risk,
+            "already_resolved": resolved,
+            "graph_support_count": graph["support_count"],
+            "graph_counter_count": graph["counter_count"],
+            "graph_missing": graph["missing"],
+        }
+        if resolved and bridge_paused and not asset_outflow and not funds_at_risk and decision.risk_score > 45:
+            return ValidationSuggestion(
+                action="cap_score",
+                score_cap=45,
+                reason="跨链桥暂停已恢复且未确认资金外流或资金风险。",
+                answered_questions=answers,
+            )
+        if "计划维护" in str(graph["counter_text"]) and not asset_outflow and not funds_at_risk and decision.risk_score > 45:
+            return ValidationSuggestion(
+                action="cap_score",
+                score_cap=45,
+                reason="证据图谱显示跨链桥计划维护反证，未确认攻击、资金外流或资金风险。",
+                answered_questions=answers,
+            )
+        if bridge_attack and (asset_outflow or loss >= 1_000_000 or funds_at_risk) and decision.risk_score < 76:
+            return ValidationSuggestion(
+                action="raise_floor",
+                score_floor=76,
+                reason="文本确认跨链桥攻击并存在资产外流或资金风险。",
                 answered_questions=answers,
             )
 

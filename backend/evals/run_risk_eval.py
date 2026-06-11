@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import statistics
 import sys
@@ -26,7 +27,7 @@ def _is_high(score: int) -> bool:
     return score >= 76
 
 
-def main() -> int:
+def run_eval() -> tuple[dict[str, object], int]:
     cases = _load_cases()
     case_by_id = {case["id"]: case for case in cases}
     rows: list[dict[str, object]] = []
@@ -35,6 +36,8 @@ def main() -> int:
     fallback_count = 0
     llm_call_count = 0
     json_parse_error_count = 0
+    evidence_graph_covered = 0
+    decision_trace_covered = 0
 
     for case in cases:
         start = time.perf_counter()
@@ -56,6 +59,10 @@ def main() -> int:
         expected_mid = (expected_min + expected_max) / 2
         expected_high = bool(case["expected_high_risk"])
         extraction_mode = str(chat_agent_result.get("extraction_mode") or evidence_debug.get("mode") or "unknown")
+        if report.get("evidence_graph"):
+            evidence_graph_covered += 1
+        if report.get("decision_trace"):
+            decision_trace_covered += 1
         case_fallback_count = int(chat_agent_result.get("fallback_count") or evidence_debug.get("fallback_count") or 0)
         case_llm_call_count = int(chat_agent_result.get("llm_call_count") or evidence_debug.get("llm_call_count") or 0)
         case_json_parse_errors = int(
@@ -100,34 +107,80 @@ def main() -> int:
     high_risk_accuracy = sum(1 for row in valid if row["high_ok"]) / max(1, len(valid))
     high_risk_precision = true_positive / max(1, true_positive + false_positive)
     high_risk_recall = true_positive / max(1, true_positive + false_negative)
+    high_risk_false_positive_rate = false_positive / max(
+        1,
+        sum(1 for row in valid if not bool(case_by_id[row["id"]]["expected_high_risk"])),
+    )
     score_mae = statistics.mean(float(row["score_abs_error"]) for row in valid) if valid else 0
     latency_avg = statistics.mean(latencies) if latencies else 0
     latency_p95 = sorted(latencies)[int(len(latencies) * 0.95) - 1] if latencies else 0
+    scenario_metrics: dict[str, dict[str, object]] = {}
+    expected_scenarios = sorted({str(case["expected_scenario"]) for case in cases})
+    for scenario in expected_scenarios:
+        scenario_rows = [row for row in valid if case_by_id[row["id"]]["expected_scenario"] == scenario]
+        scenario_high_cases = [
+            row
+            for row in scenario_rows
+            if bool(case_by_id[row["id"]]["expected_high_risk"])
+        ]
+        scenario_non_high_cases = [
+            row
+            for row in scenario_rows
+            if not bool(case_by_id[row["id"]]["expected_high_risk"])
+        ]
+        scenario_true_positive = sum(1 for row in scenario_high_cases if _is_high(int(row["score"])))
+        scenario_false_positive = sum(1 for row in scenario_non_high_cases if _is_high(int(row["score"])))
+        scenario_metrics[scenario] = {
+            "total": len(scenario_rows),
+            "scenario_accuracy": round(sum(1 for row in scenario_rows if row["scenario_ok"]) / max(1, len(scenario_rows)), 3),
+            "score_range_accuracy": round(sum(1 for row in scenario_rows if row["score_ok"]) / max(1, len(scenario_rows)), 3),
+            "high_risk_recall": round(scenario_true_positive / max(1, len(scenario_high_cases)), 3),
+            "false_positive_rate": round(scenario_false_positive / max(1, len(scenario_non_high_cases)), 3),
+            "score_mae": round(
+                statistics.mean(float(row["score_abs_error"]) for row in scenario_rows) if scenario_rows else 0,
+                2,
+            ),
+        }
 
-    print(json.dumps(
-        {
-            "total": len(cases),
-            "valid": len(valid),
-            "error_rate": errors / max(1, len(cases)),
-            "scenario_accuracy": round(scenario_accuracy, 3),
-            "score_range_accuracy": round(score_range_accuracy, 3),
-            "high_risk_accuracy": round(high_risk_accuracy, 3),
-            "high_risk_precision": round(high_risk_precision, 3),
-            "high_risk_recall": round(high_risk_recall, 3),
-            "score_mae": round(score_mae, 2),
-            "latency_avg": round(latency_avg, 1),
-            "latency_p95": round(latency_p95, 1),
-            "latency_avg_ms": round(latency_avg, 1),
-            "latency_p95_ms": round(latency_p95, 1),
-            "fallback_count": fallback_count,
-            "llm_call_count": llm_call_count,
-            "json_parse_error_count": json_parse_error_count,
-            "failed_cases": [row for row in rows if row.get("error") or not row.get("scenario_ok") or not row.get("score_ok") or not row.get("high_ok")],
-        },
-        ensure_ascii=False,
-        indent=2,
-    ))
-    return 0 if errors == 0 else 1
+    result = {
+        "total": len(cases),
+        "valid": len(valid),
+        "error_rate": errors / max(1, len(cases)),
+        "scenario_accuracy": round(scenario_accuracy, 3),
+        "score_range_accuracy": round(score_range_accuracy, 3),
+        "high_risk_accuracy": round(high_risk_accuracy, 3),
+        "high_risk_precision": round(high_risk_precision, 3),
+        "high_risk_recall": round(high_risk_recall, 3),
+        "high_risk_false_positive_rate": round(high_risk_false_positive_rate, 3),
+        "score_mae": round(score_mae, 2),
+        "latency_avg": round(latency_avg, 1),
+        "latency_p95": round(latency_p95, 1),
+        "latency_avg_ms": round(latency_avg, 1),
+        "latency_p95_ms": round(latency_p95, 1),
+        "fallback_count": fallback_count,
+        "llm_fallback_rate": round(fallback_count / max(1, fallback_count + llm_call_count), 3),
+        "llm_call_count": llm_call_count,
+        "json_parse_error_count": json_parse_error_count,
+        "evidence_graph_coverage": round(evidence_graph_covered / max(1, len(valid)), 3),
+        "decision_trace_coverage": round(decision_trace_covered / max(1, len(valid)), 3),
+        "scenario_metrics": scenario_metrics,
+        "failed_cases": [row for row in rows if row.get("error") or not row.get("scenario_ok") or not row.get("score_ok") or not row.get("high_ok")],
+    }
+    return result, 0 if errors == 0 else 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run CryptoRisk risk evaluation.")
+    parser.add_argument("--output-json", type=Path, default=None, help="Optional file path for JSON metrics output.")
+    args = parser.parse_args()
+
+    result, exit_code = run_eval()
+    payload = json.dumps(result, ensure_ascii=False, indent=2)
+    print(payload)
+    if args.output_json:
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        args.output_json.write_text(f"{payload}\n", encoding="utf-8")
+    return exit_code
 
 
 if __name__ == "__main__":

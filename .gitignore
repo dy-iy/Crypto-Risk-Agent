@@ -64,12 +64,19 @@ backend/app/data/temp_*.csv
 backend/app/data/*.tmp
 backend/app/data/*.bak
 backend/app/data/*.bak_*
+backend/app/data/*.invalid.*.bak
 backend/app/data/auth.sqlite3
 backend/app/data/auth.sqlite3-*
 backend/app/data/analysis_reports.sqlite3
 backend/app/data/analysis_reports.sqlite3-*
+backend/app/data/portfolio.sqlite3
+backend/app/data/portfolio.sqlite3-*
+backend/app/data/task_audit.sqlite3
+backend/app/data/task_audit.sqlite3-*
 backend/app/data/daily_reports/
+backend/app/data/sim_accounts.json
 backend/app/data/portfolio_state.json
+backend/app/data/portfolio_refresh_jobs.json
 backend/app/data/update_jobs.json
 
 # Tooling caches

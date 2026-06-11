@@ -18,15 +18,21 @@ def risk_level_from_score(score: int) -> str:
     return "低风险"
 
 
-def build_fast_exit_decision() -> DecisionResult:
+def build_fast_exit_decision(signal_scan: SignalScanResult | None = None) -> DecisionResult:
+    primary_scenario = "S0_GENERAL_UNKNOWN"
+    reason_codes = ["weak_rule_signal", "fast_exit"]
+    if signal_scan and signal_scan.scenario_scores:
+        primary_scenario = max(signal_scan.scenario_scores.items(), key=lambda item: item[1])[0]
+        if primary_scenario != "S0_GENERAL_UNKNOWN":
+            reason_codes.append("low_risk_scenario_hint")
     return DecisionResult(
         risk_score=10,
         pre_cap_score=10,
         risk_level="低风险",
         risk_status="low_risk",
-        primary_scenario="S0_GENERAL_UNKNOWN",
+        primary_scenario=primary_scenario,
         confidence=0.75,
-        reason_codes=["weak_rule_signal", "fast_exit"],
+        reason_codes=reason_codes,
     )
 
 
@@ -105,6 +111,9 @@ def decide_from_branches(
         if isinstance(branch, dict) and branch.get("established") and int(_branch_value(branch, "branch_score", 0)) > 0
     ]
     if not established:
+        primary_scenario = "S0_GENERAL_UNKNOWN"
+        if signal_scan.scenario_scores:
+            primary_scenario = max(signal_scan.scenario_scores.items(), key=lambda item: item[1])[0]
         floor_candidates = _high_risk_floor_candidates(signal_scan)
         if floor_candidates:
             floor_signal = floor_candidates[0]
@@ -134,12 +143,13 @@ def decide_from_branches(
                 ],
                 score_floors_applied=[_floor_signal_id(floor_signal)],
             )
+        weak_score = max(10, min(40, int(round(max(signal_scan.scenario_scores.values(), default=0.0) * 100))))
         return DecisionResult(
-            risk_score=10,
-            pre_cap_score=10,
-            risk_level="低风险",
-            risk_status="low_risk",
-            primary_scenario="S0_GENERAL_UNKNOWN",
+            risk_score=weak_score,
+            pre_cap_score=weak_score,
+            risk_level=risk_level_from_score(weak_score),
+            risk_status="low_risk" if weak_score <= 20 else "potential_risk",
+            primary_scenario=primary_scenario,
             confidence=0.65,
             reason_codes=["no_established_risk_type_branch"],
         )

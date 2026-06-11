@@ -5,6 +5,7 @@ from typing import TypedDict
 from typing_extensions import NotRequired
 
 from app.agents.chat_agent.core.decision import build_fast_exit_decision, decide_from_branches
+from app.agents.chat_agent.core.evidence_graph import arbitrate_cross_scenarios, build_evidence_graph
 from app.agents.chat_agent.core.orchestrator import choose_route
 from app.agents.chat_agent.core.report import build_report
 from app.agents.chat_agent.core.validator import need_validation, validate_conflicts
@@ -17,6 +18,7 @@ from app.agents.chat_agent.schemas import (
     AnalysisPath,
     DecisionResult,
     EvidenceExtractionResult,
+    EvidenceGraphResult,
     OrchestrationDecision,
     RiskCaseInput,
     RiskCaseResult,
@@ -37,6 +39,7 @@ class RiskCaseState(TypedDict):
     initial_validation_hint: NotRequired[bool]
     evidence: NotRequired[EvidenceExtractionResult]
     risk_type_branches: NotRequired[list[dict[str, object]]]
+    evidence_graph_result: NotRequired[dict[str, object]]
     decision: NotRequired[DecisionResult]
     validation: NotRequired[ValidationSuggestion | None]
     final_context_agents: NotRequired[dict[str, object]]
@@ -81,7 +84,7 @@ def adaptive_router_node(state: RiskCaseState) -> RiskCaseState:
 
 def fast_exit_decision_node(state: RiskCaseState) -> RiskCaseState:
     evidence = EvidenceExtractionResult(extraction_mode="fast_exit")
-    decision = build_fast_exit_decision()
+    decision = build_fast_exit_decision(state["signal_scan"])
     return {
         **state,
         "evidence": evidence,
@@ -104,6 +107,54 @@ def risk_type_branch_analysis_node(state: RiskCaseState) -> RiskCaseState:
     }
 
 
+def evidence_graph_builder_node(state: RiskCaseState) -> RiskCaseState:
+    graph_result = build_evidence_graph(
+        state["case_input"],
+        state["signal_scan"],
+        state.get("risk_type_branches", []),
+    )
+    signal_scan = state["signal_scan"].model_copy(
+        update={
+            "debug": {
+                **state["signal_scan"].debug,
+                "evidence_graph": [item.model_dump() for item in graph_result.evidence_graph],
+                "risk_hypotheses": [item.model_dump() for item in graph_result.risk_hypotheses],
+                "scenario_assessments": [item.model_dump() for item in graph_result.scenario_assessments],
+                "counter_evidence": graph_result.counter_evidence,
+                "missing_evidence_by_scenario": graph_result.missing_evidence_by_scenario,
+            }
+        }
+    )
+    return {
+        **state,
+        "signal_scan": signal_scan,
+        "evidence_graph_result": graph_result.model_dump(),
+    }
+
+
+def cross_scenario_arbiter_node(state: RiskCaseState) -> RiskCaseState:
+    raw_graph_result = state.get("evidence_graph_result")
+    graph_result = (
+        EvidenceGraphResult.model_validate(raw_graph_result)
+        if raw_graph_result
+        else build_evidence_graph(
+            state["case_input"],
+            state["signal_scan"],
+            state.get("risk_type_branches", []),
+        )
+    )
+    signal_scan = arbitrate_cross_scenarios(
+        state["case_input"],
+        state["signal_scan"],
+        graph_result,
+    )
+    return {
+        **state,
+        "signal_scan": signal_scan,
+        "evidence_graph_result": graph_result.model_dump(),
+    }
+
+
 def deterministic_decision_engine_node(state: RiskCaseState) -> RiskCaseState:
     return {
         **state,
@@ -122,7 +173,11 @@ def validation_gate_node(state: RiskCaseState) -> RiskCaseState:
 def conflict_validator_node(state: RiskCaseState) -> RiskCaseState:
     return {
         **state,
-        "validation": validate_conflicts(state["decision"], state["evidence"]),
+        "validation": validate_conflicts(
+            state["decision"],
+            state["evidence"],
+            state.get("evidence_graph_result"),
+        ),
     }
 
 

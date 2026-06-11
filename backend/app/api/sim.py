@@ -1,16 +1,14 @@
-import re
 from typing import Any
 
 from fastapi import APIRouter, Cookie, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.auth import SESSION_COOKIE_NAME
-from app.services.auth_service import get_user_by_session
-from app.services.sim_engine import DEFAULT_SIM_ACCOUNT_ID, SimError, sim_engine
+from app.services.sim_account_service import resolve_sim_account_id
+from app.services.sim_engine import SimError, sim_engine
 
 
 router = APIRouter(prefix="/api/sim", tags=["simulator"])
-GUEST_SIM_ACCOUNT_PREFIX = "guest"
 
 
 class BuyRequest(BaseModel):
@@ -37,24 +35,6 @@ def _handle_sim_error(exc: SimError) -> HTTPException:
     return HTTPException(status_code=status_code, detail=message)
 
 
-def _safe_account_fragment(value: str | None) -> str:
-    normalized = re.sub(r"[^A-Za-z0-9_.-]", "_", str(value or "").strip())[:80]
-    return normalized.strip("._-")
-
-
-def _resolve_account_id(
-    cryptorisk_session: str | None,
-    sim_client_id: str | None,
-) -> str:
-    user = get_user_by_session(cryptorisk_session)
-    if user:
-        return user.id
-    client_fragment = _safe_account_fragment(sim_client_id)
-    if client_fragment:
-        return f"{GUEST_SIM_ACCOUNT_PREFIX}:{client_fragment}"
-    return DEFAULT_SIM_ACCOUNT_ID
-
-
 @router.get("/symbols")
 def sim_symbols() -> dict[str, Any]:
     return {"status": "success", "items": sim_engine.symbols()}
@@ -65,7 +45,7 @@ def sim_reset(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     sim_client_id: str | None = Header(default=None, alias="X-CryptoRisk-Sim-Client"),
 ) -> dict[str, Any]:
-    account_id = _resolve_account_id(cryptorisk_session, sim_client_id)
+    account_id = resolve_sim_account_id(cryptorisk_session, sim_client_id)
     return {"status": "success", "data": sim_engine.reset(account_id)}
 
 
@@ -74,7 +54,7 @@ def sim_state(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     sim_client_id: str | None = Header(default=None, alias="X-CryptoRisk-Sim-Client"),
 ) -> dict[str, Any]:
-    account_id = _resolve_account_id(cryptorisk_session, sim_client_id)
+    account_id = resolve_sim_account_id(cryptorisk_session, sim_client_id)
     return {"status": "success", "data": sim_engine.state(account_id)}
 
 
@@ -83,7 +63,7 @@ def sim_next(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     sim_client_id: str | None = Header(default=None, alias="X-CryptoRisk-Sim-Client"),
 ) -> dict[str, Any]:
-    account_id = _resolve_account_id(cryptorisk_session, sim_client_id)
+    account_id = resolve_sim_account_id(cryptorisk_session, sim_client_id)
     return {"status": "success", "data": sim_engine.next(account_id)}
 
 
@@ -93,7 +73,7 @@ def sim_jump(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     sim_client_id: str | None = Header(default=None, alias="X-CryptoRisk-Sim-Client"),
 ) -> dict[str, Any]:
-    account_id = _resolve_account_id(cryptorisk_session, sim_client_id)
+    account_id = resolve_sim_account_id(cryptorisk_session, sim_client_id)
     try:
         return {
             "status": "success",
@@ -113,7 +93,7 @@ def sim_buy(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     sim_client_id: str | None = Header(default=None, alias="X-CryptoRisk-Sim-Client"),
 ) -> dict[str, Any]:
-    account_id = _resolve_account_id(cryptorisk_session, sim_client_id)
+    account_id = resolve_sim_account_id(cryptorisk_session, sim_client_id)
     try:
         return {
             "status": "success",
@@ -133,7 +113,7 @@ def sim_sell(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     sim_client_id: str | None = Header(default=None, alias="X-CryptoRisk-Sim-Client"),
 ) -> dict[str, Any]:
-    account_id = _resolve_account_id(cryptorisk_session, sim_client_id)
+    account_id = resolve_sim_account_id(cryptorisk_session, sim_client_id)
     try:
         return {
             "status": "success",
@@ -154,7 +134,7 @@ def sim_candles(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     sim_client_id: str | None = Header(default=None, alias="X-CryptoRisk-Sim-Client"),
 ) -> dict[str, Any]:
-    account_id = _resolve_account_id(cryptorisk_session, sim_client_id)
+    account_id = resolve_sim_account_id(cryptorisk_session, sim_client_id)
     try:
         return {
             "status": "success",
@@ -171,7 +151,7 @@ def sim_events(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     sim_client_id: str | None = Header(default=None, alias="X-CryptoRisk-Sim-Client"),
 ) -> dict[str, Any]:
-    account_id = _resolve_account_id(cryptorisk_session, sim_client_id)
+    account_id = resolve_sim_account_id(cryptorisk_session, sim_client_id)
     try:
         return {
             "status": "success",

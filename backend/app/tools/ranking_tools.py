@@ -6,8 +6,12 @@ from app.services.ranking_aggregation_service import (
     build_news_ranking,
     build_overview,
     filter_news_by_date,
+    risk_score_value,
     response_date,
 )
+
+
+MAX_COIN_TEXT_EXTRACTION_CANDIDATES = 1000
 
 
 def load_ranking_input(state: RankingAgentState) -> RankingAgentState:
@@ -120,6 +124,7 @@ def _coin_details_from_llm(symbols: list[str]) -> list[dict[str, object]]:
 
 def attach_coin_entities(state: RankingAgentState) -> RankingAgentState:
     enriched_news = []
+    should_extract_missing = state.get("output_type") != "overview"
     for item in state.get("scored_news", []):
         coins = item.get("coin_details", [])
         if not coins:
@@ -127,8 +132,17 @@ def attach_coin_entities(state: RankingAgentState) -> RankingAgentState:
             coins = _coin_details_from_llm(llm_symbols)
         if not coins and item.get("coins"):
             coins = _coin_details_from_llm(item.get("coins", []))
-        if not coins:
-            coins = extract_coins_from_text(item.get("title", ""), item.get("content", ""))
+        if not coins and should_extract_missing:
+            content = str(item.get("content", "") or "")
+            if state.get("output_type") == "coins":
+                content = "\n".join(
+                    [
+                        str(item.get("summary", "") or ""),
+                        str(item.get("evidence", "") or ""),
+                        content[:360],
+                    ]
+                )
+            coins = extract_coins_from_text(item.get("title", ""), content)
         enriched_news.append(
             {
                 **item,
@@ -140,6 +154,69 @@ def attach_coin_entities(state: RankingAgentState) -> RankingAgentState:
     return {
         **state,
         "coin_enriched_news": enriched_news,
+    }
+
+
+def select_limited_news_for_news_output(state: RankingAgentState) -> RankingAgentState:
+    if state.get("output_type") != "news":
+        return state
+    limit = state.get("limit", 10)
+    if limit <= 0:
+        return state
+    scored_news = sorted(state.get("scored_news", []), key=risk_score_value, reverse=True)[:limit]
+    return {
+        **state,
+        "scored_news": scored_news,
+    }
+
+
+def _has_coin_metadata(item: dict[str, object]) -> bool:
+    llm_analysis = item.get("llm_analysis", {})
+    return bool(
+        item.get("coin_details")
+        or item.get("coins")
+        or (isinstance(llm_analysis, dict) and llm_analysis.get("coins"))
+    )
+
+
+def select_candidate_news_for_coin_output(state: RankingAgentState) -> RankingAgentState:
+    if state.get("output_type") != "coins":
+        return state
+
+    scored_news = state.get("scored_news", [])
+    with_coin_metadata: list[dict[str, object]] = []
+    needs_text_extraction: list[dict[str, object]] = []
+    seen_ids: set[str] = set()
+
+    for item in scored_news:
+        news_id = str(item.get("news_id") or item.get("id"))
+        if _has_coin_metadata(item):
+            with_coin_metadata.append(item)
+            seen_ids.add(news_id)
+        else:
+            needs_text_extraction.append(item)
+
+    selected_for_extraction = sorted(
+        needs_text_extraction,
+        key=risk_score_value,
+        reverse=True,
+    )[:MAX_COIN_TEXT_EXTRACTION_CANDIDATES]
+    selected = with_coin_metadata + [
+        item
+        for item in selected_for_extraction
+        if str(item.get("news_id") or item.get("id")) not in seen_ids
+    ]
+
+    return {
+        **state,
+        "scored_news": selected,
+        "coin_candidate_pruning": {
+            "before": len(scored_news),
+            "with_coin_metadata": len(with_coin_metadata),
+            "text_extraction_candidates": len(selected_for_extraction),
+            "after": len(selected),
+            "max_text_extraction_candidates": MAX_COIN_TEXT_EXTRACTION_CANDIDATES,
+        },
     }
 
 
@@ -205,11 +282,15 @@ def build_ranking_response(state: RankingAgentState) -> RankingAgentState:
     date_filter = state.get("date_filter")
     news_ranking = state.get("news_ranking", [])
     coin_ranking = state.get("coin_ranking", [])
-    overview = build_overview(
-        state.get("coin_enriched_news", []),
-        news_ranking,
-        coin_ranking,
-        date_filter,
+    overview = (
+        build_overview(
+            state.get("coin_enriched_news", []),
+            news_ranking,
+            coin_ranking,
+            date_filter,
+        )
+        if output_type in {"overview", "all"}
+        else {}
     )
 
     if output_type == "overview":

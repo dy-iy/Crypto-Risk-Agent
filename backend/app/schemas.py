@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, description="User crypto risk text")
+    message: str = Field(..., min_length=1, max_length=12000, description="User crypto risk text")
 
 
 class EntityExtraction(BaseModel):
@@ -30,6 +30,35 @@ class SupportingEvidenceItem(BaseModel):
 class CounterEvidenceItem(BaseModel):
     text: str = ""
     meaning: str = ""
+    scenario: str = ""
+    source: str = ""
+    atom_id: str = ""
+
+
+class EvidenceGraphAtom(BaseModel):
+    id: str = ""
+    scenario: str = ""
+    risk_type: str = ""
+    risk_name: str = ""
+    polarity: str = "support"
+    field: str = ""
+    text: str = ""
+    source: str = ""
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    affected_entities: list[str] = Field(default_factory=list)
+
+
+class ScenarioAssessmentItem(BaseModel):
+    scenario: str = ""
+    risk_type: str = ""
+    risk_name: str = ""
+    status: str = ""
+    rule_score: int = Field(0, ge=0, le=100)
+    branch_score: int = Field(0, ge=0, le=100)
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    support_evidence_count: int = 0
+    counter_evidence_count: int = 0
+    missing_evidence: list[str] = Field(default_factory=list)
 
 
 class ImpactItem(BaseModel):
@@ -75,6 +104,11 @@ class RiskReport(BaseModel):
     source_hint: str = ""
     supporting_evidence: list[SupportingEvidenceItem] = Field(default_factory=list)
     counter_evidence: list[CounterEvidenceItem] = Field(default_factory=list)
+    evidence_graph: list[EvidenceGraphAtom] = Field(default_factory=list)
+    risk_hypotheses: list[dict[str, object]] = Field(default_factory=list)
+    scenario_assessments: list[ScenarioAssessmentItem] = Field(default_factory=list)
+    missing_evidence_by_scenario: dict[str, list[str]] = Field(default_factory=dict)
+    decision_trace: dict[str, object] = Field(default_factory=dict)
     missing_info: list[str] = Field(default_factory=list)
     confirmed_facts: list[str] = Field(default_factory=list)
     uncertainty_points: list[str] = Field(default_factory=list)
@@ -130,11 +164,11 @@ class ChatResponse(BaseModel):
 
 
 class RiskAssistantRequest(BaseModel):
-    question: str | None = Field(default=None, description="User question for risk assistant")
+    question: str | None = Field(default=None, max_length=2000, description="User question for risk assistant")
     analysis_mode: str | None = Field(default="general_qa", description="Risk assistant mode")
     context_type: str | None = Field(default=None, description="Typed context source")
-    selected_text: str | None = Field(default=None, description="Quoted page selection")
-    user_question: str | None = Field(default=None, description="Question typed after quoting selected text")
+    selected_text: str | None = Field(default=None, max_length=12000, description="Quoted page selection")
+    user_question: str | None = Field(default=None, max_length=2000, description="Question typed after quoting selected text")
     page_context: "PageContext | None" = None
     use_portfolio_context: bool = False
     context: dict[str, object] = Field(default_factory=dict)

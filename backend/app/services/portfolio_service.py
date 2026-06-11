@@ -14,7 +14,6 @@ import httpx
 
 from app.agents.ranking_agent.graph import run_ranking_agent
 from app.agents.portfolio_risk_agent import generate_portfolio_risk_snapshot
-from app.data.update_news import update_news_dataset
 from app.schemas_portfolio import (
     CoinRiskSnapshot,
     MarketCandle,
@@ -28,6 +27,13 @@ from app.schemas_portfolio import (
 )
 from app.services.coin_extraction_service import COIN_DICTIONARY, extract_coins_from_text
 from app.services.data_loader import load_scored_news, read_raw_news_records, shorten
+from app.services.portfolio_watchlist_store import (
+    is_watchlist_initialized,
+    list_watchlist_records,
+    seed_watchlist_items,
+    upsert_watchlist_record,
+    delete_watchlist_record,
+)
 from app.services.ranking_aggregation_service import SOURCE_URL_FIELDS, first_text_value
 
 
@@ -156,14 +162,22 @@ def _save_state_unlocked(state: dict[str, Any]) -> None:
     _write_json(PORTFOLIO_STATE_PATH, state)
 
 
-def _watch_items(user_id: str = DEFAULT_USER_ID) -> list[UserWatchlist]:
+def _seed_watchlist_store_if_needed() -> None:
+    if is_watchlist_initialized():
+        return
     with _state_lock:
         state = _load_state_unlocked()
-        return [
+        seed_items = [
             UserWatchlist.model_validate(item)
             for item in state.get("watchlist", [])
-            if str(item.get("user_id") or DEFAULT_USER_ID) == user_id
+            if isinstance(item, dict)
         ]
+    seed_watchlist_items(seed_items)
+
+
+def _watch_items(user_id: str = DEFAULT_USER_ID) -> list[UserWatchlist]:
+    _seed_watchlist_store_if_needed()
+    return list_watchlist_records(user_id)
 
 
 def add_watchlist_item(payload: UserWatchlistCreate, user_id: str = DEFAULT_USER_ID) -> UserWatchlist:
@@ -173,48 +187,41 @@ def add_watchlist_item(payload: UserWatchlistCreate, user_id: str = DEFAULT_USER
     exposure_mode = payload.exposure_mode
     if payload.is_holding and exposure_mode == "bucket" and exposure_bucket == "none":
         exposure_bucket = "medium"
-    with _state_lock:
-        state = _load_state_unlocked()
-        items = state.get("watchlist", [])
-        for index, raw_item in enumerate(items):
-            item = UserWatchlist.model_validate(raw_item)
-            if item.user_id == user_id and item.symbol == symbol:
-                updated = item.model_copy(
-                    update={
-                        "is_holding": payload.is_holding,
-                        "is_watched": payload.is_watched or payload.is_holding,
-                        "exposure_mode": exposure_mode,
-                        "exposure_bucket": exposure_bucket,
-                        "custom_exposure_pct": payload.custom_exposure_pct,
-                        "amount": payload.amount,
-                        "avg_buy_price": payload.avg_buy_price,
-                        "alert_threshold": payload.alert_threshold,
-                        "updated_at": now,
-                    }
-                )
-                items[index] = updated.model_dump()
-                _save_state_unlocked(state)
-                return updated
+    _seed_watchlist_store_if_needed()
+    for item in list_watchlist_records(user_id):
+        if item.symbol == symbol:
+            updated = item.model_copy(
+                update={
+                    "is_holding": payload.is_holding,
+                    "is_watched": payload.is_watched or payload.is_holding,
+                    "exposure_mode": exposure_mode,
+                    "exposure_bucket": exposure_bucket,
+                    "custom_exposure_pct": payload.custom_exposure_pct,
+                    "amount": payload.amount,
+                    "avg_buy_price": payload.avg_buy_price,
+                    "alert_threshold": payload.alert_threshold,
+                    "updated_at": now,
+                }
+            )
+            return upsert_watchlist_record(updated)
 
-        created = UserWatchlist(
-            id=f"{user_id}:{symbol}",
-            user_id=user_id,
-            symbol=symbol,
-            base_asset=_base_asset(symbol),
-            is_watched=payload.is_watched or payload.is_holding,
-            is_holding=payload.is_holding,
-            exposure_mode=exposure_mode,
-            exposure_bucket=exposure_bucket,
-            custom_exposure_pct=payload.custom_exposure_pct,
-            amount=payload.amount,
-            avg_buy_price=payload.avg_buy_price,
-            alert_threshold=payload.alert_threshold,
-            created_at=now,
-            updated_at=now,
-        )
-        items.append(created.model_dump())
-        _save_state_unlocked(state)
-        return created
+    created = UserWatchlist(
+        id=f"{user_id}:{symbol}",
+        user_id=user_id,
+        symbol=symbol,
+        base_asset=_base_asset(symbol),
+        is_watched=payload.is_watched or payload.is_holding,
+        is_holding=payload.is_holding,
+        exposure_mode=exposure_mode,
+        exposure_bucket=exposure_bucket,
+        custom_exposure_pct=payload.custom_exposure_pct,
+        amount=payload.amount,
+        avg_buy_price=payload.avg_buy_price,
+        alert_threshold=payload.alert_threshold,
+        created_at=now,
+        updated_at=now,
+    )
+    return upsert_watchlist_record(created)
 
 
 def update_watchlist_item(symbol: str, payload: UserWatchlistUpdate, user_id: str = DEFAULT_USER_ID) -> UserWatchlist:
@@ -227,31 +234,19 @@ def update_watchlist_item(symbol: str, payload: UserWatchlistUpdate, user_id: st
         updates["is_watched"] = True
     if updates.get("is_watched") is False and updates.get("is_holding") is not False:
         updates["is_watched"] = True
-    with _state_lock:
-        state = _load_state_unlocked()
-        for index, raw_item in enumerate(state.get("watchlist", [])):
-            item = UserWatchlist.model_validate(raw_item)
-            if item.user_id == user_id and item.symbol == normalized:
-                updated = item.model_copy(update={**updates, "updated_at": now})
-                state["watchlist"][index] = updated.model_dump()
-                _save_state_unlocked(state)
-                return updated
+    _seed_watchlist_store_if_needed()
+    for item in list_watchlist_records(user_id):
+        if item.symbol == normalized:
+            updated = item.model_copy(update={**updates, "updated_at": now})
+            return upsert_watchlist_record(updated)
     raise PortfolioError(f"watchlist symbol not found: {symbol}")
 
 
 def delete_watchlist_item(symbol: str, user_id: str = DEFAULT_USER_ID) -> None:
     normalized = _normalize_symbol(symbol)
-    with _state_lock:
-        state = _load_state_unlocked()
-        before = len(state.get("watchlist", []))
-        state["watchlist"] = [
-            item
-            for item in state.get("watchlist", [])
-            if not (str(item.get("user_id") or DEFAULT_USER_ID) == user_id and str(item.get("symbol")) == normalized)
-        ]
-        if len(state["watchlist"]) == before:
-            raise PortfolioError(f"watchlist symbol not found: {symbol}")
-        _save_state_unlocked(state)
+    _seed_watchlist_store_if_needed()
+    if not delete_watchlist_record(user_id, normalized):
+        raise PortfolioError(f"watchlist symbol not found: {symbol}")
 
 
 def _candle_key(symbol: str, interval: str) -> str:
@@ -529,6 +524,8 @@ def get_risk_snapshot(symbol: str, user_id: str = DEFAULT_USER_ID) -> CoinRiskSn
 
 def _refresh_news_dataset_for_portfolio() -> tuple[bool, str]:
     try:
+        from app.data.update_news import update_news_dataset
+
         update_result = update_news_dataset()
         read_raw_news_records.cache_clear()
         run_ranking_agent("all", date_filter="7d", limit=10)

@@ -1,5 +1,5 @@
-import RiskDashboard from "@/components/risk-dashboard";
+import RiskDashboardLoader from "@/components/risk-dashboard-loader";
 
 export default function CoinsPage() {
-  return <RiskDashboard initialView="coin" />;
+  return <RiskDashboardLoader initialView="coin" />;
 }

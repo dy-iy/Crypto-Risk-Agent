@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from heapq import nlargest
 
 from app.services.data_loader import shorten
 from app.services.rule_risk_scorer import risk_level_from_score
+
+MAX_COIN_RELATED_NEWS = 12
 
 
 SOURCE_URL_FIELDS = [
@@ -79,8 +82,15 @@ def first_text_value(item: dict[str, object], fields: list[str]) -> str:
     return ""
 
 
+def risk_score_value(item: dict[str, object]) -> int:
+    try:
+        return int(float(item.get("risk_score", 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def build_news_ranking(items: list[dict[str, object]], limit: int) -> list[dict[str, object]]:
-    ranked = sorted(items, key=lambda item: int(item.get("risk_score", 0)), reverse=True)
+    ranked = nlargest(limit, items, key=risk_score_value) if limit > 0 else sorted(items, key=risk_score_value, reverse=True)
     selected = ranked if limit <= 0 else ranked[:limit]
     output: list[dict[str, object]] = []
     for rank, item in enumerate(selected, start=1):
@@ -118,12 +128,12 @@ def build_coin_ranking(items: list[dict[str, object]], limit: int) -> list[dict[
 
     coin_items = []
     for symbol, related_news in grouped.items():
-        scores = [int(news.get("risk_score", 0)) for news in related_news]
+        scores = [risk_score_value(news) for news in related_news]
         max_score = max(scores)
         avg_score = sum(scores) / len(scores)
         volume_score = min(len(related_news) / 5, 1) * 100
         final_score = round(max_score * 0.5 + avg_score * 0.3 + volume_score * 0.2, 1)
-        top_news = max(related_news, key=lambda news: int(news.get("risk_score", 0)))
+        top_news = max(related_news, key=risk_score_value)
         risk_type_counter = Counter(str(news.get("risk_type", "")) for news in related_news)
 
         coin_items.append(
@@ -147,9 +157,9 @@ def build_coin_ranking(items: list[dict[str, object]], limit: int) -> list[dict[
                     }
                     for news in sorted(
                         related_news,
-                        key=lambda news: int(news.get("risk_score", 0)),
+                        key=risk_score_value,
                         reverse=True,
-                    )
+                    )[:MAX_COIN_RELATED_NEWS]
                 ],
             }
         )

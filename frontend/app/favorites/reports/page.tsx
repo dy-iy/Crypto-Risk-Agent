@@ -1,6 +1,5 @@
-import RiskDashboard from "@/components/risk-dashboard";
+import RiskDashboardLoader from "@/components/risk-dashboard-loader";
 
 export default function FavoriteReportsPage() {
-  return <RiskDashboard initialView="favoriteReports" />;
+  return <RiskDashboardLoader initialView="favoriteReports" />;
 }
-

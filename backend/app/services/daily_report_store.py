@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -126,3 +127,26 @@ def list_daily_reports(user_id: str, date_filter: str | None = None) -> list[dic
         for item in reports
         if not normalized_range or str(item.get("range") or "") == normalized_range
     ]
+
+
+def list_daily_report_payloads(user_id: str, date_filter: str | None = None) -> list[dict[str, Any]]:
+    normalized_range = date_filter if date_filter in {"24h", "7d"} else None
+    payloads: list[dict[str, Any]] = []
+    with _store_lock:
+        reports = _load_index(user_id)["reports"]
+        for item in reports:
+            if normalized_range and str(item.get("range") or "") != normalized_range:
+                continue
+            report = _read_json(_user_dir(user_id) / str(item.get("path") or ""))
+            if report:
+                payloads.append(report)
+    return payloads
+
+
+def delete_daily_reports_for_user(user_id: str) -> int:
+    with _store_lock:
+        reports = _load_index(user_id)["reports"]
+        user_dir = _user_dir(user_id)
+        if user_dir.exists():
+            shutil.rmtree(user_dir)
+        return len(reports)

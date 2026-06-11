@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoadingDots } from "@/components/ui/loading-states";
 import {
@@ -31,6 +31,18 @@ type SelectionQuote = {
 };
 
 type SelectionAskMode = "general_qa" | "deep_analysis";
+type OpenAssistantDetail = {
+  selectedText?: string;
+  context?: Record<string, unknown>;
+  sourceInput?: string;
+  news?: Partial<NewsRankingItem>;
+  mode?: SelectionAskMode;
+  openOnly?: boolean;
+};
+type OpenAssistantRequest = {
+  detail: OpenAssistantDetail;
+  id: number;
+};
 
 type AssistantMemory = {
   news?: Partial<NewsRankingItem>;
@@ -67,12 +79,35 @@ const selectedRecordStorageKey = "cryptorisk.selectedRecordId";
 const reportCreatedEventName = "cryptorisk:analysis-record-created";
 const openAssistantEventName = "cryptorisk:open-risk-assistant";
 const authUsernameStorageKey = "cryptorisk.auth.username";
+const maxAssistantSessions = 8;
+const maxAssistantMessages = 40;
+const assistantScopeLoadDelayMs = 1200;
 
 function createAssistantMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default function AskAIOnSelection() {
+function openAssistantText(detail?: OpenAssistantDetail | null) {
+  return String(detail?.selectedText || detail?.news?.content || detail?.news?.summary || detail?.news?.title || "").trim();
+}
+
+function buildOpenAssistantQuote(detail?: OpenAssistantDetail | null): SelectionQuote | null {
+  const text = openAssistantText(detail);
+  if (!detail || !text) return null;
+  return {
+    selectedText: text,
+    context: detail.context || buildNewsContext(detail.news),
+    mode: detail.mode || "deep_analysis",
+    sourceInput: detail.sourceInput,
+    news: detail.news,
+  };
+}
+
+function shouldOpenAssistantRequest(detail?: OpenAssistantDetail | null) {
+  return Boolean(detail?.openOnly || openAssistantText(detail));
+}
+
+export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRequest?: OpenAssistantRequest | null }) {
   const router = useRouter();
   const [storageScope, setStorageScope] = useState(() => readAssistantStorageScope());
   const [sessions, setSessions] = useState<AssistantSession[]>(() => readAssistantSessions(readAssistantStorageScope()));
@@ -80,8 +115,8 @@ export default function AskAIOnSelection() {
   const [selectedText, setSelectedText] = useState("");
   const [selectionContext, setSelectionContext] = useState<Record<string, unknown>>({});
   const [buttonPosition, setButtonPosition] = useState<{ x: number; y: number } | null>(null);
-  const [quote, setQuote] = useState<SelectionQuote | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [quote, setQuote] = useState<SelectionQuote | null>(() => buildOpenAssistantQuote(initialOpenRequest?.detail));
+  const [panelOpen, setPanelOpen] = useState(() => shouldOpenAssistantRequest(initialOpenRequest?.detail));
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -92,12 +127,23 @@ export default function AskAIOnSelection() {
   const activeSession = sessions.find((item) => item.id === resolvedActiveSessionId) || sessions[0] || createAssistantSession();
   const messages = activeSession.messages;
 
+  const openAssistant = useCallback((detail: OpenAssistantDetail) => {
+    if (!shouldOpenAssistantRequest(detail)) return;
+    const nextQuote = buildOpenAssistantQuote(detail);
+    if (nextQuote) setQuote(nextQuote);
+    setQuestion("");
+    setPanelOpen(true);
+  }, []);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading, panelOpen]);
 
   useEffect(() => {
     let ignore = false;
+    const timer = window.setTimeout(() => {
+      void loadScope();
+    }, assistantScopeLoadDelayMs);
 
     async function loadScope() {
       try {
@@ -113,9 +159,9 @@ export default function AskAIOnSelection() {
       }
     }
 
-    void loadScope();
     return () => {
       ignore = true;
+      window.clearTimeout(timer);
     };
   }, [storageScope]);
 
@@ -171,30 +217,11 @@ export default function AskAIOnSelection() {
   }, []);
 
   useEffect(() => {
-    const handleOpenAssistant = (event: Event) => {
-      const detail = (event as CustomEvent<{
-        selectedText?: string;
-        context?: Record<string, unknown>;
-        sourceInput?: string;
-        news?: Partial<NewsRankingItem>;
-        mode?: SelectionAskMode;
-      }>).detail || {};
-      const text = String(detail.selectedText || detail.news?.content || detail.news?.summary || detail.news?.title || "").trim();
-      if (!text) return;
-      setQuote({
-        selectedText: text,
-        context: detail.context || buildNewsContext(detail.news),
-        mode: detail.mode || "deep_analysis",
-        sourceInput: detail.sourceInput,
-        news: detail.news,
-      });
-      setQuestion("");
-      setPanelOpen(true);
-    };
+    const handleOpenAssistant = (event: Event) => openAssistant((event as CustomEvent<OpenAssistantDetail>).detail || {});
 
     window.addEventListener(openAssistantEventName, handleOpenAssistant);
     return () => window.removeEventListener(openAssistantEventName, handleOpenAssistant);
-  }, []);
+  }, [openAssistant]);
 
   function updateActiveSession(updater: (session: AssistantSession) => AssistantSession) {
     setSessions((items) => {
@@ -749,12 +776,45 @@ function createAssistantSession(): AssistantSession {
   };
 }
 
+function compactAssistantReport(report: RiskReport): RiskReport {
+  return {
+    risk_level: report.risk_level,
+    risk_score: report.risk_score,
+    summary: compactText(report.summary || "", 900),
+    risk_categories: report.risk_categories?.slice(0, 8),
+    evidence: report.evidence?.slice(0, 6),
+    impact: report.impact?.slice(0, 6),
+    advice: report.advice?.slice(0, 6),
+  } as RiskReport;
+}
+
+function compactAssistantSession(session: AssistantSession): AssistantSession {
+  const eventAnalysis = session.memory.eventAnalysis;
+  return {
+    ...session,
+    messages: session.messages.slice(-maxAssistantMessages).map((message) => ({
+      ...message,
+      content: compactText(message.content || "", 2400),
+    })),
+    memory: {
+      ...session.memory,
+      quotedText: session.memory.quotedText ? compactText(session.memory.quotedText, 1200) : undefined,
+      eventAnalysis: eventAnalysis ? {
+        ...eventAnalysis,
+        input: compactText(eventAnalysis.input, 2000),
+        answer: compactText(eventAnalysis.answer, 2000),
+        report: compactAssistantReport(eventAnalysis.report),
+      } : undefined,
+    },
+  };
+}
+
 function readAssistantSessions(scope: string): AssistantSession[] {
   if (typeof window === "undefined") return [createAssistantSession()];
   try {
     const raw = window.localStorage.getItem(assistantSessionsStorageKey(scope));
     const parsed = raw ? (JSON.parse(raw) as AssistantSession[]) : [];
-    return parsed.length ? parsed : [createAssistantSession()];
+    return parsed.length ? parsed.slice(0, maxAssistantSessions).map(compactAssistantSession) : [createAssistantSession()];
   } catch {
     return [createAssistantSession()];
   }
@@ -762,7 +822,8 @@ function readAssistantSessions(scope: string): AssistantSession[] {
 
 function writeAssistantSessions(scope: string, sessions: AssistantSession[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(assistantSessionsStorageKey(scope), JSON.stringify(sessions.slice(0, 20)));
+  const compactSessions = sessions.slice(0, maxAssistantSessions).map(compactAssistantSession);
+  window.localStorage.setItem(assistantSessionsStorageKey(scope), JSON.stringify(compactSessions));
 }
 
 function readActiveAssistantSessionId(scope: string) {

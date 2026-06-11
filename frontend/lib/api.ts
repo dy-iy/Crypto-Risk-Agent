@@ -4,6 +4,40 @@ export type EvidenceItem = {
   explanation: string;
 };
 
+export type EvidenceGraphAtom = {
+  id: string;
+  scenario: string;
+  risk_type: string;
+  risk_name: string;
+  polarity: "support" | "counter" | "missing" | string;
+  field: string;
+  text: string;
+  source: string;
+  confidence: number;
+  affected_entities?: string[];
+};
+
+export type ScenarioAssessment = {
+  scenario: string;
+  risk_type: string;
+  risk_name: string;
+  status: string;
+  rule_score: number;
+  branch_score: number;
+  confidence: number;
+  support_evidence_count: number;
+  counter_evidence_count: number;
+  missing_evidence: string[];
+};
+
+export type CounterEvidence = {
+  atom_id?: string;
+  scenario?: string;
+  text: string;
+  meaning: string;
+  source?: string;
+};
+
 export type ScoreBreakdown = {
   severity: number;
   evidence_strength: number;
@@ -91,6 +125,13 @@ export type ChatAgentResult = {
   low_risk_gate?: Record<string, unknown>;
   risk_type_branches?: RiskTypeBranch[];
   branch_score_merge?: Record<string, unknown>;
+  evidence_graph?: EvidenceGraphAtom[];
+  risk_hypotheses?: Array<Record<string, unknown>>;
+  scenario_assessments?: ScenarioAssessment[];
+  counter_evidence?: CounterEvidence[];
+  missing_evidence_by_scenario?: Record<string, string[]>;
+  decision_trace?: Record<string, unknown>;
+  cross_scenario_arbiter?: Record<string, unknown>;
   impact_analysis?: ImpactAnalysis;
   advice_generation?: AdviceGeneration;
   context_keys?: string[];
@@ -123,6 +164,12 @@ export type RiskReport = {
   secondary_categories?: string[];
   risk_signals: string[];
   non_risk_factors?: string[];
+  evidence_graph?: EvidenceGraphAtom[];
+  risk_hypotheses?: Array<Record<string, unknown>>;
+  scenario_assessments?: ScenarioAssessment[];
+  counter_evidence?: CounterEvidence[];
+  missing_evidence_by_scenario?: Record<string, string[]>;
+  decision_trace?: Record<string, unknown>;
   evidence: EvidenceItem[];
   score_breakdown: ScoreBreakdown;
   impact: string[];
@@ -569,6 +616,7 @@ export type AuthUser = {
   display_name: string;
   email?: string;
   created_at: string;
+  is_admin?: boolean;
 };
 
 export type AuthResponse = {
@@ -576,6 +624,42 @@ export type AuthResponse = {
   message: string;
   user: AuthUser;
 };
+
+export type PasswordChangeResult = {
+  status: string;
+  message: string;
+  sessions_revoked: number;
+};
+
+export type AuthSessionItem = {
+  session_id: string;
+  created_at: string;
+  expires_at: string;
+  client_ip_hash?: string;
+  user_agent?: string;
+  is_current: boolean;
+};
+
+export type SessionRevokeResult = {
+  status: string;
+  message: string;
+  sessions_revoked: number;
+};
+
+export type AccountSecurityEvent = {
+  id: number;
+  job_kind: string;
+  job_id: string;
+  event_type: string;
+  status: string;
+  stage: string;
+  message: string;
+  user_id: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export type SystemTaskEvent = AccountSecurityEvent;
 
 export type AnalysisDisposition = "pending" | "verified" | "ignored" | "monitoring" | "reviewed";
 
@@ -615,13 +699,265 @@ export type FavoriteCreatePayload = {
   payload: Record<string, unknown>;
 };
 
+export type SystemReadinessCheck = {
+  name: string;
+  ok?: boolean;
+  required?: boolean;
+  severity?: "critical" | "warning" | "info" | string;
+  message?: string;
+  configured?: boolean;
+  exists?: boolean;
+  writable?: boolean;
+  size_bytes?: number;
+};
+
+export type SystemReadiness = {
+  status: "ready" | "degraded" | "not_ready" | string;
+  service: string;
+  checked_at: string;
+  started_at: string;
+  uptime_seconds: number;
+  version: string;
+  environment: SystemReadinessCheck[];
+  security: SystemReadinessCheck[];
+  data: SystemReadinessCheck[];
+  storage?: SystemReadinessCheck[];
+  summary: {
+    total_checks: number;
+    failed_checks: number;
+    critical_failures: number;
+  };
+};
+
+export type AuditSummaryKind = {
+  job_kind: string;
+  total: number;
+  success: number;
+  error: number;
+  queued: number;
+  running: number;
+  other: number;
+  error_rate: number;
+  latest_event: {
+    job_id: string;
+    status: string;
+    stage: string;
+    message: string;
+    created_at: string;
+  } | null;
+};
+
+export type AuditSummary = {
+  window_hours: number;
+  total_events: number;
+  window_events: number;
+  by_kind: AuditSummaryKind[];
+  retention: {
+    retention_days: number;
+    max_events: number;
+  };
+};
+
+export type AuditPruneResult = {
+  status: string;
+  deleted_by_age: number;
+  deleted_by_count: number;
+  remaining_events: number;
+};
+
+export type GuestSimPruneResult = {
+  status: string;
+  deleted_accounts: number;
+  remaining_accounts: number;
+  retention_days: number;
+};
+
+export type AuthSessionPruneResult = {
+  status: string;
+  deleted_sessions: number;
+  remaining_sessions: number;
+  pruned_at: string;
+};
+
+export type RuntimeJobsPruneBucket = {
+  deleted_by_age: number;
+  deleted_by_count: number;
+  remaining_jobs: number;
+  retention_days: number;
+  max_jobs: number;
+};
+
+export type RuntimeJobsPruneResult = {
+  status: string;
+  news_update: RuntimeJobsPruneBucket;
+  portfolio_refresh: RuntimeJobsPruneBucket;
+  retention_days: number;
+  max_jobs: number;
+};
+
+export type InvalidJsonBackupsPruneResult = {
+  status: string;
+  deleted_files: number;
+  deleted_bytes: number;
+  remaining_files: number;
+  remaining_bytes: number;
+  retention_days: number;
+  deleted: Array<{
+    name: string;
+    display_path: string;
+    size_bytes: number;
+    modified_at: string;
+  }>;
+};
+
+export type RateLimitRule = {
+  name: string;
+  path_prefixes: string[];
+  methods: string[];
+  limit: number;
+  window_seconds: number;
+};
+
+export type RateLimitStatus = {
+  enabled: boolean;
+  active_buckets: number;
+  active_events: number;
+  rules: RateLimitRule[];
+};
+
+export type StorageInventoryDatastore = {
+  name: string;
+  path: string;
+  exists: boolean;
+  size_bytes: number;
+  tables?: Record<string, number>;
+  user_dirs?: number;
+  report_files?: number;
+  index_files?: number;
+  file_count?: number;
+  files?: Array<{
+    name: string;
+    path: string;
+    display_path: string;
+    size_bytes: number;
+  }>;
+  error?: string;
+};
+
+export type StorageInventory = {
+  generated_at: string;
+  total_size_bytes: number;
+  datastores: StorageInventoryDatastore[];
+  sqlite_errors: Array<{
+    name: string;
+    error: string;
+  }>;
+  runtime: {
+    sim_accounts: number;
+    invalid_json_backups?: number;
+  };
+};
+
+export type BackupManifestItem = {
+  name: string;
+  kind: string;
+  path: string;
+  display_path: string;
+  exists: boolean;
+  size_bytes: number;
+  backup_required: boolean;
+  note: string;
+};
+
+export type BackupManifest = {
+  generated_at: string;
+  root: string;
+  total_size_bytes: number;
+  target_count: number;
+  items: BackupManifestItem[];
+  missing_expected_targets: Array<{
+    name: string;
+    display_path: string;
+  }>;
+  warnings: string[];
+};
+
+export type AccountExportPayload = {
+  schema_version: number;
+  exported_at: string;
+  user: {
+    id: string;
+    username: string;
+    display_name: string;
+    created_at: string;
+  };
+  summary: {
+    analysis_reports: number;
+    favorites: number;
+    portfolio_watchlist: number;
+    daily_reports: number;
+    sim_account?: number;
+    sim_positions?: number;
+    sim_trades?: number;
+    account_security_events?: number;
+    auth_sessions?: number;
+  };
+  analysis_reports: AnalysisReportItem[];
+  favorites: FavoriteItem[];
+  portfolio_watchlist: PortfolioWatchlistItem[];
+  daily_reports: Array<Record<string, unknown>>;
+  sim_account?: Record<string, unknown> | null;
+  account_security_events?: AccountSecurityEvent[];
+  auth_sessions?: AuthSessionItem[];
+};
+
+export type AccountDeleteResult = {
+  status: string;
+  message: string;
+  summary: {
+    analysis_reports_deleted: number;
+    portfolio_watchlist_deleted: number;
+    daily_reports_deleted: number;
+    sim_accounts_deleted?: number;
+    audit_events_deleted?: number;
+    favorites_deleted: number;
+    sessions_deleted: number;
+    users_deleted: number;
+  };
+};
+
+export class ApiRequestError extends Error {
+  status: number;
+  detail: string;
+
+  constructor(status: number, detail = "") {
+    super(`Request failed: ${status}${detail ? `: ${detail}` : ""}`);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 const legacyApiCachePrefix = "cryptorisk.api-cache:";
 const apiCachePrefix = "cryptorisk.api-cache:v2:";
 const simClientStorageKey = "cryptorisk.sim.client_id";
-const apiCacheTtlMs = 60 * 1000;
+const apiCacheTtlMs = 3 * 60 * 1000;
+const csrfHeaderName = "X-CryptoRisk-CSRF";
+const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const memoryCache = new Map<string, { expiresAt: number; data: unknown }>();
 const pendingRequests = new Map<string, Promise<unknown>>();
 let fallbackSimClientId = "";
+
+function assertApiPath(path: string) {
+  if (!path.startsWith("/api/")) {
+    throw new Error("Frontend API requests must use /api/ paths.");
+  }
+}
+
+function apiFetch(path: string, init?: RequestInit) {
+  assertApiPath(path);
+  return fetch(path, init);
+}
 
 function createSimClientId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -648,6 +984,11 @@ function simClientHeaders(path: string): Record<string, string> {
   if (!path.startsWith("/api/sim/")) return {};
   const clientId = getSimClientId();
   return clientId ? { "X-CryptoRisk-Sim-Client": clientId } : {};
+}
+
+function csrfHeaders(method?: string): Record<string, string> {
+  const normalized = (method || "GET").toUpperCase();
+  return unsafeMethods.has(normalized) ? { [csrfHeaderName]: "1" } : {};
 }
 
 function apiCacheKey(path: string) {
@@ -712,14 +1053,16 @@ export function clearApiCache() {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  assertApiPath(path);
   const { headers, ...restInit } = init || {};
-  const response = await fetch(path, {
+  const response = await apiFetch(path, {
     cache: "no-store",
     credentials: "same-origin",
     ...restInit,
     headers: {
       "Content-Type": "application/json",
       ...simClientHeaders(path),
+      ...csrfHeaders(restInit.method),
       ...(headers || {}),
     },
   });
@@ -728,17 +1071,18 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     let detail = "";
     try {
       const payload = (await response.json()) as { detail?: string };
-      detail = payload.detail ? `: ${payload.detail}` : "";
+      detail = payload.detail || "";
     } catch {
       detail = "";
     }
-    throw new Error(`Request failed: ${response.status}${detail}`);
+    throw new ApiRequestError(response.status, detail);
   }
 
   return response.json() as Promise<T>;
 }
 
 async function cachedRequestJson<T>(path: string): Promise<T> {
+  assertApiPath(path);
   const cached = readCachedJson<T>(path);
   if (cached) return cached;
 
@@ -768,6 +1112,21 @@ export function fetchCurrentUser() {
   return requestJson<AuthUser | null>("/api/auth/me");
 }
 
+export function exportAccountData() {
+  return requestJson<AccountExportPayload>("/api/account/export");
+}
+
+export function fetchAccountSecurityEvents(limit = 20) {
+  return requestJson<{ items: AccountSecurityEvent[] }>(`/api/account/security-events?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export function deleteAccountData(currentPassword: string) {
+  return requestJson<AccountDeleteResult>("/api/account?confirm=delete-my-account", {
+    method: "DELETE",
+    body: JSON.stringify({ current_password: currentPassword }),
+  });
+}
+
 export function loginUser(username: string, password: string) {
   return requestJson<AuthResponse>("/api/auth/login", {
     method: "POST",
@@ -779,6 +1138,26 @@ export function registerUser(username: string, password: string) {
   return requestJson<AuthResponse>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ username, password }),
+  });
+}
+
+export function changePassword(currentPassword: string, newPassword: string) {
+  return requestJson<PasswordChangeResult>("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+}
+
+export function fetchAuthSessions() {
+  return requestJson<AuthSessionItem[]>("/api/auth/sessions");
+}
+
+export function revokeOtherAuthSessions() {
+  return requestJson<SessionRevokeResult>("/api/auth/sessions/revoke-others", {
+    method: "POST",
   });
 }
 
@@ -849,11 +1228,12 @@ export async function streamChatMessage(
   message: string,
   onProgress: (event: ChatProgressEvent) => void
 ): Promise<ChatResponse> {
-  const response = await fetch("/api/chat/stream", {
+  const response = await apiFetch("/api/chat/stream", {
     method: "POST",
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
+      ...csrfHeaders("POST"),
     },
     body: JSON.stringify({ message }),
   });
@@ -943,6 +1323,79 @@ export function fetchNewsUpdateJob(jobId: string) {
 
 export function fetchCurrentNewsUpdateJob() {
   return requestJson<NewsUpdateJob>("/api/rankings/update-news/jobs/current");
+}
+
+export function fetchSystemReadiness() {
+  return apiFetch("/api/system/readiness", {
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+  }).then(async (response) => {
+    const payload = await response.json() as SystemReadiness;
+    if (!response.ok && response.status !== 503) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+    return payload;
+  });
+}
+
+export function fetchAuditSummary(windowHours = 24) {
+  return requestJson<AuditSummary>(`/api/system/audit-summary?window_hours=${encodeURIComponent(String(windowHours))}`);
+}
+
+export function fetchSystemTaskEvents(limit = 20) {
+  return requestJson<{ items: SystemTaskEvent[] }>(`/api/system/task-events?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export function fetchRateLimitStatus() {
+  return requestJson<RateLimitStatus>("/api/system/rate-limits");
+}
+
+export function fetchStorageInventory() {
+  return requestJson<StorageInventory>("/api/system/storage-inventory");
+}
+
+export function fetchBackupManifest() {
+  return requestJson<BackupManifest>("/api/system/backup-manifest");
+}
+
+export function pruneTaskEvents() {
+  return requestJson<AuditPruneResult>("/api/system/task-events/prune", {
+    method: "POST",
+  });
+}
+
+export function pruneGuestSimAccounts(retentionDays = 14) {
+  return requestJson<GuestSimPruneResult>(
+    `/api/system/sim-accounts/prune?retention_days=${encodeURIComponent(String(retentionDays))}`,
+    {
+      method: "POST",
+    }
+  );
+}
+
+export function pruneExpiredAuthSessions() {
+  return requestJson<AuthSessionPruneResult>("/api/system/auth-sessions/prune", {
+    method: "POST",
+  });
+}
+
+export function pruneRuntimeJobs(retentionDays = 14, maxJobs = 100) {
+  return requestJson<RuntimeJobsPruneResult>(
+    `/api/system/runtime-jobs/prune?retention_days=${encodeURIComponent(String(retentionDays))}&max_jobs=${encodeURIComponent(String(maxJobs))}`,
+    {
+      method: "POST",
+    }
+  );
+}
+
+export function pruneInvalidJsonBackups(retentionDays = 30) {
+  return requestJson<InvalidJsonBackupsPruneResult>(
+    `/api/system/invalid-json-backups/prune?retention_days=${encodeURIComponent(String(retentionDays))}`,
+    {
+      method: "POST",
+    }
+  );
 }
 
 export function fetchPortfolioWatchlist() {
@@ -1078,11 +1531,12 @@ export async function streamRiskAssistant(
     userQuestion?: string;
   }
 ) {
-  const response = await fetch("/api/risk-assistant/stream", {
+  const response = await apiFetch("/api/risk-assistant/stream", {
     method: "POST",
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
+      ...csrfHeaders("POST"),
     },
     body: JSON.stringify({
       question,
@@ -1103,12 +1557,18 @@ export async function streamRiskAssistant(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let streamError = "";
 
   const flushEvents = () => {
     const events = buffer.split("\n\n");
     buffer = events.pop() || "";
 
     events.forEach((eventText) => {
+      const eventName = eventText
+        .split("\n")
+        .find((line) => line.startsWith("event:"))
+        ?.slice(6)
+        .trim() || "message";
       const dataLine = eventText
         .split("\n")
         .find((line) => line.startsWith("data:"));
@@ -1117,8 +1577,12 @@ export async function streamRiskAssistant(
       const payload = dataLine.slice(5).trim();
       if (!payload || payload === "{}") return;
 
-      const parsed = JSON.parse(payload) as { content?: string };
-      if (parsed.content) onChunk(parsed.content);
+      const parsed = JSON.parse(payload) as { content?: string; detail?: string };
+      if (eventName === "error") {
+        streamError = String(parsed.detail || "Risk assistant failed");
+      } else if (parsed.content) {
+        onChunk(parsed.content);
+      }
     });
   };
 
@@ -1131,6 +1595,10 @@ export async function streamRiskAssistant(
 
   buffer += decoder.decode();
   flushEvents();
+
+  if (streamError) {
+    throw new Error(streamError);
+  }
 }
 
 export function fetchRiskOverview(date?: string) {
@@ -1185,17 +1653,9 @@ export function fetchNewsDetail(newsId: string, date?: string) {
 
 export function readCachedNewsDetail(newsId: string, date?: string) {
   const search = date ? `?date=${encodeURIComponent(date)}` : "";
-  const detail = readCachedJson<NewsRankingItem>(
+  return readCachedJson<NewsRankingItem>(
     `/api/rankings/news/${encodeURIComponent(newsId)}${search}`
   );
-  if (detail) return detail;
-
-  const rankingParams = new URLSearchParams({ limit: "0" });
-  if (date) rankingParams.set("date", date);
-  const ranking = readCachedJson<NewsRankingResponse>(
-    `/api/rankings/news?${rankingParams.toString()}`
-  );
-  return ranking?.items.find((item) => String(item.news_id) === newsId) || null;
 }
 
 export function fetchCoinRanking(limit = 10, date?: string) {
@@ -1223,18 +1683,9 @@ export function fetchCoinDetail(symbol: string, date?: string) {
 
 export function readCachedCoinDetail(symbol: string, date?: string) {
   const search = date ? `?date=${encodeURIComponent(date)}` : "";
-  const normalizedSymbol = symbol.toUpperCase();
-  const detail = readCachedJson<CoinRankingItem>(
+  return readCachedJson<CoinRankingItem>(
     `/api/rankings/coins/${encodeURIComponent(symbol)}${search}`
   );
-  if (detail) return detail;
-
-  const rankingParams = new URLSearchParams({ limit: "0" });
-  if (date) rankingParams.set("date", date);
-  const ranking = readCachedJson<CoinRankingResponse>(
-    `/api/rankings/coins?${rankingParams.toString()}`
-  );
-  return ranking?.items.find((item) => item.symbol.toUpperCase() === normalizedSymbol) || null;
 }
 
 export type SimSymbol = {

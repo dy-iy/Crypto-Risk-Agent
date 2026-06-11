@@ -11,6 +11,7 @@ from app.schemas_reports import (
 )
 from app.services.analysis_report_service import (
     AnalysisReportError,
+    AnalysisReportTooLargeError,
     delete_analysis_report,
     list_analysis_reports,
     save_analysis_report,
@@ -46,7 +47,10 @@ def upsert_analysis_report(
     user = _current_user(cryptorisk_session)
     if payload.id != report_id:
         raise HTTPException(status_code=400, detail="report id mismatch")
-    return save_analysis_report(user.id, payload)
+    try:
+        return save_analysis_report(user.id, payload)
+    except AnalysisReportTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
 
 
 @router.patch("/{report_id}/disposition", response_model=AnalysisReportItem)
@@ -68,5 +72,8 @@ def remove_analysis_report(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     user = _current_user(cryptorisk_session)
-    delete_analysis_report(user.id, report_id)
+    try:
+        delete_analysis_report(user.id, report_id)
+    except AnalysisReportError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"status": "success", "message": "分析报告已删除"}

@@ -10,6 +10,7 @@ from threading import Lock
 from typing import Any
 
 from app.services.data_loader import load_scored_news
+from app.services.runtime_json_store import load_runtime_json_or_quarantine, write_runtime_json_atomic
 
 
 INITIAL_CASH = 10_000.0
@@ -34,6 +35,8 @@ SYMBOLS = [
 REPO_ROOT = Path(__file__).resolve().parents[3]
 KLINE_DIR = REPO_ROOT / "data" / "sim" / "klines"
 KLINE_INTERVAL_MS = INTERVAL_MINUTES * 60 * 1000
+SIM_ACCOUNTS_PATH = Path(__file__).resolve().parents[1] / "data" / "sim_accounts.json"
+DEFAULT_GUEST_RETENTION_DAYS = 14
 
 
 SYMBOL_META = {
@@ -88,6 +91,7 @@ class SimAccountState:
     cash: float = INITIAL_CASH
     positions: dict[str, Position] = field(default_factory=dict)
     trade_history: list[dict[str, Any]] = field(default_factory=list)
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class SimError(ValueError):
@@ -112,6 +116,21 @@ def _normalize_symbol(symbol: str) -> str:
 
 def _iso_from_ms(value: int) -> str:
     return datetime.fromtimestamp(value / 1000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_iso_datetime(value: Any) -> datetime:
+    text = str(value or "").strip()
+    if not text:
+        return datetime.now(timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.now(timezone.utc)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def _float(value: Any) -> float:
@@ -298,18 +317,87 @@ def _load_symbol_klines(symbol: str) -> list[dict[str, float | int]]:
         return _build_mock_klines(symbol)
 
 
+def _position_to_dict(position: Position) -> dict[str, float]:
+    return {
+        "quantity": float(position.quantity),
+        "avg_cost": float(position.avg_cost),
+    }
+
+
+def _position_from_dict(payload: Any) -> Position:
+    if not isinstance(payload, dict):
+        return Position()
+    try:
+        quantity = float(payload.get("quantity") or 0)
+        avg_cost = float(payload.get("avg_cost") or 0)
+    except (TypeError, ValueError):
+        return Position()
+    if quantity <= 0:
+        return Position()
+    return Position(quantity=quantity, avg_cost=max(0.0, avg_cost))
+
+
+def _account_to_dict(account: SimAccountState) -> dict[str, Any]:
+    return {
+        "current_index": int(account.current_index),
+        "cash": float(account.cash),
+        "positions": {
+            symbol: _position_to_dict(position)
+            for symbol, position in account.positions.items()
+            if symbol in SYMBOLS and position.quantity > 0
+        },
+        "trade_history": list(account.trade_history[:500]),
+        "updated_at": account.updated_at,
+    }
+
+
+def _account_from_dict(payload: Any, max_index: int) -> SimAccountState:
+    if not isinstance(payload, dict):
+        return SimAccountState()
+    try:
+        current_index = max(0, min(max_index, int(payload.get("current_index") or 0)))
+    except (TypeError, ValueError):
+        current_index = 0
+    try:
+        cash = float(payload.get("cash") if payload.get("cash") is not None else INITIAL_CASH)
+    except (TypeError, ValueError):
+        cash = INITIAL_CASH
+
+    positions: dict[str, Position] = {}
+    raw_positions = payload.get("positions")
+    if isinstance(raw_positions, dict):
+        for symbol, raw_position in raw_positions.items():
+            normalized = str(symbol or "").upper()
+            if normalized not in SYMBOLS:
+                continue
+            position = _position_from_dict(raw_position)
+            if position.quantity > 0:
+                positions[normalized] = position
+
+    raw_history = payload.get("trade_history")
+    trade_history = raw_history if isinstance(raw_history, list) else []
+    return SimAccountState(
+        current_index=current_index,
+        cash=max(0.0, cash),
+        positions=positions,
+        trade_history=[item for item in trade_history[:500] if isinstance(item, dict)],
+        updated_at=str(payload.get("updated_at") or _now_iso()),
+    )
+
+
 class SimEngine:
     def __init__(self) -> None:
         self._lock = Lock()
         self.klines = {symbol: _load_symbol_klines(symbol) for symbol in SYMBOLS}
         self.max_index = min(len(items) for items in self.klines.values()) - 1
         self.risk_events_by_index = self._load_risk_events_by_index()
-        self._accounts: dict[str, SimAccountState] = {}
+        self._accounts: dict[str, SimAccountState] = self._load_accounts()
 
     def reset(self, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> dict[str, Any]:
         with self._lock:
             account = SimAccountState()
             self._accounts[_normalize_account_id(account_id)] = account
+            self._persist_accounts_unlocked()
             return self._state_unlocked(account)
 
     def symbols(self) -> list[dict[str, str]]:
@@ -327,6 +415,8 @@ class SimEngine:
             account = self._account_unlocked(account_id)
             if account.current_index < self.max_index:
                 account.current_index += 1
+                self._touch_account_unlocked(account)
+                self._persist_accounts_unlocked()
             return self._state_unlocked(account)
 
     def jump(
@@ -349,11 +439,53 @@ class SimEngine:
                 raise SimError("Jump target is required")
 
             account.current_index = max(0, min(self.max_index, int(index)))
+            self._touch_account_unlocked(account)
+            self._persist_accounts_unlocked()
             return self._state_unlocked(account)
 
     def state(self, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> dict[str, Any]:
         with self._lock:
             return self._state_unlocked(self._account_unlocked(account_id))
+
+    def account_state_snapshot(self, account_id: str | None) -> dict[str, Any] | None:
+        normalized = _normalize_account_id(account_id)
+        with self._lock:
+            account = self._accounts.get(normalized)
+            if not account:
+                return None
+            return self._state_unlocked(account)
+
+    def account_count(self) -> int:
+        with self._lock:
+            return len(self._accounts)
+
+    def delete_account(self, account_id: str | None) -> int:
+        normalized = _normalize_account_id(account_id)
+        with self._lock:
+            if normalized not in self._accounts:
+                return 0
+            del self._accounts[normalized]
+            self._persist_accounts_unlocked()
+            return 1
+
+    def prune_guest_accounts(self, retention_days: int = DEFAULT_GUEST_RETENTION_DAYS) -> dict[str, Any]:
+        safe_days = max(1, min(3650, int(retention_days or DEFAULT_GUEST_RETENTION_DAYS)))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=safe_days)
+        with self._lock:
+            deleted_ids = [
+                account_id
+                for account_id, account in self._accounts.items()
+                if account_id.startswith("guest:") and _parse_iso_datetime(account.updated_at) < cutoff
+            ]
+            for account_id in deleted_ids:
+                del self._accounts[account_id]
+            if deleted_ids:
+                self._persist_accounts_unlocked()
+            return {
+                "deleted_accounts": len(deleted_ids),
+                "remaining_accounts": len(self._accounts),
+                "retention_days": safe_days,
+            }
 
     def candles(self, symbol: str, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> list[dict[str, Any]]:
         normalized = _normalize_symbol(symbol)
@@ -406,6 +538,8 @@ class SimEngine:
             account.positions[normalized] = Position(quantity=new_quantity, avg_cost=new_avg_cost)
             account.cash -= total_cost
             self._append_trade_unlocked(account, normalized, "BUY", price, quantity, amount, fee)
+            self._touch_account_unlocked(account)
+            self._persist_accounts_unlocked()
             return self._state_unlocked(account)
 
     def sell(
@@ -444,6 +578,8 @@ class SimEngine:
                 account.positions[normalized] = Position(quantity=remaining, avg_cost=position.avg_cost)
 
             self._append_trade_unlocked(account, normalized, "SELL", price, sell_quantity, gross, fee)
+            self._touch_account_unlocked(account)
+            self._persist_accounts_unlocked()
             return self._state_unlocked(account)
 
     def _account_unlocked(self, account_id: str | None) -> SimAccountState:
@@ -452,7 +588,33 @@ class SimEngine:
         if not account:
             account = SimAccountState()
             self._accounts[normalized] = account
+            self._persist_accounts_unlocked()
         return account
+
+    def _touch_account_unlocked(self, account: SimAccountState) -> None:
+        account.updated_at = _now_iso()
+
+    def _load_accounts(self) -> dict[str, SimAccountState]:
+        payload = load_runtime_json_or_quarantine(SIM_ACCOUNTS_PATH)
+        raw_accounts = payload.get("accounts") if isinstance(payload, dict) else None
+        if not isinstance(raw_accounts, dict):
+            return {}
+        accounts: dict[str, SimAccountState] = {}
+        for raw_account_id, raw_account in raw_accounts.items():
+            account_id = _normalize_account_id(str(raw_account_id))
+            accounts[account_id] = _account_from_dict(raw_account, self.max_index)
+        return accounts
+
+    def _persist_accounts_unlocked(self) -> None:
+        payload = {
+            "schema_version": 1,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "accounts": {
+                account_id: _account_to_dict(account)
+                for account_id, account in sorted(self._accounts.items())
+            },
+        }
+        write_runtime_json_atomic(SIM_ACCOUNTS_PATH, payload)
 
     def _price_unlocked(self, symbol: str, account: SimAccountState) -> float:
         return float(self.klines[symbol][account.current_index]["close"])

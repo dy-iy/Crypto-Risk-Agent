@@ -1,5 +1,5 @@
-import RiskDashboard from "@/components/risk-dashboard";
+import RiskDashboardLoader from "@/components/risk-dashboard-loader";
 
 export default function DailyReportPage() {
-  return <RiskDashboard initialView="daily" />;
+  return <RiskDashboardLoader initialView="daily" />;
 }

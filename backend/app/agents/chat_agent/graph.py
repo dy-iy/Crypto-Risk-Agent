@@ -10,7 +10,9 @@ from app.agents.chat_agent.nodes import (
     adaptive_router_node,
     apply_validation_decision_node,
     conflict_validator_node,
+    cross_scenario_arbiter_node,
     deterministic_decision_engine_node,
+    evidence_graph_builder_node,
     fast_exit_decision_node,
     fast_signal_scan_node,
     final_context_agents_node,
@@ -44,6 +46,8 @@ def get_compiled_chat_graph():
     graph.add_node("low_risk_gate", low_risk_gate_node)
     graph.add_node("fast_exit_decision", fast_exit_decision_node)
     graph.add_node("risk_type_branch_analysis", risk_type_branch_analysis_node)
+    graph.add_node("evidence_graph_builder", evidence_graph_builder_node)
+    graph.add_node("cross_scenario_arbiter", cross_scenario_arbiter_node)
     graph.add_node("deterministic_decision_engine", deterministic_decision_engine_node)
     graph.add_node("validation_gate", validation_gate_node)
     graph.add_node("conflict_validator", conflict_validator_node)
@@ -71,7 +75,9 @@ def get_compiled_chat_graph():
         },
     )
     graph.add_edge("fast_exit_decision", "final_context_agents")
-    graph.add_edge("risk_type_branch_analysis", "deterministic_decision_engine")
+    graph.add_edge("risk_type_branch_analysis", "evidence_graph_builder")
+    graph.add_edge("evidence_graph_builder", "cross_scenario_arbiter")
+    graph.add_edge("cross_scenario_arbiter", "deterministic_decision_engine")
     graph.add_edge("deterministic_decision_engine", "validation_gate")
     graph.add_conditional_edges(
         "validation_gate",
@@ -137,6 +143,8 @@ def run_chat_agent_with_progress(
 
     emit("evidence_extraction")
     state = risk_type_branch_analysis_node(state)
+    state = evidence_graph_builder_node(state)
+    state = cross_scenario_arbiter_node(state)
     state = deterministic_decision_engine_node(state)
     state = validation_gate_node(state)
     if _route_after_validation_gate(state) == "need_validation":

@@ -1,5 +1,5 @@
-import RiskDashboard from "@/components/risk-dashboard";
+import RiskDashboardLoader from "@/components/risk-dashboard-loader";
 
 export default function SimPage() {
-  return <RiskDashboard initialView="sim" />;
+  return <RiskDashboardLoader initialView="sim" />;
 }
