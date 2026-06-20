@@ -17,11 +17,13 @@ import {
   DailyRiskReport,
   DailyReportSubscription,
   DailySchedulerStatus,
+  FeishuBindingStatus,
   fetchCoinRanking,
   fetchCoinLibrary,
   fetchDailyReportSubscription,
   fetchDailyRiskReport,
   fetchDailySchedulerStatus,
+  fetchFeishuBinding,
   fetchCurrentNewsUpdateJob,
   fetchNewsDetail,
   fetchNewsUpdateJob,
@@ -60,6 +62,7 @@ import {
   createUserAsset,
   deleteAccountData,
   deleteAnalysisReport,
+  deleteFeishuBinding,
   deleteFavorite,
   exportAccountData,
   fetchAuditSummary,
@@ -890,6 +893,9 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [dailyReportError, setDailyReportError] = useState("");
   const [dailyReportSubscription, setDailyReportSubscription] = useState<DailyReportSubscription | null>(null);
   const [dailyReportSubscriptionLoading, setDailyReportSubscriptionLoading] = useState(false);
+  const [feishuBinding, setFeishuBinding] = useState<FeishuBindingStatus | null>(null);
+  const [feishuBindingLoading, setFeishuBindingLoading] = useState(false);
+  const [feishuBindingMessage, setFeishuBindingMessage] = useState("");
   const [rankingLoading, setRankingLoading] = useState(initialSnapshot.rankingLoading);
   const [rankingError, setRankingError] = useState("");
   const [newsUpdateLoading, setNewsUpdateLoading] = useState(false);
@@ -1050,6 +1056,43 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       ignore = true;
     };
   }, [activeView, authUser?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+    if (activeView !== "daily" && activeView !== "settings") return;
+
+    const feishuStatus = new URLSearchParams(getWindowSearch()).get("feishu");
+    const feishuStatusMessage = feishuStatus === "bound"
+      ? "飞书账号已绑定，08:00 日报会发送到飞书。"
+      : feishuStatus === "error"
+        ? "飞书绑定失败，请重新尝试。"
+        : "";
+    const statusTimer = feishuStatusMessage
+      ? window.setTimeout(() => {
+        if (!ignore) setFeishuBindingMessage(feishuStatusMessage);
+      }, 0)
+      : null;
+
+    async function loadFeishuBinding() {
+      setFeishuBindingLoading(true);
+      try {
+        const data = await fetchFeishuBinding();
+        if (!ignore) setFeishuBinding(data);
+      } catch (error) {
+        console.error(error);
+        if (!ignore) setFeishuBinding(null);
+      } finally {
+        if (!ignore) setFeishuBindingLoading(false);
+      }
+    }
+
+    void loadFeishuBinding();
+
+    return () => {
+      ignore = true;
+      if (statusTimer) window.clearTimeout(statusTimer);
+    };
+  }, [activeView, authUser?.id, currentSearch]);
 
   useEffect(() => {
     function handlePopState() {
@@ -1374,6 +1417,25 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       setDailyReportError("日报订阅状态更新失败，请稍后重试。");
     } finally {
       setDailyReportSubscriptionLoading(false);
+    }
+  }
+
+  function handleStartFeishuBinding() {
+    window.location.href = "/api/feishu/oauth/start";
+  }
+
+  async function handleDeleteFeishuBinding() {
+    setFeishuBindingLoading(true);
+    setFeishuBindingMessage("");
+    try {
+      const data = await deleteFeishuBinding();
+      setFeishuBinding(data);
+      setFeishuBindingMessage("飞书账号已解绑。");
+    } catch (error) {
+      console.error(error);
+      setFeishuBindingMessage("飞书解绑失败，请稍后重试。");
+    } finally {
+      setFeishuBindingLoading(false);
     }
   }
 
@@ -2125,9 +2187,14 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   agentReport={dailyReport}
                   error={dailyReportError}
                   fetching={dailyReportFetching}
+                  feishuBinding={feishuBinding}
+                  feishuBindingLoading={feishuBindingLoading}
+                  feishuBindingMessage={feishuBindingMessage}
                   loading={dailyReportLoading}
                   onChangeRange={handleDailyRangeChange}
+                  onDeleteFeishuBinding={handleDeleteFeishuBinding}
                   onGenerate={handleGenerateDailyReport}
+                  onStartFeishuBinding={handleStartFeishuBinding}
                   onToggleSubscription={handleToggleDailyReportSubscription}
                   range={rankingRange}
                   subscription={dailyReportSubscription}
@@ -2204,8 +2271,12 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   dailySchedulerActionLoading={dailySchedulerActionLoading}
                   dailySchedulerMessage={dailySchedulerMessage}
                   dailySchedulerStatus={dailySchedulerStatus}
+                  feishuBinding={feishuBinding}
+                  feishuBindingLoading={feishuBindingLoading}
+                  feishuBindingMessage={feishuBindingMessage}
                   auditPruneLoading={auditPruneLoading}
                   auditPruneResult={auditPruneResult}
+                  onDeleteFeishuBinding={handleDeleteFeishuBinding}
                   onExportAccountData={handleExportAccountData}
                   onDeleteAccountData={handleDeleteAccountData}
                   onPruneAuditEvents={handlePruneAuditEvents}
@@ -2214,6 +2285,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   onPruneInvalidJsonBackups={handlePruneInvalidJsonBackups}
                   onPruneRuntimeJobs={handlePruneRuntimeJobs}
                   onRunDailySchedulerNow={handleRunDailySchedulerNow}
+                  onStartFeishuBinding={handleStartFeishuBinding}
                   onToggleDailyScheduler={handleToggleDailyScheduler}
                   onRefreshSystemStatus={loadSystemStatus}
                   rateLimitStatus={rateLimitStatus}
@@ -3482,9 +3554,14 @@ function DailyReportView({
   agentReport,
   error,
   fetching,
+  feishuBinding,
+  feishuBindingLoading,
+  feishuBindingMessage,
   loading,
   onChangeRange,
+  onDeleteFeishuBinding,
   onGenerate,
+  onStartFeishuBinding,
   onToggleSubscription,
   range,
   subscription,
@@ -3493,9 +3570,14 @@ function DailyReportView({
   agentReport: DailyRiskReport | null;
   error: string;
   fetching: boolean;
+  feishuBinding: FeishuBindingStatus | null;
+  feishuBindingLoading: boolean;
+  feishuBindingMessage: string;
   loading: boolean;
   onChangeRange: (range: RankingRange) => void;
+  onDeleteFeishuBinding: () => void;
   onGenerate: () => void;
+  onStartFeishuBinding: () => void;
   onToggleSubscription: (enabled: boolean) => void;
   range: RankingRange;
   subscription: DailyReportSubscription | null;
@@ -3505,10 +3587,16 @@ function DailyReportView({
   const sourceLabel = report?.source === "llm" ? "LangGraph Agent 生成" : report ? "LangGraph 规则兜底" : loading ? "Agent 生成中" : fetching ? "读取已保存日报" : "等待生成";
   const busy = loading || fetching;
   const subscriptionEnabled = Boolean(subscription?.enabled);
+  const feishuBound = Boolean(feishuBinding?.bound && feishuBinding.enabled);
 
   return (
     <section className="space-y-5">
       {error && <Notice tone="amber" text={error} />}
+      {feishuBindingMessage && (
+        <p className={`rounded-lg border px-3 py-2 text-sm font-bold ${feishuBindingMessage.includes("失败") ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+          {feishuBindingMessage}
+        </p>
+      )}
       <div className="risk-card rounded-lg p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-4xl">
@@ -3565,6 +3653,27 @@ function DailyReportView({
               <span className={`h-2.5 w-2.5 rounded-full ${subscriptionEnabled ? "bg-emerald-500" : "bg-slate-300"}`} />
               {subscriptionLoading ? "更新订阅" : subscriptionEnabled ? "已订阅 08:00 日报" : "订阅 08:00 日报"}
             </button>
+            {feishuBound ? (
+              <button
+                type="button"
+                onClick={onDeleteFeishuBinding}
+                disabled={feishuBindingLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-700 transition-colors duration-200 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CheckIcon />
+                {feishuBindingLoading ? "处理中" : `解绑飞书${feishuBinding?.name ? `：${feishuBinding.name}` : ""}`}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onStartFeishuBinding}
+                disabled={feishuBindingLoading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <LinkIcon />
+                {feishuBindingLoading ? "读取飞书状态" : "绑定飞书接收日报"}
+              </button>
+            )}
             <RangeSegmentedControl range={range} onChangeRange={onChangeRange} />
             <button
               type="button"
@@ -5073,6 +5182,10 @@ function SettingsView({
   dailySchedulerActionLoading,
   dailySchedulerMessage,
   dailySchedulerStatus,
+  feishuBinding,
+  feishuBindingLoading,
+  feishuBindingMessage,
+  onDeleteFeishuBinding,
   onDeleteAccountData,
   onExportAccountData,
   onPruneAuditEvents,
@@ -5081,6 +5194,7 @@ function SettingsView({
   onPruneInvalidJsonBackups,
   onPruneRuntimeJobs,
   onRunDailySchedulerNow,
+  onStartFeishuBinding,
   onToggleDailyScheduler,
   onRefreshSystemStatus,
   onUpdateTodayNews,
@@ -5113,6 +5227,10 @@ function SettingsView({
   dailySchedulerActionLoading: boolean;
   dailySchedulerMessage: string;
   dailySchedulerStatus: DailySchedulerStatus | null;
+  feishuBinding: FeishuBindingStatus | null;
+  feishuBindingLoading: boolean;
+  feishuBindingMessage: string;
+  onDeleteFeishuBinding: () => void;
   onDeleteAccountData: (currentPassword: string) => void;
   onExportAccountData: () => void;
   onPruneAuditEvents: () => void;
@@ -5121,6 +5239,7 @@ function SettingsView({
   onPruneInvalidJsonBackups: () => void;
   onPruneRuntimeJobs: () => void;
   onRunDailySchedulerNow: () => void;
+  onStartFeishuBinding: () => void;
   onToggleDailyScheduler: (enabled: boolean) => void;
   onRefreshSystemStatus: () => void;
   onUpdateTodayNews: () => void;
@@ -5338,6 +5457,8 @@ function SettingsView({
   const schedulerTime = dailySchedulerStatus
     ? `${String(dailySchedulerStatus.schedule_hour).padStart(2, "0")}:${String(dailySchedulerStatus.schedule_minute).padStart(2, "0")}`
     : "08:00";
+  const personalFeishuBound = Boolean(feishuBinding?.bound && feishuBinding.enabled);
+  const personalFeishuName = feishuBinding?.name || "已绑定账号";
   const settingsSections = {
     automation: {
       id: "settings-automation",
@@ -5371,6 +5492,10 @@ function SettingsView({
     settingsSections.agentHealth,
   ];
   const activeSettingsSection = settingsSectionList.find((section) => section.id === activeSettingsSectionId) || settingsSections.automation;
+  const schedulerLastResult = dailySchedulerStatus?.last_result || {};
+  const feishuSentCount = Number(schedulerLastResult.feishu_sent_count || 0);
+  const feishuSkippedCount = Number(schedulerLastResult.feishu_skipped_count || 0);
+  const feishuErrorCount = Number(schedulerLastResult.feishu_error_count || 0);
 
   return (
     <section className="risk-card overflow-hidden rounded-lg border border-blue-100 bg-white">
@@ -5453,7 +5578,7 @@ function SettingsView({
               </button>
             </div>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <SystemMetricCard
               label="Scheduler"
               tone={schedulerTone}
@@ -5471,6 +5596,12 @@ function SettingsView({
               tone="blue"
               value={String((dailySchedulerStatus?.last_result?.generated_report_count as number | undefined) ?? 0)}
               detail={`订阅用户 ${(dailySchedulerStatus?.last_result?.subscribed_user_count as number | undefined) ?? 0} 个`}
+            />
+            <SystemMetricCard
+              label="Feishu"
+              tone={feishuErrorCount > 0 ? "amber" : feishuSentCount > 0 ? "emerald" : "slate"}
+              value={`${feishuSentCount} 份`}
+              detail={`跳过 ${feishuSkippedCount}，失败 ${feishuErrorCount}`}
             />
           </div>
           {dailySchedulerMessage && (
@@ -5814,6 +5945,62 @@ function SettingsView({
               {...settingsSections.accountSecurity}
             >
         <div className="space-y-4">
+        <div className="rounded-lg border border-emerald-100 bg-white/90 p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600">Feishu Binding</p>
+              <h3 className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-950">
+                <LinkIcon />
+                飞书账号绑定
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                绑定后，每日 08:00 资产日报会发送到当前账号自己的飞书。
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold ${
+                personalFeishuBound
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-slate-200 bg-slate-50 text-slate-600"
+              }`}>
+                <span className={`h-2.5 w-2.5 rounded-full ${personalFeishuBound ? "bg-emerald-500" : "bg-slate-300"}`} />
+                {personalFeishuBound ? personalFeishuName : "未绑定"}
+              </span>
+              {personalFeishuBound ? (
+                <button
+                  type="button"
+                  onClick={onDeleteFeishuBinding}
+                  disabled={feishuBindingLoading}
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-bold text-emerald-700 transition-colors duration-200 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <CheckIcon />
+                  {feishuBindingLoading ? "处理中" : "解绑飞书"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onStartFeishuBinding}
+                  disabled={feishuBindingLoading}
+                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <LinkIcon />
+                  {feishuBindingLoading ? "读取状态" : "绑定飞书"}
+                </button>
+              )}
+            </div>
+          </div>
+          {feishuBindingMessage && (
+            <p className={`mt-3 rounded-lg border px-3 py-2 text-sm font-bold ${feishuBindingMessage.includes("失败") ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+              {feishuBindingMessage}
+            </p>
+          )}
+          {feishuBinding?.bound_at && (
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              绑定时间：{feishuBinding.bound_at}
+            </p>
+          )}
+        </div>
+
         <div className="rounded-lg border border-rose-100 bg-rose-50/80 p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-2xl">
@@ -6644,18 +6831,14 @@ function ReportDocument({
   const report = record.report;
   const score = clampScore(report.risk_score);
   const chatAgentResult = report.chat_agent_result || report.v6_result || {};
-  const branchScoreMerge = (report.branch_score_merge || chatAgentResult.branch_score_merge || {}) as Record<string, unknown>;
-  const mergedPrimaryCategory =
-    typeof branchScoreMerge.primary_risk_name === "string" && branchScoreMerge.primary_risk_name.trim()
-      ? branchScoreMerge.primary_risk_name
-      : report.primary_category;
-  const categories = report.risk_categories?.length ? report.risk_categories : ["综合风险"];
-  const primaryCategory = mergedPrimaryCategory || categories[0];
-  const secondaryCategories = (report.secondary_categories?.length ? report.secondary_categories : categories.filter((item) => item !== primaryCategory)).slice(0, 6);
-  const evidenceItems = report.evidence?.length
-    ? report.evidence
-    : [{ risk_category: categories[0], evidence_text: "当前报告尚未抽取到结构化证据。", explanation: "建议补充官方公告、链上交易哈希、社群反馈截图或交易所通知。" }];
   const riskBranches = report.risk_type_branches || chatAgentResult.risk_type_branches || [];
+  const categories = getDisplayRiskCategories(report, chatAgentResult);
+  const primaryCategory = categories[0];
+  const secondaryCategories = categories.slice(1, 7);
+  const lowRiskWithoutEstablishedBranch = isLowRiskWithoutEstablishedRisk(report, chatAgentResult);
+  const evidenceItems = report.evidence?.length
+    ? getDisplayEvidenceItems(report.evidence, lowRiskWithoutEstablishedBranch)
+    : [{ risk_category: categories[0], evidence_text: "当前报告尚未抽取到结构化证据。", explanation: "建议补充官方公告、链上交易哈希、社群反馈截图或交易所通知。" }];
   const evidenceGraph = report.evidence_graph || chatAgentResult.evidence_graph || [];
   const scenarioAssessments = report.scenario_assessments || chatAgentResult.scenario_assessments || [];
   const counterEvidence = report.counter_evidence || chatAgentResult.counter_evidence || [];
@@ -6698,7 +6881,7 @@ function ReportDocument({
         title: record.title,
         riskLevel: report.risk_level,
         riskScore: report.risk_score,
-        riskCategories: report.risk_categories,
+        riskCategories: categories,
         createdAt: record.createdAt,
       })}
     >
@@ -6840,6 +7023,7 @@ function ReportDocument({
               atoms={evidenceGraph}
               counterEvidence={counterEvidence}
               decisionTrace={decisionTrace}
+              lowRiskWithoutEstablishedBranch={lowRiskWithoutEstablishedBranch}
               missingByScenario={missingEvidenceByScenario}
               scenarioAssessments={scenarioAssessments}
             />
@@ -6963,16 +7147,21 @@ function EvidenceGraphPanel({
   atoms,
   counterEvidence,
   decisionTrace,
+  lowRiskWithoutEstablishedBranch,
   missingByScenario,
   scenarioAssessments,
 }: {
   atoms: NonNullable<RiskReport["evidence_graph"]>;
   counterEvidence: NonNullable<RiskReport["counter_evidence"]>;
   decisionTrace: NonNullable<RiskReport["decision_trace"]>;
+  lowRiskWithoutEstablishedBranch: boolean;
   missingByScenario: NonNullable<RiskReport["missing_evidence_by_scenario"]>;
   scenarioAssessments: NonNullable<RiskReport["scenario_assessments"]>;
 }) {
-  const supportAtoms = atoms.filter((item) => item.polarity === "support").slice(0, 5);
+  const displayAtoms = lowRiskWithoutEstablishedBranch ? getGeneralizedLowRiskAtoms(atoms) : atoms;
+  const supportAtoms = displayAtoms.filter((item) => item.polarity === "support").slice(0, 5);
+  const counterAtoms = displayAtoms.filter((item) => item.polarity !== "support").slice(0, 4);
+  const displayScenarioAssessments = lowRiskWithoutEstablishedBranch ? [] : scenarioAssessments;
   const missingEntries = Object.entries(missingByScenario || {}).flatMap(([scenario, items]) =>
     asStringList(items).map((item) => ({ scenario, item })),
   ).slice(0, 6);
@@ -6992,7 +7181,7 @@ function EvidenceGraphPanel({
   return (
     <div className="space-y-4">
       <div className="grid gap-3 lg:grid-cols-3">
-        {(scenarioAssessments.length ? scenarioAssessments : []).slice(0, 6).map((item) => (
+        {displayScenarioAssessments.slice(0, 6).map((item) => (
           <div key={`${item.scenario}-${item.risk_type}`} className="rounded-lg border border-blue-100 bg-slate-50 p-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-md bg-white px-2 py-0.5 text-xs font-bold text-blue-700">{formatScenarioCode(item.scenario)}</span>
@@ -7008,7 +7197,7 @@ function EvidenceGraphPanel({
             </div>
           </div>
         ))}
-        {!scenarioAssessments.length && (
+        {!displayScenarioAssessments.length && (
           <div className="rounded-lg border border-blue-100 bg-slate-50 p-3 text-sm font-semibold text-slate-600">
             当前路径未进入多场景深度评估，按低风险或兜底路径生成报告。
           </div>
@@ -7019,10 +7208,14 @@ function EvidenceGraphPanel({
         <div className="rounded-lg border border-blue-100 bg-white p-3">
           <p className="text-xs font-bold text-slate-500">支持证据节点</p>
           <div className="mt-2 space-y-2">
-            {(supportAtoms.length ? supportAtoms : atoms.slice(0, 3)).map((item) => (
+            {supportAtoms.map((item) => (
               <EvidenceAtomRow key={item.id} atom={item} />
             ))}
-            {!atoms.length && <p className="text-sm font-semibold leading-6 text-slate-600">暂无结构化证据节点。</p>}
+            {!supportAtoms.length && (
+              <p className="text-sm font-semibold leading-6 text-slate-600">
+                {lowRiskWithoutEstablishedBranch ? "暂无支持高风险判断的证据节点。" : "暂无结构化支持证据节点。"}
+              </p>
+            )}
           </div>
         </div>
 
@@ -7034,12 +7227,15 @@ function EvidenceGraphPanel({
                 {formatScoreReasonText(item.meaning || item.text)}
               </p>
             ))}
+            {counterAtoms.map((item) => (
+              <EvidenceAtomRow key={`counter-${item.id}`} atom={item} />
+            ))}
             {missingEntries.map((entry) => (
               <p key={`${entry.scenario}-${entry.item}`} className="rounded-md bg-white/80 px-3 py-2 text-sm font-semibold leading-6 text-slate-700">
-                {formatScenarioCode(entry.scenario)} 待核验：{formatScoreReasonText(entry.item)}
+                {formatScenarioCode(lowRiskWithoutEstablishedBranch ? "S0_GENERAL_UNKNOWN" : entry.scenario)} 待核验：{formatScoreReasonText(entry.item)}
               </p>
             ))}
-            {!counterEvidence.length && !missingEntries.length && (
+            {!counterEvidence.length && !counterAtoms.length && !missingEntries.length && (
               <p className="rounded-md bg-white/80 px-3 py-2 text-sm font-semibold text-slate-600">未发现明确反向证据，仍需继续跟踪来源更新。</p>
             )}
           </div>
@@ -7593,6 +7789,72 @@ function detectWeakRisk(
       || sources.some((source) => source.includes("weak_risk"))
       || result.report_mode === "fast_exit",
   );
+}
+
+function hasEstablishedRiskBranch(branches: RiskTypeBranch[]) {
+  return branches.some((branch) => branch.established === true && clampScore(branch.branch_score || 0) > 0);
+}
+
+function isLowRiskWithoutEstablishedRisk(report: RiskReport, result: ChatAgentResult = report.chat_agent_result || report.v6_result || {}) {
+  const branches = report.risk_type_branches || result.risk_type_branches || [];
+  return isLowRiskBriefReport(report) && !hasEstablishedRiskBranch(branches);
+}
+
+function branchScoreMergePrimaryCategory(branchScoreMerge: Record<string, unknown>) {
+  const category = typeof branchScoreMerge.primary_risk_name === "string" ? branchScoreMerge.primary_risk_name.trim() : "";
+  if (!category) return "";
+  const primaryRiskType = typeof branchScoreMerge.primary_risk_type === "string" ? branchScoreMerge.primary_risk_type.trim() : "";
+  const primaryBranchScore = clampScore(typeof branchScoreMerge.primary_branch_score === "number" ? branchScoreMerge.primary_branch_score : 0);
+  const highRiskFloors = Array.isArray(branchScoreMerge.high_risk_floors) ? branchScoreMerge.high_risk_floors : [];
+  return primaryRiskType || primaryBranchScore > 0 || highRiskFloors.length > 0 ? category : "";
+}
+
+function uniqueRiskCategories(values: Array<string | undefined>) {
+  const categories: string[] = [];
+  for (const value of values) {
+    const category = String(value || "").trim();
+    if (category && !categories.includes(category)) categories.push(category);
+  }
+  return categories.length ? categories : ["综合风险"];
+}
+
+function getDisplayRiskCategories(report: RiskReport, result: ChatAgentResult = report.chat_agent_result || report.v6_result || {}) {
+  const branches = report.risk_type_branches || result.risk_type_branches || [];
+  if (isLowRiskWithoutEstablishedRisk(report, result)) {
+    return ["综合风险"];
+  }
+
+  const branchScoreMerge = (report.branch_score_merge || result.branch_score_merge || {}) as Record<string, unknown>;
+  const establishedBranchCategories = [...branches]
+    .filter((branch) => branch.established === true)
+    .sort((left, right) => clampScore(right.branch_score || 0) - clampScore(left.branch_score || 0))
+    .map((branch) => branch.risk_name);
+
+  return uniqueRiskCategories([
+    branchScoreMergePrimaryCategory(branchScoreMerge),
+    report.primary_category,
+    ...(report.secondary_categories || []),
+    ...establishedBranchCategories,
+    ...(report.risk_categories || []),
+  ]);
+}
+
+function getDisplayEvidenceItems(evidenceItems: ReportEvidenceItem[], lowRiskWithoutEstablishedBranch: boolean) {
+  if (!lowRiskWithoutEstablishedBranch) return evidenceItems;
+  return evidenceItems.map((item) => ({
+    ...item,
+    risk_category: "综合风险",
+    explanation: item.explanation && item.explanation.includes("风险类型：") ? "低风险监测" : item.explanation,
+  }));
+}
+
+function getGeneralizedLowRiskAtoms(atoms: NonNullable<RiskReport["evidence_graph"]>) {
+  return atoms.map((atom) => ({
+    ...atom,
+    scenario: "S0_GENERAL_UNKNOWN",
+    risk_type: atom.risk_type === "negative_signal" ? atom.risk_type : "low_risk_rule_summary",
+    risk_name: atom.risk_name === "反向证据" ? atom.risk_name : "低风险规则证据",
+  }));
 }
 
 function ReportSection({
@@ -8780,7 +9042,7 @@ function compactReportSummary(value: string) {
 
 function buildBriefAnalysis(record: AnalysisRecord) {
   const report = record.report;
-  const categories = report.risk_categories?.length ? report.risk_categories.join(" / ") : "综合风险";
+  const categories = getDisplayRiskCategories(report).join(" / ");
   const summary = formatScoreReasonText(compactReportSummary(report.summary) || "事件已完成结构化风险研判");
   const isLowRiskPath = isLowRiskBriefReport(report);
   const signals = isLowRiskPath
@@ -8801,11 +9063,12 @@ function buildBriefAnalysis(record: AnalysisRecord) {
 
 function buildReportSummaryText(record: AnalysisRecord) {
   const report = record.report;
+  const categories = getDisplayRiskCategories(report);
   return [
     record.title,
     `风险评分：${clampScore(report.risk_score)}/100（${report.risk_level || "待确认"}）`,
     `置信度：${clampScore(report.confidence_score ?? 0)}/100（${report.confidence_level || "待确认"}）`,
-    `风险类别：${(report.risk_categories || []).join(" / ") || "综合风险"}`,
+    `风险类别：${categories.join(" / ")}`,
     `摘要：${formatScoreReasonText(compactReportSummary(report.summary) || "暂无摘要")}`,
     `处置状态：${dispositionOptions.find((item) => item.value === (record.disposition || "pending"))?.label || "待处理"}`,
   ].join("\n");
@@ -8820,6 +9083,7 @@ function buildEvidenceText(evidenceItems: ReportEvidenceItem[]) {
 function buildReportMarkdown(record: AnalysisRecord) {
   const report = record.report;
   const advice = sanitizeAdvice(report.advice || []);
+  const categories = getDisplayRiskCategories(report);
   return [
     `# ${record.title}`,
     "",
@@ -8839,7 +9103,7 @@ function buildReportMarkdown(record: AnalysisRecord) {
     "",
     "## 风险类别",
     "",
-    (report.risk_categories || []).map((item) => `- ${item}`).join("\n") || "- 综合风险",
+    categories.map((item) => `- ${item}`).join("\n") || "- 综合风险",
     "",
     "## 证据链",
     "",

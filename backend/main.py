@@ -16,6 +16,7 @@ from app.api.auth import SESSION_COOKIE_NAME, router as auth_router
 from app.api.coin_library import router as coin_library_router
 from app.api.daily_report import router as daily_report_router
 from app.api.favorites import router as favorites_router
+from app.api.feishu import router as feishu_router
 from app.agents.chat_agent import run_chat_agent, run_chat_agent_with_progress
 from app.api.portfolio import router as portfolio_router
 from app.api.risk_ranking import router as risk_ranking_router
@@ -198,6 +199,7 @@ app.include_router(account_router)
 app.include_router(favorites_router)
 app.include_router(daily_report_router)
 app.include_router(user_assets_router)
+app.include_router(feishu_router)
 
 
 @app.on_event("startup")

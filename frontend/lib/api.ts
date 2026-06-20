@@ -751,6 +751,16 @@ export type DailyReportSubscription = {
   updated_at: string;
 };
 
+export type FeishuBindingStatus = {
+  user_id: string;
+  bound: boolean;
+  enabled: boolean;
+  name: string;
+  avatar_url: string;
+  bound_at: string;
+  updated_at: string;
+};
+
 export type AuditSummaryKind = {
   job_kind: string;
   total: number;
@@ -918,6 +928,7 @@ export type AccountExportPayload = {
     favorites: number;
     portfolio_watchlist: number;
     daily_reports: number;
+    feishu_binding?: number;
     sim_account?: number;
     sim_positions?: number;
     sim_trades?: number;
@@ -928,6 +939,7 @@ export type AccountExportPayload = {
   favorites: FavoriteItem[];
   portfolio_watchlist: PortfolioWatchlistItem[];
   daily_reports: Array<Record<string, unknown>>;
+  feishu_binding?: FeishuBindingStatus;
   sim_account?: Record<string, unknown> | null;
   account_security_events?: AccountSecurityEvent[];
   auth_sessions?: AuthSessionItem[];
@@ -941,6 +953,7 @@ export type AccountDeleteResult = {
     portfolio_watchlist_deleted: number;
     daily_reports_deleted: number;
     daily_report_subscriptions_deleted?: number;
+    feishu_bindings_deleted?: number;
     sim_accounts_deleted?: number;
     audit_events_deleted?: number;
     favorites_deleted: number;
@@ -1397,6 +1410,16 @@ export function runDailySchedulerNow() {
   clearApiCache();
   return requestJson<DailySchedulerStatus>("/api/system/daily-scheduler/run-now", {
     method: "POST",
+  });
+}
+
+export function fetchFeishuBinding() {
+  return requestJson<FeishuBindingStatus>("/api/feishu/binding");
+}
+
+export function deleteFeishuBinding() {
+  return requestJson<FeishuBindingStatus & { status: string; deleted: number }>("/api/feishu/binding", {
+    method: "DELETE",
   });
 }
 

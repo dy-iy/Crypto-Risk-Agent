@@ -64,7 +64,8 @@ NEG_NON_CRYPTO_HACK = ["医疗机构", "医疗数据", "AI", "人工智能", "�
 
 # score_hack 否定语境（已修复/无损失等）改为减权列表，不再完全阻断
 NEG_HACK_DOWNWEIGHT = ["追回", "已修复", "完成修复", "报告漏洞", "漏洞赏金", "不受影响", "未受影响", "安然无恙",
-                       "无资产损失", "未造成损失", "无资金损失", "已经恢复", "误报", "用户资金未受影响",
+                       "无资产损失", "未造成损失", "未造成资金损失", "没有造成损失", "没有造成资金损失",
+                       "无资金损失", "没有资金损失", "已经恢复", "误报", "用户资金未受影响",
                        "不涉及用户资产", "未影响用户", "资金安全", "未造成用户损失", "未造成代币超发"]
 
 # score_hack 防御/澄清/防范语境——出现时分数上限0.3
@@ -89,9 +90,17 @@ NEG_HACK_NON_ATTACK = ["增持", "增持了", "买入", "购买", "建仓", "ATM
                        "公司债券", "股票", "回购", "DeFi 收益", "收益池", "流动性挖矿"]
 
 # score_hack 新增：强烈否定（安全运营/无损失等）——出现且无实际损失时直接返回0
-NEG_HACK_STRONG_NO_RISK = ["无资金损失", "未造成损失", "安全运营", "平安无事", "安然无恙", "未受影响",
+NEG_HACK_STRONG_NO_RISK = ["无资金损失", "没有资金损失", "未造成损失", "未造成资金损失",
+                           "没有造成损失", "没有造成资金损失", "没有安全事件", "没有漏洞利用",
+                           "无漏洞利用", "安全运营", "平安无事", "安然无恙", "未受影响",
                            "安全无虞", "未遭攻击", "未发现损失", "未造成用户损失", "未造成代币超发",
                            "一切正常", "正常运行"]
+
+HACK_REAL_LOSS_EVIDENCE = [
+    "实际损失", "损失金额", "损失约", "损失达", "损失超过", "损失逾", "损失高达",
+    "被盗", "盗取", "窃取", "资金丢失", "资金消失", "资金外流", "用户资产受损",
+    "资金被盗", "资产被转走", "仍受损", "未被追回",
+]
 
 # score_hack v3 新增：安全产品/讨论/非攻击语境，直接阻断或强力降权
 NEG_HACK_SAFETY = ["安全产品", "安全服务", "安全合作", "安全响应", "安全提升", "安全公告", "安全运营", "安全无虞",
@@ -268,6 +277,12 @@ def has_illicit_fund_flow(text):
     return has_any(text, actor_terms) and has_any(text, flow_terms) and (extract_usd_equiv(text) >= 1_000_000 or has_any(text, impact_terms))
 
 
+def has_hack_real_loss(text):
+    if has_any(text, NEG_HACK_STRONG_NO_RISK) and not has_any(text, ["被盗", "盗取", "窃取", "资金外流", "仍受损", "未被追回"]):
+        return False
+    return has_any(text, HACK_REAL_LOSS_EVIDENCE)
+
+
 def extract_max_pct(text):
     mx = 0.0
     for m in PCT_RE.finditer(text or ""):
@@ -312,12 +327,12 @@ def score_hack(text):
         return 0.55
 
     # 强烈否定词（安全运营、无任何损失）且无实际损失描述，直接返回0
-    if has_any(text, NEG_HACK_STRONG_NO_RISK) and not has_any(text, ["损失", "被盗", "盗取", "资金丢失", "资金消失", "仍受损"]):
+    if has_any(text, NEG_HACK_STRONG_NO_RISK) and not has_hack_real_loss(text):
         return 0.0
 
     # v3.1 安全语境硬上限：若命中安全产品/研究/合作等词，且无真实损失证据，限制得分上限
     in_safety_context = has_any(text, NEG_HACK_SAFETY) or has_any(text, NEG_VULN_REPORT)
-    has_real_loss = has_any(text, ["资金损失", "实际损失", "被盗", "盗取", "损失金额", "资金丢失", "用户资产受损"])
+    has_real_loss = has_hack_real_loss(text)
 
     # 安全语境下，若无真实损失，上限 0.2；若真实损失存在，上限 0.35
     if in_safety_context:
@@ -355,7 +370,7 @@ def score_hack(text):
     if has_any(text, KW_HACK):
         usd = extract_usd_equiv(text)
         downweight = has_any(text, NEG_HACK_DOWNWEIGHT)
-        has_loss_evid = has_any(text, ["损失", "被盗", "盗取", "资金消失", "资金损失", "被利用", "资金丢失", "仍受损", "未被追回"])
+        has_loss_evid = has_hack_real_loss(text) or has_any(text, ["被利用"])
         has_attack_evid = has_any(text, ["攻击事件", "被黑", "安全漏洞", "利用漏洞", "黑客攻击", "漏洞攻击", "遭受攻击", "窃取",
                                          "利用", "漏洞", "未授权铸造", "资金被盗", "桥接被攻击", "攻击合约", "社会工程", "量子攻击",
                                          "量子计算", "冻结黑客地址", "截留资金"])

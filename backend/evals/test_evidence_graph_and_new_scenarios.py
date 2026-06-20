@@ -32,6 +32,15 @@ class EvidenceGraphAndNewScenariosTest(unittest.TestCase):
         meanings = " ".join(str(item.get("meaning", "")) for item in report["counter_evidence"])
         self.assertIn("计划维护", meanings)
 
+    def test_low_risk_security_context_uses_general_category(self) -> None:
+        report = self._run_offline(
+            "安全研究团队发布漏洞披露报告，未造成资金损失，用户资金未受影响。"
+        )
+
+        self.assertLessEqual(int(report["risk_score"]), 20)
+        self.assertEqual(report["primary_category"], "综合风险")
+        self.assertEqual(report["risk_categories"], ["综合风险"])
+
     def test_token_issuance_anomaly_gets_new_scenario(self) -> None:
         report = self._run_offline(
             "某协议合约漏洞导致攻击者未授权铸造价值 800 万美元代币并转入 DEX 抛售，供应量异常增加。"

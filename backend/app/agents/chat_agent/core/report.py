@@ -26,14 +26,56 @@ def _confidence_label(confidence: float) -> str:
     return "低"
 
 
+def _branch_sort_score(branch: dict[str, object]) -> int:
+    try:
+        return int(branch.get("branch_score", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _branch_merge_category(branch_score_merge: object) -> str:
+    if not isinstance(branch_score_merge, dict):
+        return ""
+    category = str(branch_score_merge.get("primary_risk_name") or "").strip()
+    if not category:
+        return ""
+    has_merge_evidence = bool(
+        branch_score_merge.get("primary_risk_type")
+        or branch_score_merge.get("primary_branch_score")
+        or branch_score_merge.get("high_risk_floors")
+    )
+    return category if has_merge_evidence else ""
+
+
+def _established_branch_categories(risk_type_branches: object) -> list[str]:
+    if not isinstance(risk_type_branches, list):
+        return []
+    categories: list[str] = []
+    branches = [branch for branch in risk_type_branches if isinstance(branch, dict)]
+    for branch in sorted(branches, key=_branch_sort_score, reverse=True):
+        if not branch.get("established"):
+            continue
+        category = str(branch.get("risk_name") or "").strip()
+        if category and category not in categories:
+            categories.append(category)
+    return categories
+
+
+def _primary_category(result: RiskCaseResult) -> str:
+    branch_score_merge = result.signal_scan.debug.get("branch_score_merge", {})
+    risk_type_branches = result.signal_scan.debug.get("risk_type_branches", [])
+    merged_category = _branch_merge_category(branch_score_merge)
+    if merged_category:
+        return merged_category
+    branch_categories = _established_branch_categories(risk_type_branches)
+    if branch_categories:
+        return branch_categories[0]
+    return "综合风险"
+
+
 def _summary(result: RiskCaseResult) -> str:
     decision = result.decision
-    branch_score_merge = result.signal_scan.debug.get("branch_score_merge", {})
-    category = (
-        str(branch_score_merge.get("primary_risk_name"))
-        if isinstance(branch_score_merge, dict) and branch_score_merge.get("primary_risk_name")
-        else SCENARIO_CATEGORY_MAP.get(decision.primary_scenario, "综合风险")
-    )
+    category = _primary_category(result)
     if decision.risk_status == "low_risk":
         return "未发现明确高危加密资产风险事件，当前文本更适合低风险监测。"
     if decision.risk_status == "insufficient_evidence":
@@ -169,7 +211,6 @@ def _llm_score_breakdown(
 
 def build_report(result: RiskCaseResult) -> dict[str, object]:
     decision = result.decision
-    category = SCENARIO_CATEGORY_MAP.get(decision.primary_scenario, "综合风险")
     risk_type_stats = result.signal_scan.debug.get("risk_type_stats", [])
     high_risk_route = result.signal_scan.debug.get("high_risk_route", {})
     low_risk_gate = result.signal_scan.debug.get("low_risk_gate", {})
@@ -226,21 +267,18 @@ def build_report(result: RiskCaseResult) -> dict[str, object]:
             }
         ]
     final_context_is_dict = isinstance(final_context_agents, dict)
-    if isinstance(branch_score_merge, dict) and branch_score_merge.get("primary_risk_name"):
-        category = str(branch_score_merge["primary_risk_name"])
+    category = _primary_category(result)
+    established_categories = _established_branch_categories(risk_type_branches)
 
     categories = [category]
-    if isinstance(risk_type_branches, list) and risk_type_branches:
-        for branch in sorted(risk_type_branches, key=lambda item: int(item.get("branch_score", 0)), reverse=True):
-            if not branch.get("established"):
-                continue
-            next_category = str(branch.get("risk_name") or "综合风险")
-            if next_category not in categories:
-                categories.append(next_category)
-    for scenario in decision.secondary_scenarios:
-        next_category = SCENARIO_CATEGORY_MAP.get(scenario, "综合风险")
+    for next_category in established_categories:
         if next_category not in categories:
             categories.append(next_category)
+    if category != "综合风险":
+        for scenario in decision.secondary_scenarios:
+            next_category = SCENARIO_CATEGORY_MAP.get(scenario, "综合风险")
+            if next_category not in categories:
+                categories.append(next_category)
 
     confidence_score = int(round(decision.confidence * 100))
     severity = decision.risk_score

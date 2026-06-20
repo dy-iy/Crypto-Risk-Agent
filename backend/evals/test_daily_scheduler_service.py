@@ -74,6 +74,7 @@ class DailySchedulerServiceTest(unittest.TestCase):
         self.assertEqual(result["last_result"]["subscribed_user_count"], 1)
         self.assertEqual(result["last_result"]["generated_report_count"], 1)
         self.assertEqual(saved_reports[0][0], "user-1")
+        self.assertEqual(result["last_result"]["feishu_skipped_count"], 1)
 
     def test_disabled_scheduler_does_not_run(self) -> None:
         scheduler = load_scheduler_service_with_stubs()
@@ -85,6 +86,31 @@ class DailySchedulerServiceTest(unittest.TestCase):
 
         self.assertFalse(result["due"])
         self.assertFalse(result["enabled"])
+
+    def test_run_if_due_records_feishu_delivery_stats(self) -> None:
+        scheduler = load_scheduler_service_with_stubs()
+
+        class _User:
+            display_name = "Alice"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "daily_scheduler_state.json"
+            with (
+                patch.object(scheduler, "SCHEDULER_STATE_PATH", state_path),
+                patch.object(scheduler, "list_subscribed_daily_report_user_ids", return_value=["user-1", "user-2"]),
+                patch.object(scheduler, "get_user_by_id", return_value=_User()),
+                patch.object(scheduler, "save_daily_report", side_effect=lambda _user_id, report: {"report_id": "r1", **report}),
+                patch.object(scheduler, "feishu_notify_enabled", return_value=True),
+                patch.object(scheduler, "get_feishu_binding", side_effect=lambda user_id: {"open_id": "ou_1", "enabled": True} if user_id == "user-1" else None),
+                patch.object(scheduler, "send_daily_report_to_feishu", return_value={"sent": True, "skipped": False}),
+            ):
+                scheduler.set_daily_scheduler_enabled(True)
+                result = scheduler.run_daily_scheduler_if_due(datetime(2026, 6, 11, 8, 0))
+
+        self.assertEqual(result["last_result"]["generated_report_count"], 2)
+        self.assertEqual(result["last_result"]["feishu_sent_count"], 1)
+        self.assertEqual(result["last_result"]["feishu_skipped_count"], 1)
+        self.assertEqual(result["last_result"]["feishu_error_count"], 0)
 
 
 if __name__ == "__main__":

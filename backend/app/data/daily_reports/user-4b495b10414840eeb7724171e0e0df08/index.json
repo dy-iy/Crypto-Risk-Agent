@@ -1,6 +1,66 @@
 {
   "reports": [
     {
+      "report_id": "24h-20260616171212-b62e6744",
+      "range": "24h",
+      "created_at": "2026-06-16 17:12:12",
+      "generation_date": "2026-06-16",
+      "headline": "你的 BTCUSDT 等资产今日需关注 宏观/政策冲击风险",
+      "alert_level": "中风险",
+      "personal_risk_score": 71,
+      "user_assets_count": 2,
+      "asset_report_count": 2,
+      "path": "24h-20260616171212-b62e6744.json"
+    },
+    {
+      "report_id": "24h-20260616160255-33b04dd1",
+      "range": "24h",
+      "created_at": "2026-06-16 16:02:55",
+      "generation_date": "2026-06-16",
+      "headline": "你的关注资产暂无直接高风险命中",
+      "alert_level": "中风险",
+      "personal_risk_score": 78,
+      "user_assets_count": 2,
+      "asset_report_count": 2,
+      "path": "24h-20260616160255-33b04dd1.json"
+    },
+    {
+      "report_id": "24h-20260614080050-7318879d",
+      "range": "24h",
+      "created_at": "2026-06-14 08:00:50",
+      "generation_date": "2026-06-14",
+      "headline": "无新增直接风险事件，但历史攻击余波持续，BTC与ETH维持谨慎关注",
+      "alert_level": "中风险",
+      "personal_risk_score": 78,
+      "user_assets_count": 2,
+      "asset_report_count": 2,
+      "path": "24h-20260614080050-7318879d.json"
+    },
+    {
+      "report_id": "24h-20260613080104-e2e1f597",
+      "range": "24h",
+      "created_at": "2026-06-13 08:01:04",
+      "generation_date": "2026-06-13",
+      "headline": "市场情绪中性，BTC与ETH暂无直接风险事件，但协议层历史风险仍需警惕",
+      "alert_level": "中风险",
+      "personal_risk_score": 78,
+      "user_assets_count": 2,
+      "asset_report_count": 2,
+      "path": "24h-20260613080104-e2e1f597.json"
+    },
+    {
+      "report_id": "24h-20260612080104-f229e6ec",
+      "range": "24h",
+      "created_at": "2026-06-12 08:01:04",
+      "generation_date": "2026-06-12",
+      "headline": "BTC 与 ETH 同步承压：宏观避险叠加巨鲸做空，关键清算堆积",
+      "alert_level": "中风险",
+      "personal_risk_score": 71,
+      "user_assets_count": 2,
+      "asset_report_count": 2,
+      "path": "24h-20260612080104-f229e6ec.json"
+    },
+    {
       "report_id": "24h-20260611164352-b33dc88f",
       "range": "24h",
       "created_at": "2026-06-11 16:43:52",

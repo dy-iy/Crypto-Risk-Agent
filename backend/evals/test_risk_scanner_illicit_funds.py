@@ -7,6 +7,15 @@ from app.agents.chat_agent.tools.risk_scanner import scan_fast_signals
 
 
 class RiskScannerIllicitFundsTest(unittest.TestCase):
+    def test_negated_security_event_does_not_score_as_hack_risk(self) -> None:
+        text = "该协议没有安全事件，没有漏洞利用，没有资金损失，仅发布产品更新。"
+
+        scan = scan_fast_signals(text)
+
+        self.assertEqual(scan.raw_rule_scores["score_hack"], 0.0)
+        self.assertTrue(scan.fast_exit_allowed)
+        self.assertFalse(scan.debug["high_risk_route"]["triggered"])
+
     def test_illicit_fund_flow_gets_high_risk_floor(self) -> None:
         text = (
             "据 ChainCatcher 报道，链上监测显示，一批疑似黑客或钓鱼活动相关资金"

@@ -14,6 +14,13 @@ from app.data.update_news import update_news_dataset
 from app.services.auth_service import get_user_by_id
 from app.services.daily_report_store import save_daily_report
 from app.services.daily_report_subscription_service import list_subscribed_daily_report_user_ids
+from app.services.feishu_binding_service import get_feishu_binding
+from app.services.feishu_notification_service import (
+    FeishuApiError,
+    FeishuConfigError,
+    feishu_notify_enabled,
+    send_daily_report_to_feishu,
+)
 from app.services.portfolio_service import DEFAULT_USER_ID
 from app.services.runtime_json_store import load_runtime_json_or_quarantine, write_runtime_json_atomic
 from app.services.task_audit_service import record_task_event
@@ -105,7 +112,7 @@ def _should_run(now: datetime, state: dict[str, Any]) -> bool:
     return scheduled_time_reached and state.get("last_run_date") != now.date().isoformat()
 
 
-def run_daily_scheduler_once(*, force: bool = False) -> dict[str, Any]:
+def run_daily_scheduler_once(*, force: bool = False, run_date: str | None = None) -> dict[str, Any]:
     if not _run_lock.acquire(blocking=False):
         status = get_daily_scheduler_status()
         status["last_status"] = "running"
@@ -115,7 +122,7 @@ def run_daily_scheduler_once(*, force: bool = False) -> dict[str, Any]:
 
     job_id = f"daily-scheduler-{uuid4().hex}"
     started_at = _now_text()
-    run_date = datetime.now().date().isoformat()
+    effective_run_date = run_date or datetime.now().date().isoformat()
     with _state_lock:
         state = _load_state_unlocked()
         if not force and not state.get("enabled"):
@@ -152,6 +159,9 @@ def run_daily_scheduler_once(*, force: bool = False) -> dict[str, Any]:
         subscribed_user_ids = list_subscribed_daily_report_user_ids()
         generated_reports: list[dict[str, str]] = []
         errors: list[dict[str, str]] = []
+        feishu_sent_count = 0
+        feishu_skipped_count = 0
+        feishu_errors: list[dict[str, str]] = []
 
         for user_id in subscribed_user_ids:
             if user_id != DEFAULT_USER_ID:
@@ -174,30 +184,44 @@ def run_daily_scheduler_once(*, force: bool = False) -> dict[str, Any]:
                     "user_id": user_id,
                     "report_id": str(saved.get("report_id") or ""),
                 })
+                feishu_result = _send_feishu_daily_report_if_bound(user_id, saved)
+                if feishu_result.get("sent"):
+                    feishu_sent_count += 1
+                elif feishu_result.get("error"):
+                    feishu_errors.append({
+                        "user_id": user_id,
+                        "error": str(feishu_result.get("error") or ""),
+                    })
+                else:
+                    feishu_skipped_count += 1
             except Exception as exc:
                 errors.append({"user_id": user_id, "error": str(exc)})
 
-        status = "success" if not errors else "partial_success"
+        status = "success" if not errors and not feishu_errors else "partial_success"
         result = {
-            "run_date": run_date,
+            "run_date": effective_run_date,
             "crawler": update_result,
             "ranking_date": ranking.get("date"),
             "subscribed_user_count": len(subscribed_user_ids),
             "generated_report_count": len(generated_reports),
             "generated_reports": generated_reports,
+            "feishu_sent_count": feishu_sent_count,
+            "feishu_skipped_count": feishu_skipped_count,
+            "feishu_error_count": len(feishu_errors),
+            "feishu_errors": feishu_errors,
             "errors": errors,
         }
         message = (
             f"每日定时任务完成：订阅用户 {len(subscribed_user_ids)} 个，"
-            f"已生成日报 {len(generated_reports)} 份。"
+            f"已生成日报 {len(generated_reports)} 份，飞书推送 {feishu_sent_count} 份。"
         )
-        if errors:
-            message += f" 失败 {len(errors)} 个。"
+        if errors or feishu_errors:
+            message += f" 失败 {len(errors) + len(feishu_errors)} 个。"
 
         with _state_lock:
             state = _load_state_unlocked()
             state.update({
-                "last_run_date": run_date,
+                "last_run_date": effective_run_date,
                 "last_finished_at": _now_text(),
                 "last_status": status,
                 "last_message": message,
@@ -227,7 +251,7 @@ def run_daily_scheduler_once(*, force: bool = False) -> dict[str, Any]:
                 "last_finished_at": _now_text(),
                 "last_status": "error",
                 "last_message": message,
-                "last_result": {"error": str(exc), "run_date": run_date},
+                "last_result": {"error": str(exc), "run_date": effective_run_date},
             })
             saved = _save_state_unlocked(state)
         record_task_event(
@@ -237,7 +261,7 @@ def run_daily_scheduler_once(*, force: bool = False) -> dict[str, Any]:
             status="error",
             stage="error",
             message=message,
-            payload={"error": str(exc), "run_date": run_date},
+            payload={"error": str(exc), "run_date": effective_run_date},
         )
         return {
             **saved,
@@ -259,9 +283,21 @@ def run_daily_scheduler_if_due(now: datetime | None = None) -> dict[str, Any]:
             "due": False,
         }
     return {
-        **run_daily_scheduler_once(),
+        **run_daily_scheduler_once(run_date=current.date().isoformat()),
         "due": True,
     }
+
+
+def _send_feishu_daily_report_if_bound(user_id: str, report: dict[str, Any]) -> dict[str, Any]:
+    if not feishu_notify_enabled():
+        return {"sent": False, "skipped": True, "reason": "disabled"}
+    binding = get_feishu_binding(user_id)
+    if not binding or not binding.get("enabled") or not binding.get("open_id"):
+        return {"sent": False, "skipped": True, "reason": "not_bound"}
+    try:
+        return send_daily_report_to_feishu(str(binding.get("open_id") or ""), report)
+    except (FeishuApiError, FeishuConfigError) as exc:
+        return {"sent": False, "skipped": False, "error": str(exc)}
 
 
 def _scheduler_loop() -> None:

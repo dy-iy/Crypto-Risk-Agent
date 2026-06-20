@@ -1,0 +1,25 @@
+{
+  "source": "backend/app/data/mastered_news.csv",
+  "output_rows": 100,
+  "date_span": [
+    "2026-05-18",
+    "2026-06-17"
+  ],
+  "category_counts": {
+    "监管合规": 14,
+    "稳定币与支付": 11,
+    "ETF机构与储备": 12,
+    "交易所与衍生品": 11,
+    "安全诈骗与非法资金": 10,
+    "DeFi与协议": 10,
+    "链上资金与巨鲸": 10,
+    "价格行情与波动": 10,
+    "宏观政策冲击": 6,
+    "公链与基础设施": 6
+  },
+  "selection_notes": [
+    "Only rows with strong cryptocurrency-market relevance were considered.",
+    "Promotional campaigns and generic non-crypto finance stories were filtered unless they changed market structure, derivatives, listing, settlement, or risk exposure.",
+    "Rows were stratified across ten event-risk categories and capped by date where possible to avoid over-concentration."
+  ]
+}
