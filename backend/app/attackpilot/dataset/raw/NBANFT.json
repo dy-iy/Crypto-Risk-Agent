@@ -1,0 +1,21 @@
+{
+    "name": "NBA NFT",
+    "cause": "Lack of require",
+    "platform": "Ethereum",
+    "time": "2022/4/20 17:12",
+    "transaction_hash": [
+        "0x2e2d9f262dcaa4a6ccdb047092f837b0f65ae533b34332428674d3f36308ff83"
+    ],
+    "report": "The vulnerability lies in the verify function used for whitelist validation during minting. The contract accepts an external 'info' parameter containing a whitelisted address for verification, but does not ensure that this address matches the actual caller (msg.sender) who receives the NFT. This allows an attacker to reuse a legitimate whitelisted user's transaction input data (including their verified address in the 'info' field) and replace the recipient address with their own via direct contract interaction using MetaMask and hexadecimal input data. As a result, non-whitelisted users could bypass the whitelist check entirely and mint NFTs freely.",
+    "detection": {
+        "time": "2022/4/20 23:57",
+        "link": "https://twitter.com/NBAxNFT/status/1516929175986212865"
+    },
+    "disclosure": {
+        "time": "2022/4/21 2:48",
+        "link": "https://twitter.com/BlockSecTeam/status/1516972147805409281?ref_src=twsrc%5Etfw%7Ctwcamp%5Etweetembed%7Ctwterm%5E1516972147805409281%7Ctwgr%5E77568b22b1a17b736c711c28e68ff160bc8f6497%7Ctwcon%5Es1_&ref_url=https%3A%2F%2Fwatcher.guru%2Fnews%2Fhacker-steals-100-nfts-from-nbas-collection-a-day-after-release"
+    },
+    "root_cause": "verify",
+    "report_link": "https://news.owlting.com/articles/85394",
+    "report_zh": "漏洞在于铸造时用于白名单验证的 verify 函数。合约接受一个包含白名单地址的外部“info”参数进行验证，但未确保该地址与实际接收 NFT 的调用者（msg.sender）一致。这允许攻击者复用合法白名单用户的交易输入数据（包括其在“info”字段中的验证地址），并通过 MetaMask 和十六进制输入数据直接与合约交互，将接收地址替换为自己的地址。结果，非白名单用户可以完全绕过白名单检查，免费铸造 NFT。"
+}

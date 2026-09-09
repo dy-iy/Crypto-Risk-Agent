@@ -82,6 +82,8 @@ backend/app/data/daily_scheduler_state.json
 backend/app/data/daily_report_subscriptions.json
 
 # Tooling caches
+backend/runtime/attackpilot/
+backend/app/attackpilot/data/rag/
 .cache/
 .turbo/
 .vercel/

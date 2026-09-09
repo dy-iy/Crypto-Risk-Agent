@@ -58,7 +58,7 @@ def rate_limit_rules() -> list[RateLimitRule]:
         ),
         RateLimitRule(
             name="agent",
-            path_prefixes=("/api/chat", "/api/risk-assistant"),
+            path_prefixes=("/api/chat", "/api/risk-assistant", "/api/attackpilot/tx-", "/api/attackpilot/assistant", "/api/attackpilot/tasks"),
             methods=("POST",),
             limit=_env_int("AGENT_RATE_LIMIT_PER_5_MINUTES", 30, minimum=1, maximum=1000),
             window_seconds=300,
@@ -71,6 +71,7 @@ def rate_limit_rules() -> list[RateLimitRule]:
                 "/api/favorites",
                 "/api/daily-report/generate",
                 "/api/rankings/update-news",
+                "/api/attackpilot",
             ),
             methods=("POST", "PATCH", "DELETE"),
             limit=_env_int("MUTATION_RATE_LIMIT_PER_MINUTE", 90, minimum=1, maximum=5000),
@@ -86,6 +87,8 @@ def match_rate_limit_rule(path: str, method: str) -> RateLimitRule | None:
     for rule in rate_limit_rules():
         if normalized_method not in rule.methods:
             continue
+        if rule.name == "agent" and path.startswith("/api/attackpilot/tasks/"):
+            continue  # Cancelling a task must remain possible after exhausting analysis quota.
         if any(str(path or "").startswith(prefix) for prefix in rule.path_prefixes):
             return rule
     return None

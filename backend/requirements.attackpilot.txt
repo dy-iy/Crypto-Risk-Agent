@@ -1,0 +1,8 @@
+# Install into the existing backend virtual environment.
+aiofiles>=24,<26
+anytree>=2.13,<3
+eth-abi>=5,<6
+web3>=7,<8
+fastmcp>=2.14.2,<3
+networkx>=3.4,<4
+tqdm>=4.66,<5

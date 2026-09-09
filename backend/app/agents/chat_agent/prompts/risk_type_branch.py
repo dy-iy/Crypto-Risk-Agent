@@ -35,7 +35,9 @@ def build_branch_prompt(case_input: RiskCaseInput, signal_scan: SignalScanResult
 3. field_evidence.evidence_text 也必须是短概括，不要粘贴原文长句。
 4. 如果只是传闻、预测、观点、例行维护、内部归集、已恢复、无损失，请降低 established、severity_score 和 evidence_strength。
 5. 缺少关键事实时，missing_evidence 要指出缺什么；证据不足时 severity_score 不应高。
-6. 不要给交易建议，不要输出 Markdown，只能输出 JSON。
+6. 评分锚点：普通讨论/上线/交易竞赛/正向流入 <=25；明确风险机制但无实际损失 25-45；实际流出、强平、坏账、连续暴跌、服务停止 50-75；攻击、脱锚、大规模清算、重大坏账 >=80。
+7. 类别仲裁：清算/强平优先于巨鲸或攻击误判；跨链桥关闭/停止转账优先于交易所运维；市场暴跌优先于宏观，除非原文明确说明由宏观事件驱动。
+8. 不要给交易建议，不要输出 Markdown，只能输出 JSON。
 
 JSON 格式：
 {{

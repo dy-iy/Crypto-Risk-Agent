@@ -12,6 +12,8 @@ from app.services.task_audit_service import delete_task_events_for_user
 
 
 def delete_account_data(user: AuthUser) -> dict[str, int]:
+    from app.attackpilot.lifecycle import delete_user_tasks
+    attackpilot_deleted = delete_user_tasks(user.id)
     analysis_reports_deleted = delete_analysis_reports_for_user(user.id)
     portfolio_watchlist_deleted = delete_watchlist_records_for_user(user.id)
     daily_reports_deleted = delete_daily_reports_for_user(user.id)
@@ -21,6 +23,7 @@ def delete_account_data(user: AuthUser) -> dict[str, int]:
     audit_events_deleted = delete_task_events_for_user(user.id)
     auth_deleted = delete_user_account(user.id)
     return {
+        "attackpilot_tasks_deleted": attackpilot_deleted,
         "analysis_reports_deleted": analysis_reports_deleted,
         "portfolio_watchlist_deleted": portfolio_watchlist_deleted,
         "daily_reports_deleted": daily_reports_deleted,

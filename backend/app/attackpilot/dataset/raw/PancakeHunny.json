@@ -1,0 +1,21 @@
+{
+    "name": "PancakeHunny",
+    "cause": "uncorrected use balanceOf to calculate profit",
+    "platform": "BNBChain",
+    "time": "2021/6/3 2:24",
+    "transaction_hash": [
+        "0x765de8357994a206bb90af57dcf427f48a2021f2f28ca81f2c00bc3b9842be8e"
+    ],
+    "report": "The mintFor function incorrectly calculates profit by using balanceOf(address(this)) to determine the amount of CAKE tokens available for conversion into HUNNY-BNB LP tokens. Since balanceOf includes all CAKE in the contract—including funds belonging to other users—the performance fee calculation is based on an inflated total balance rather than just the fee amount being transferred. This allows an attacker to deposit CAKE, trigger getReward (which calls mintFor), and cause the contract to mint excess HUNNY tokens proportional to the entire pool's CAKE balance. The vulnerability mirrors the PancakeBunny exploit, where shared contract balance is misused as a proxy for user-specific or fee-specific amounts.",
+    "detection": {
+        "time": "2021/6/3 5:06",
+        "link": "https://twitter.com/HunnyFinance/status/1400317982400684038"
+    },
+    "disclosure": {
+        "time": "2021/6/3 13:26",
+        "link": "https://twitter.com/HunnyFinance/status/1400443773436399617"
+    },
+    "root_cause": "mintFor",
+    "report_link": "https://web3sec.notion.site/Incorrect-profit-calculation-via-balanceOf-13bc12c60a24491086b5334242eb47dd",
+    "report_zh": "mintFor 函数错误地使用 balanceOf(address(this)) 来计算可用于兑换 HUNNY-BNB LP 代币的 CAKE 数量，从而计算利润。由于 balanceOf 包含合约中所有 CAKE（包括属于其他用户的资金），绩效费计算基于虚增的总余额，而非仅被转移的费用金额。这使得攻击者可以存入 CAKE，触发 getReward（调用 mintFor），导致合约增发与整个池子 CAKE 余额成比例的过量 HUNNY 代币。该漏洞与 PancakeBunny 攻击类似，将共享合约余额误用为特定用户或特定费用的数量代理。"
+}

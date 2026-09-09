@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from app.attackpilot import settings as attackpilot_settings
 
 from app.schemas_auth import AuthUser
 from app.schemas_favorites import FavoriteCreate
@@ -26,6 +27,8 @@ class AccountExportServiceTest(unittest.TestCase):
         self.sim_account_ids: set[str] = set()
         root = Path(self.tmpdir.name)
         self.patches = [
+            patch.object(attackpilot_settings, "DATABASE_PATH", root / "attackpilot.sqlite3"),
+            patch.object(attackpilot_settings, "RUNTIME_ROOT", root / "attackpilot"),
             patch.object(analysis_report_service, "REPORT_DB_PATH", root / "analysis_reports.sqlite3"),
             patch.object(auth_service, "AUTH_DB_PATH", root / "auth.sqlite3"),
             patch.object(portfolio_watchlist_store, "PORTFOLIO_DB_PATH", root / "portfolio.sqlite3"),

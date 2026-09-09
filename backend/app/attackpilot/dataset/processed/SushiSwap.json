@@ -1,0 +1,2914 @@
+{
+  "dapp": {
+    "name": "SushiSwap",
+    "cause": "Manipulate",
+    "platform": "Ethereum",
+    "time": "2021/1/25 20:07",
+    "transaction_hash": [
+      "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f",
+      "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f",
+      "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9"
+    ],
+    "report": "The root cause of this attack lies in the combination of the logical defect in the bridgeFor function of the SushiMaker contract and the manipulation of liquidity. When this function is not preset with a specific token routing, it defaults to using WETH as the intermediate exchange bridge (Bridge). The attacker exploited this mechanism and pre-created a DIGG-WETH trading pair with extremely low initial liquidity (containing only a small amount of WETH and DIGG). When the attacker called the convert function to trigger the fee redemption logic, the bridgeFor function forcibly converted the accumulated huge amount of DIGG fees through this low-liquidity pool into WETH. This resulted in an extreme slippage and a large amount of DIGG being dumped into the pool, causing the price of WETH against DIGG in the pool to be extremely inflated. Eventually, the attacker only needed to use a very small amount of WETH to exchange the previously injected large amount of DIGG fees at a low price from this pool, thereby achieving the profit.",
+    "detection": {
+      "time": "2021/1/25 20:17",
+      "link": "https://rekt.news/badgers-digg-sushi/"
+    },
+    "disclosure": {
+      "time": "2021/1/27 0:00",
+      "link": "https://slowmist.medium.com/slow-mist-sushiswap-was-attacked-for-the-second-time-a47f2d110a84"
+    },
+    "root_cause": "bridgeFor",
+    "report_link": "https://www.freebuf.com/articles/others-articles/262212.html"
+  },
+  "transaction_detail": "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f: 好的，遵照您的指示，我将以一名资深以太坊交易分析专家的身份，对您提供的交易详情进行深入、全面的解析。\n\n***\n\n### **以太坊交易分析报告**\n\n**交易哈希：** 0x4bb91a091b23c364f1371fe36308951bbc128f651b855915ba07299e410eca21\n\n#### **一、 基本信息**\n*   **交易状态：** 成功。\n*   **所在区块：** 11720124。\n*   **时间戳：** 2021-01-24 06:04:57 (UTC)。\n*   **发送方 (From)：** 0x51841D9AFe10fE55571bDB8f4Af1060415003528。\n*   **接收方/交互合约 (To)：** 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F (SushiSwap: Router)。\n*   **发送价值：** 0.001 ETH (Raw Value: 1000000000000000 Wei)。\n*   **函数签名：** `0xf305d719` (经辨识，此为 `addLiquidityETH` 函数，用于向资金池添加单边 ETH 流动性)。\n*   **Gas 消耗与成本：**\n    *   Gas 使用量：2，275，106 (占 Gas Limit 的 88.73%)。\n    *   Gas 价格：99 Gwei (99，000，000，000 Wei)。\n    *   **总交易成本：** 0.225235494 ETH (Raw Value: 225235494000000000 Wei)。\n\n#### **二、 核心操作分析**\n通过对交易日志的深度剖析，此交易的核心是 **在 SushiSwap 上为 Digg/WETH 交易对创建并添加初始流动性**。\n\n1.  **创建流动性池 (Pair)：**\n    *   日志 `[PAIRCREATED]` 显示，SushiSwap 工厂合约 (`0xc0aee478...`) 创建了一个新的交易对。代币0为 Digg (`0x798d1be8...`)，代币1为 WETH (`0xc02aaa39...`)，对应的流动性池（LP）合约地址为 `0xf41e354e...`。\n\n2.  **添加流动性操作流程：**\n    *   **用户提供代币：** 用户向新创建的 LP 合约转移了 **0.000017211 Digg** (Raw Value: 17211， Decimals: 9)。\n    *   **ETH 处理：** 用户随交易发送的 0.001 ETH 被路由器合约 (`0xd9e1cE17...`) 通过 `[DEPOSIT]` 事件封装为等额的 **0.001 WETH** (Raw Value: 1000000000000000， Decimals: 18)，随后由路由器将这笔 WETH 转移给 LP 合约。\n    *   **铸造流动性凭证 (LP Token)：**\n        *   首先，系统铸造了极小单位 (1e-18) 的 SLP 代币给零地址，这通常是初始化操作。\n        *   随后，系统向用户地址 **铸造了 0.000000004148613226 SLP 代币** (Raw Value: 4148613226， Decimals: 18)，作为用户提供流动性的份额凭证。\n    *   **更新资金池状态：** `[SYNC]` 事件更新了资金池的储备金，分别为 17211 单位 Digg 和 1000000000000000 单位 WETH，与用户添加的数量一致。\n    *   **操作确认：** 最终的 `[MINT]` 事件由路由器触发，确认了向池中添加了 17211 Digg 和 1000000000000000 WETH。\n\n#### **三、 关键地址解析**\n*   **`0x51841D9AFe10fE55571bDB8f4Af1060415003528`：** **交易发起方/流动性提供者**。提供了 Digg 和 ETH，并最终获得了代表流动性的 SLP 代币。\n*   **`0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F`：** **SushiSwap Router (路由器合约)**。处理所有流动性添加、代币交换等复杂操作的智能合约入口。\n*   **`0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac`：** **SushiSwap Factory (工厂合约)**。负责创建和管理所有交易对（流动性池）合约。\n*   **`0xf41e354eb138b328d56957b36b7f814826708724`：** **新创建的 SushiSwap LP Token 合约 (Digg/WETH 池)**。代表该流动性池的份额凭证，也管理池中的两种储备资产。\n*   **`0x798d1be841a82a273720ce31c822c61a67a601c3`：** **Digg (DIGG)**，一个弹性供应代币 (Rebase Token)。\n*   **`0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2`：** **Wrapped Ether (WETH)**，标准的 ETH 封装代币。\n\n#### **四、 交易总结**\n这是一笔**成功的、创建并添加初始流动性的 DeFi 交易**。用户通过 SushiSwap 路由器，为全新的 Digg/WETH 交易对注入了第一笔流动性，具体提供了 **0.000017211 DIGG** 和 **0.001 ETH (等价于 0.001 WETH)**。作为回报，用户获得了 **0.000000004148613226 枚该池的 SLP 流动性凭证**。\n\n值得注意的是，本次交易的 Gas 成本 (约 0.225 ETH) **远高于** 用户实际投入的 ETH 价值 (0.001 ETH)。这在 DeFi 交互中并非罕见，尤其是在创建新合约、执行复杂逻辑或网络拥堵时。这表明用户的核心目的可能在于建立该交易对的流动性，而非短期的资金效率。交易成功创建了池子，并完成了首次流动性注入。\n0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f: ### **以太坊交易分析报告**\n\n**交易哈希：** 0x94c9d84cf037dfb122e0579f6f78af7caa0fc9d82575e4b7a5d0660734643ba2\n\n#### **一、 基本信息**\n*   **交易状态：** 成功。\n*   **所在区块：** 11720137。\n*   **时间戳：** 2021-01-24 06:07:41 (UTC)。\n*   **发送方 (From)：** 0x51841D9AFe10fE55571bDB8f4Af1060415003528。\n*   **交互合约 (To)：** 0xE11fc0B43ab98Eb91e9836129d1ee7c3Bc95df50 (分析表明，此为自定义的聚合或路由合约)。\n*   **发送价值：** 0.0 ETH (Raw Value: 0 Wei)。\n*   **函数签名：** `0xbd1b820c` (输入数据指向代币 `0x798d1be8...` (Digg) 和 `0x2260fac5...` (WBTC)，推测为涉及这两种代币的复杂操作)。\n*   **Gas 消耗与成本：**\n    *   Gas 使用量：425，736 (占 Gas Limit 的 54.65%)。\n    *   Gas 价格：99 Gwei (99，000，000，000 Wei)。\n    *   **总交易成本：** 0.042147864 ETH (Raw Value: 42147864000000000 Wei)。\n\n#### **二、 核心操作分析**\n此交易执行了一个**多步骤的套利或流动性移除操作**，核心路径是：**销毁 DIGG/WBTC 流动性池份额 -> 将 DIGG 交换为 WETH -> 将 WBTC 交换为 WETH -> 将 WETH 交换为 SUSHI**。整个过程由智能合约 `0xE11fc0B43...` 自动执行。\n\n1.  **移除初始流动性：**\n    *   交易首先**销毁（BURN）** 了 `0.000000000528629604` 份 (Raw: 528629604) **Digg/WBTC SLP 代币** (地址: `0x9a138670...`)。\n    *   作为回报，从该池中取出了 **1.140602218 DIGG** (Raw: 1140602218， Decimals: 9) 和 **2.7973651 WBTC** (Raw: 279736510， Decimals: 8)。\n\n2.  **多级代币交换（套利路径）：**\n    *   **步骤 A (DIGG -> WETH):** 将上一步获得的 **1.140602218 DIGG** 注入到另一个 **Digg/WETH 池** (地址: `0xf41e354e...`)，换出了 **0.000999984865427378 WETH** (Raw: 999984865427378， Decimals: 18)。\n    *   **步骤 B (WBTC -> WETH):** 将第一步获得的 **2.7973651 WBTC** 在 **WBTC/WETH 池** (地址: `0xceff5175...`) 中兑换为 **65.657225537064736037 WETH** (Raw: 65657225537064736037， Decimals: 18)。\n    *   **汇总 WETH:** 将步骤A和B获得的WETH合并，合约地址**合计收到约 65.658225521930163415 WETH**。\n    *   **步骤 C (WETH -> SUSHI):** 将合并后的 WETH 在 **SUSHI/WETH 池** (地址: `0x795065dc...`) 中兑换为最终代币 **10844.682068505278758672 SUSHI** (Raw: 10844682068505278758672， Decimals: 18)。\n    *   最终的 **SUSHI 代币被发送至 SushiSwap 的 MasterChef 合约** (`0x8798249c...`)，这是质押 SUSHI 获得收益的标准地址。\n\n3.  **操作总结：** 最后的 `[LOGCONVERT]` 事件清晰地记录了本次操作的输入与输出：投入了指定数量的 DIGG 和 WBTC，最终获得了对应数量的 SUSHI。\n\n#### **三、 关键地址解析**\n*   **`0x51841D9AFe10fE55571bDB8f4Af1060415003528`：** **交易发起方/最终受益人**。触发整个复杂交易，最终的 SUSHI 收益流向其关联的合约或质押地址。\n*   **`0xE11fc0B43ab98Eb91e9836129d1ee7c3bc95df50`：** **自定义聚合/路由合约**。作为本次所有操作的执行代理，负责接收中间代币、调用各个交易对合约并完成交换。\n*   **`0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3`：** **SushiSwap LP Token (Digg/WBTC 池)**。用户最初提供并销毁流动性的池子。\n*   **`0xf41e354eb138b328d56957b36b7f814826708724`：** **SushiSwap LP Token (Digg/WETH 池)**。用于完成 DIGG 到 WETH 的交换。\n*   **`0xceff51756c56ceffca006cd410b03ffc46dd3a58`：** **SushiSwap LP Token (WBTC/WETH 池)**。用于完成 WBTC 到 WETH 的交换。\n*   **`0x795065dcc9f64b5614c407a6efdc400da6221fb0`：** **SushiSwap LP Token (SUSHI/WETH 池)**。用于完成 WETH 到最终 SUSHI 的交换。\n*   **`0x8798249c2e607446efb7ad49ec89dd1865ff4272`：** **SushiSwap MasterChef 合约**。接收最终生成的 SUSHI 代币，用于质押或奖励分配。\n*   **代币地址：**\n    *   `0x798d1be8...`： **Digg (DIGG)**，弹性供应代币。\n    *   `0x2260fac5...`： **Wrapped BTC (WBTC)**。\n    *   `0xc02aaa39...`： **Wrapped Ether (WETH)**。\n    *   `0x6b359506...`： **SushiToken (SUSHI)**。\n\n#### **四、 交易总结**\n这是一笔**高度复杂的、由智能合约自动执行的 DeFi 套利或流动性迁移交易**。核心操作是将用户在 **Digg/WBTC 流动性池**中的份额，通过一系列最优路径的链上兑换，最终全部转换为 **SUSHI 治理代币**并发送至质押合约。\n\n**操作路径为：Digg/WBTC LP Token -> (DIGG + WBTC) -> (DIGG -> WETH) + (WBTC -> WETH) -> 合并 WETH -> WETH -> SUSHI**。用户通过销毁约 `0.000000000528629604` 个 SLP 凭证，最终获得了 **10844.682068505278758672 SUSHI**。该交易充分展示了 DeFi 乐高组合的特性，由路由合约在单笔交易内自动、原子化地完成了多个池子的退出与交换操作，旨在最大化资产转换效率或捕获套利机会。\n0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9: ### **以太坊交易分析报告**\n\n**交易哈希：** 0x868fee3bbf8079f317c7d9626e51ee22cb25dac7df1cac6cf70a643decdc44cd\n\n#### **一、 基本信息**\n*   **交易状态：** 成功。\n*   **所在区块：** 11720137。\n*   **时间戳：** 2021-01-24 06:07:41 (UTC)。\n*   **发送方 (From)：** 0x51841D9AFe10fE55571bDB8f4Af1060415003528。\n*   **交互合约 (To)：** 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F (SushiSwap 路由合约)。\n*   **发送价值：** 0.001 ETH (Raw Value: 1000000000000000 Wei)。\n*   **函数签名：** `0xb6f9de95` (对应 `swapExactETHForTokensSupportingFeeOnTransferTokens`，即“使用支持转账手续费代币的ETH精确兑换代币”函数)。\n*   **Gas 消耗与成本：**\n    *   Gas 使用量：292，644 (占 Gas Limit 的 29.66%)。\n    *   Gas 价格：100 Gwei (100，000，000，000 Wei)。\n    *   **总交易成本：** 0.0292644 ETH (Raw Value: 29264400000000000 Wei)。\n\n#### **二、 核心操作分析**\n此交易是**通过SushiSwap路由合约执行的一笔多步骤套利交易**。用户支付 `0.001 ETH`，路由合约自动完成了一个 **WETH -> DIGG -> WBTC -> WETH** 的三角交换路径，最终将获利（少量WETH）返回给用户。\n\n1.  **路径起点 (存入 ETH):**\n    *   用户将 `0.001 WETH` 存入路由合约 `0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F` 中。\n\n2.  **第一步交换 (WETH -> DIGG):**\n    *   路由合约将 `0.001 WETH` 注入 **Digg/WETH 流动性池** (地址: `0xf41e354eb138b328d56957b36b7f814826708724`)。\n    *   从该池中换出 `0.000008592 DIGG` (Raw: 8592， Decimals: 9)，并将此 DIGG 发送到下一个池子。\n\n3.  **第二步交换 (DIGG -> WBTC):**\n    *   收到的 `0.000008592 DIGG` 被注入 **Digg/WBTC 流动性池** (地址: `0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3`)。\n    *   从该池中换出 `0.000021 WBTC` (Raw: 2100， Decimals: 8)，并将此 WBTC 发送到最终交换池。\n\n4.  **第三步交换 (WBTC -> WETH) 与利润结算:**\n    *   将 `0.000021 WBTC` 注入 **WBTC/WETH 流动性池** (地址: `0xceff51756c56ceffca006cd410b03ffc46dd3a58`)。\n    *   从该池中换出 `0.000493062366699223 WETH` (Raw: 493062366699223， Decimals: 18)，并**直接发送回用户地址** `0x51841D9AFe10fE55571bDB8f4Af1060415003528`。\n\n#### **三、 关键地址解析**\n*   **`0x51841D9AFe10fE55571bDB8f4Af1060415003528`：** **套利者/交易发起方**。投入初始资金并接收最终套利所得。\n*   **`0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F`：** **SushiSwap 路由合约**。接收用户资金，并自动、原子化地执行预设的复杂多步交换路径。\n*   **`0xf41e354eb138b328d56957b36b7f814826708724`：** **SushiSwap LP Token (Digg/WETH 池)**。用于完成第一步 WETH 到 DIGG 的交换。\n*   **`0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3`：** **SushiSwap LP Token (Digg/WBTC 池)**。用于完成第二步 DIGG 到 WBTC 的交换。\n*   **`0xceff51756c56ceffca006cd410b03ffc46dd3a58`：** **SushiSwap LP Token (WBTC/WETH 池)**。用于完成第三步 WBTC 到 WETH 的交换，并将利润返还给用户。\n*   **代币地址：**\n    *   `0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2`： **Wrapped Ether (WETH)**，为交易媒介和最终利润。\n    *   `0x798d1be841a82a273720ce31c822c61a67a601c3`： **Digg (DIGG)**，作为中间交换代币。\n    *   `0x2260fac5e5542a773aa44fbcfedf7c193bc2c599`： **Wrapped BTC (WBTC)**，作为中间交换代币。\n\n#### **四、 交易总结**\n这是一笔典型的 **DeFi 三角套利交易**。套利者利用SushiSwap路由合约的原子化执行能力，在一次交易中完成了 **WETH -> DIGG -> WBTC -> WETH** 的完整交换循环。其核心目标是利用三个不同流动性池之间的瞬时价格差异，通过一系列兑换操作，最终换回比初始投入更多的同种资产（WETH），从而赚取差价利润。\n\n**交易结果：** 用户投入 `0.001 ETH` (Raw: 1000000000000000 Wei)，经过一次完整的三角套利后，收回 `0.000493062366699223 WETH` (Raw: 493062366699223 Wei)。**此次套利尝试以亏损告终**，收回的WETH价值远低于初始投入，可能由于高昂的交易手续费（Gas费 0.0292644 ETH）或不利的汇率滑点所致。该交易充分展示了链上套利的风险与成本。\n",
+  "transaction_to_detail": {
+    "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f": {
+      "hash": "0x4bb91a091b23c364f1371fe36308951bbc128f651b855915ba07299e410eca21",
+      "block_hash": "",
+      "block_number": 11720124,
+      "transaction_index": 0,
+      "timestamp": 1611515097,
+      "from": "0x51841D9AFe10fE55571bDB8f4Af1060415003528",
+      "to": "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+      "value": {
+        "wei": 1000000000000000,
+        "eth": 0.001
+      },
+      "input_data": "0xf305d719000000000000000000000000798d1be841a82a273720ce31c822c61a67a601c3000000000000000000000000000000000000000000000000000000000000433b000000000000000000000000000000000000000000000000000000000000433b00000000000000000000000000000000000000000000000000038d7ea4c6800000000000000000000000000051841d9afe10fe55571bdb8f4af106041500352800000000000000000000000000000000000000000000000000000000600dc970",
+      "function_signature": "0xf305d719",
+      "nonce": 423,
+      "gas": {
+        "limit": 2563950,
+        "used": 2275106,
+        "used_percentage": 88.73,
+        "waste_percentage": 11.27,
+        "price_wei": 99000000000,
+        "effective_price_wei": 99000000000,
+        "cumulative_used": 0
+      },
+      "cost": {
+        "total_wei": 225235494000000000,
+        "total_eth": 0.225235494
+      },
+      "status": {
+        "code": 1,
+        "success": true,
+        "description": "success"
+      },
+      "contract_address": "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+      "type_analysis": {
+        "transaction_type": "contract_call",
+        "is_contract_creation": true,
+        "is_contract_interaction": true,
+        "chain_id": 1
+      },
+      "log_analysis": {
+        "total_logs": 8,
+        "transfer_events": 0,
+        "interacted_addresses": [
+          "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac",
+          "0xf41e354eb138b328d56957b36b7f814826708724",
+          "0x798d1be841a82a273720ce31c822c61a67a601c3",
+          "0xfabec03b04279c6e73f27aaf25866acc844448ae",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        ],
+        "detailed_logs": [
+          "[PAIRCREATED] 0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac | token0: 0x798d1be841a82a273720ce31c822c61a67a601c3, token1: 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, pair: 0xf41e354eb138b328d56957b36b7f814826708724, : 637",
+          "[TRANSFER] 0.000017211 Digg (Raw: 17211, Decimals: 9, Address: 0x798d1be841a82a273720ce31c822c61a67a601c3) | 0x51841d9afe10fe55571bdb8f4af1060415003528 -> SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724)",
+          "[DEPOSIT] Wrapped Ether(0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2) | dst: 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f, wad: 1000000000000000",
+          "[TRANSFER] 0.001 Wrapped Ether (Raw: 1000000000000000, Decimals: 18, Address: 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2) | 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f -> SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724)",
+          "[MINT] 0.000000000000001 SushiSwap LP Token (Raw: 1000, Decimals: 18, Address: 0xf41e354eb138b328d56957b36b7f814826708724) | 0x0000000000000000000000000000000000000000 -> 0x0000000000000000000000000000000000000000",
+          "[MINT] 0.000000004148613226 SushiSwap LP Token (Raw: 4148613226, Decimals: 18, Address: 0xf41e354eb138b328d56957b36b7f814826708724) | 0x0000000000000000000000000000000000000000 -> 0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "[SYNC] SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724) | reserve0: 17211, reserve1: 1000000000000000",
+          "[MINT] SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724) | sender: 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f, amount0: 17211, amount1: 1000000000000000"
+        ]
+      },
+      "state_diff": [
+        {
+          "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+          "soltype": {
+            "name": "_allowedFragments",
+            "type": "mapping (address => mapping (address => uint256))",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x00000000000000000000000000000000000000000000000000000000000000a2",
+            "indexed": false
+          },
+          "original": {
+            "0x51841d9afe10fe55571bdb8f4af1060415003528": {
+              "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+            }
+          },
+          "dirty": {
+            "0x51841d9afe10fe55571bdb8f4af1060415003528": {
+              "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f": "115792089237316195423570985008687907853269984665640564039457584007913129622724"
+            }
+          },
+          "raw": [
+            {
+              "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+              "key": "0x2cf25513bf16cd4d1decd8e8ebd32d446bd05a4e051f751a7e23dea40e5c6550",
+              "original": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "dirty": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffbcc4"
+            }
+          ]
+        },
+        {
+          "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+          "soltype": {
+            "name": "_shareBalances",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+            "indexed": false
+          },
+          "original": {
+            "0x51841d9afe10fe55571bdb8f4af1060415003528": "444785548985223824553155131163142118597960528125445440402181301320203",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "0"
+          },
+          "dirty": {
+            "0x51841d9afe10fe55571bdb8f4af1060415003528": "0",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "444785548985223824553155131163142118597960528125445440402181301320203"
+          },
+          "raw": [
+            {
+              "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+              "key": "0x39db55f021b976dbb1c25a07923d2b96db02c15700924f5ddabb3ca24a5d270f",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x000000107f7dc6abb25c30ccb0a6f5659b904c9ec5dd48fd9742422053b9ba0b"
+            },
+            {
+              "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+              "key": "0xa6aed17512b2db593b28be27b8d2216dde06bc62db3b1d91d8abd1fac9affea4",
+              "original": "0x000000107f7dc6abb25c30ccb0a6f5659b904c9ec5dd48fd9742422053b9ba0b",
+              "dirty": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        {
+          "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "soltype": {
+            "name": "balanceOf",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000003",
+            "indexed": false
+          },
+          "original": {
+            "0xf41e354eb138b328d56957b36b7f814826708724": "0"
+          },
+          "dirty": {
+            "0xf41e354eb138b328d56957b36b7f814826708724": "1000000000000000"
+          },
+          "raw": [
+            {
+              "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "key": "0x36f24f1a13b1605a12efeae03b95d767f9348b9f6e556c8bca57d1b16e3df44e",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x00000000000000000000000000000000000000000000000000038d7ea4c68000"
+            }
+          ]
+        },
+        {
+          "address": "0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac",
+          "soltype": {
+            "name": "allPairs",
+            "type": "address[]",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000004",
+            "indexed": false,
+            "simple_type": {
+              "type": "slice",
+              "nested_type": {
+                "type": "address"
+              }
+            }
+          },
+          "original": {
+            "636": "0x0000000000000000000000000000000000000000"
+          },
+          "dirty": {
+            "636": "0xf41e354eb138b328d56957b36b7f814826708724"
+          },
+          "raw": [
+            {
+              "address": "0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000004",
+              "original": "0x000000000000000000000000000000000000000000000000000000000000027c",
+              "dirty": "0x000000000000000000000000000000000000000000000000000000000000027d"
+            },
+            {
+              "address": "0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac",
+              "key": "0x8a35acfbc15ff81a39ae7d344fd709f28e8600b4aa8c65c6b64bfe7fe36bd417",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x000000000000000000000000f41e354eb138b328d56957b36b7f814826708724"
+            }
+          ]
+        },
+        {
+          "address": "0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac",
+          "soltype": {
+            "name": "getPair",
+            "type": "mapping (address => mapping (address => address))",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000003",
+            "indexed": false
+          },
+          "original": {
+            "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": "0x0000000000000000000000000000000000000000"
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+              "0x798d1be841a82a273720ce31c822c61a67a601c3": "0x0000000000000000000000000000000000000000"
+            }
+          },
+          "dirty": {
+            "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": "0xf41e354eb138b328d56957b36b7f814826708724"
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+              "0x798d1be841a82a273720ce31c822c61a67a601c3": "0xf41e354eb138b328d56957b36b7f814826708724"
+            }
+          },
+          "raw": [
+            {
+              "address": "0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac",
+              "key": "0xbb9d755f486f5a3eaacb0483f5087fe8660491a032e436aa8619faeb7a40deec",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x000000000000000000000000f41e354eb138b328d56957b36b7f814826708724"
+            },
+            {
+              "address": "0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac",
+              "key": "0xc9da82e4813ae9af2beea46eeeb8844b1b0ecbb480f9ad4e6123fe951ffcd39a",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x000000000000000000000000f41e354eb138b328d56957b36b7f814826708724"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x00000000000000000000000000000000000000000000000000000000f746d452"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000003",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x2f331777de8d5a7eca508ca8e3e1842617d2569076524f03a2154a37c041388d"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000005",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x000000000000000000000000c0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000006",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x000000000000000000000000798d1be841a82a273720ce31c822c61a67a601c3"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000007",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x600dc4d900000000000000038d7ea4c68000000000000000000000000000433b"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000b",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x000000000000000000000000000000000000000000000000eed9c14fed3f8000"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000c",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x0000000000000000000000000000000000000000000000000000000000000001"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0xa6eef7e35abe7026729641147f7915573c7e97b47efa546f5f6e3230263bcb49",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x00000000000000000000000000000000000000000000000000000000000003e8"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": null,
+          "original": null,
+          "dirty": null,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0xc7a5fb7fcb393e13746d8bb67adfc351e153850fa9bd657dafc5daf86862469c",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x00000000000000000000000000000000000000000000000000000000f746d06a"
+            }
+          ]
+        }
+      ],
+      "balance_diff": [
+        {
+          "address": "0x51841D9AFe10fE55571bDB8f4Af1060415003528",
+          "original": "23779876813304785243",
+          "dirty": "23553641319304785243",
+          "is_miner": false
+        },
+        {
+          "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "original": "5381998216643211704198636",
+          "dirty": "5381998217643211704198636",
+          "is_miner": false
+        },
+        {
+          "address": "0xEA674fdDe714fd979de3EdF0F56AA9716B898ec8",
+          "original": "1444569613741561972419",
+          "dirty": "1444794849235561972419",
+          "is_miner": true
+        }
+      ],
+      "balance_changes": [
+        {
+          "address": "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "dollar_value": "-2.2071203415832214355",
+          "transfers": [
+            0,
+            4,
+            5
+          ]
+        },
+        {
+          "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "dollar_value": "2.20343994140625",
+          "transfers": [
+            6
+          ]
+        },
+        {
+          "address": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "dollar_value": "0",
+          "transfers": [
+            1,
+            2,
+            5,
+            6
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "dollar_value": "2.2678005173644714353",
+          "transfers": [
+            0,
+            2
+          ]
+        }
+      ],
+      "asset_changes": [
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+            "symbol": "digg",
+            "name": "DIGG",
+            "logo": "https://coin-images.coingecko.com/coins/images/13737/large/digg.PNG?1696513481",
+            "decimals": 9,
+            "dollar_value": "213.83999633789062"
+          },
+          "type": "Transfer",
+          "from": "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "to": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "amount": "0.000017211",
+          "raw_amount": "17211",
+          "dollar_value": "0.0036804001769714355468",
+          "from_before_balance": "0x107f7dc6abb25c30ccb0a6f5659b904c9ec5dd48fd9742422053b9ba0b",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "symbol": "weth",
+            "name": "WETH",
+            "logo": "https://coin-images.coingecko.com/coins/images/2518/large/weth.png?1696503332",
+            "decimals": 18,
+            "dollar_value": "2264.1201171875"
+          },
+          "type": "Mint",
+          "to": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "amount": "0.001",
+          "raw_amount": "1000000000000000",
+          "dollar_value": "2.2641201171874999999",
+          "from_before_balance": "0x0",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "symbol": "weth",
+            "name": "WETH",
+            "logo": "https://coin-images.coingecko.com/coins/images/2518/large/weth.png?1696503332",
+            "decimals": 18,
+            "dollar_value": "2264.1201171875"
+          },
+          "type": "Transfer",
+          "from": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "to": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "amount": "0.001",
+          "raw_amount": "1000000000000000",
+          "dollar_value": "2.2641201171874999999",
+          "from_before_balance": "0x38d7ea4c68000",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "contract_address": "0xf41e354eb138b328d56957b36b7f814826708724",
+            "symbol": "SLP",
+            "name": "SushiSwap LP Token",
+            "decimals": 18
+          },
+          "type": "Burn",
+          "amount": null,
+          "raw_amount": "1000",
+          "dollar_value": null,
+          "from_before_balance": "0x0",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "contract_address": "0xf41e354eb138b328d56957b36b7f814826708724",
+            "symbol": "SLP",
+            "name": "SushiSwap LP Token",
+            "decimals": 18
+          },
+          "type": "Mint",
+          "to": "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "amount": null,
+          "raw_amount": "4148613226",
+          "dollar_value": null,
+          "from_before_balance": "0x0",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "NativeCurrency",
+            "type": "Fungible",
+            "contract_address": "0x0000000000000000000000000000000000000000",
+            "symbol": "ETH",
+            "name": "Ether",
+            "logo": "https://coin-images.coingecko.com/coins/images/279/large/ethereum.png?1696501628",
+            "decimals": 18,
+            "dollar_value": "2203.43994140625"
+          },
+          "type": "Transfer",
+          "from": "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "to": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "amount": "0.001",
+          "raw_amount": "1000000000000000",
+          "dollar_value": "2.20343994140625",
+          "from_before_balance": "0x14a0317f87394695b",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "NativeCurrency",
+            "type": "Fungible",
+            "contract_address": "0x0000000000000000000000000000000000000000",
+            "symbol": "ETH",
+            "name": "Ether",
+            "logo": "https://coin-images.coingecko.com/coins/images/279/large/ethereum.png?1696501628",
+            "decimals": 18,
+            "dollar_value": "2203.43994140625"
+          },
+          "type": "Transfer",
+          "from": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "to": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amount": "0.001",
+          "raw_amount": "1000000000000000",
+          "dollar_value": "2.20343994140625",
+          "from_before_balance": "0x38d7ea4c68000",
+          "to_before_balance": "0x473aeb53b8c597598e5ec"
+        }
+      ]
+    },
+    "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f": {
+      "hash": "0x94c9d84cf037dfb122e0579f6f78af7caa0fc9d82575e4b7a5d0660734643ba2",
+      "block_hash": "",
+      "block_number": 11720137,
+      "transaction_index": 0,
+      "timestamp": 1611515261,
+      "from": "0x51841D9AFe10fE55571bDB8f4Af1060415003528",
+      "to": "0xE11fc0B43ab98Eb91e9836129d1ee7c3Bc95df50",
+      "value": {
+        "wei": 0,
+        "eth": 0.0
+      },
+      "input_data": "0xbd1b820c000000000000000000000000798d1be841a82a273720ce31c822c61a67a601c30000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "function_signature": "0xbd1b820c",
+      "nonce": 424,
+      "gas": {
+        "limit": 779004,
+        "used": 425736,
+        "used_percentage": 54.65,
+        "waste_percentage": 45.35,
+        "price_wei": 99000000000,
+        "effective_price_wei": 99000000000,
+        "cumulative_used": 0
+      },
+      "cost": {
+        "total_wei": 42147864000000000,
+        "total_eth": 0.042147864
+      },
+      "status": {
+        "code": 1,
+        "success": true,
+        "description": "success"
+      },
+      "contract_address": "0xE11fc0B43ab98Eb91e9836129d1ee7c3Bc95df50",
+      "type_analysis": {
+        "transaction_type": "contract_call",
+        "is_contract_creation": true,
+        "is_contract_interaction": true,
+        "chain_id": 1
+      },
+      "log_analysis": {
+        "total_logs": 20,
+        "transfer_events": 0,
+        "interacted_addresses": [
+          "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac",
+          "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "0x798d1be841a82a273720ce31c822c61a67a601c3",
+          "0xfabec03b04279c6e73f27aaf25866acc844448ae",
+          "0xf41e354eb138b328d56957b36b7f814826708724",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2"
+        ],
+        "detailed_logs": [
+          "[TRANSFER] 0.000000000528629604 SushiSwap LP Token (Raw: 528629604, Decimals: 18, Address: 0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) | 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 -> SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3)",
+          "[MINT] 0.000000000000000372 SushiSwap LP Token (Raw: 372, Decimals: 18, Address: 0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) | 0x0000000000000000000000000000000000000000 -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "[BURN] 0.000000000528629604 SushiSwap LP Token (Raw: 528629604, Decimals: 18, Address: 0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) | SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) -> 0x0000000000000000000000000000000000000000",
+          "[TRANSFER] 2.7973651 Wrapped BTC (Raw: 279736510, Decimals: 8, Address: 0x2260fac5e5542a773aa44fbcfedf7c193bc2c599) | SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "[TRANSFER] 1.140602218 Digg (Raw: 1140602218, Decimals: 9, Address: 0x798d1be841a82a273720ce31c822c61a67a601c3) | SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "[SYNC] SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) | reserve0: 23910503523, reserve1: 97493077764",
+          "[BURN] SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) | sender: 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50, amount0: 279736510, amount1: 1140602218, to: 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "[TRANSFER] 1.140602218 Digg (Raw: 1140602218, Decimals: 9, Address: 0x798d1be841a82a273720ce31c822c61a67a601c3) | 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 -> SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724)",
+          "[TRANSFER] 0.000999984865427378 Wrapped Ether (Raw: 999984865427378, Decimals: 18, Address: 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2) | SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724) -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "[SYNC] SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724) | reserve0: 1140619429, reserve1: 15134572622",
+          "[SWAP] Contract: SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724) | Details: {'sender': '0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50', 'amount0In': '1140602218', 'amount1In': '0', 'amount0Out': '0', 'amount1Out': '999984865427378', 'to': '0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50'}",
+          "[TRANSFER] 2.7973651 Wrapped BTC (Raw: 279736510, Decimals: 8, Address: 0x2260fac5e5542a773aa44fbcfedf7c193bc2c599) | 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 -> 0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "[TRANSFER] 65.657225537064736037 Wrapped Ether (Raw: 65657225537064736037, Decimals: 18, Address: 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2) | 0xceff51756c56ceffca006cd410b03ffc46dd3a58 -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "[SYNC] 0xceff51756c56ceffca006cd410b03ffc46dd3a58 | reserve0: 812026822348, reserve1: 191099237619381658601240",
+          "[SWAP] Contract: 0xceff51756c56ceffca006cd410b03ffc46dd3a58 | Details: {'sender': '0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50', 'amount0In': '279736510', 'amount1In': '0', 'amount0Out': '0', 'amount1Out': '65657225537064736037', 'to': '0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50'}",
+          "[TRANSFER] 65.658225521930163415 Wrapped Ether (Raw: 65658225521930163415, Decimals: 18, Address: 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2) | 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 -> 0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "[TRANSFER] 10844.682068505278758672 SushiToken (Raw: 10844682068505278758672, Decimals: 18, Address: 0x6b3595068778dd592e39a122f4f5a5cf09c90fe2) | 0x795065dcc9f64b5614c407a6efdc400da6221fb0 -> 0x8798249c2e607446efb7ad49ec89dd1865ff4272",
+          "[SYNC] 0x795065dcc9f64b5614c407a6efdc400da6221fb0 | reserve0: 18644115142162672343185219, reserve1: 112606264801292553559595",
+          "[SWAP] Contract: 0x795065dcc9f64b5614c407a6efdc400da6221fb0 | Details: {'sender': '0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50', 'amount0In': '0', 'amount1In': '65658225521930163415', 'amount0Out': '10844682068505278758672', 'amount1Out': '0', 'to': '0x8798249c2e607446efb7ad49ec89dd1865ff4272'}",
+          "[LOGCONVERT] 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 | server: 0x51841d9afe10fe55571bdb8f4af1060415003528, token0: 0x798d1be841a82a273720ce31c822c61a67a601c3, token1: 0x2260fac5e5542a773aa44fbcfedf7c193bc2c599, amount0: 1140602218, amount1: 279736510, amountSUSHI: 10844682068505278758672"
+        ]
+      },
+      "state_diff": [
+        {
+          "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "soltype": {
+            "name": "balances",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "indexed": false
+          },
+          "original": {
+            "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": "24190240033",
+            "0xceff51756c56ceffca006cd410b03ffc46dd3a58": "811747085838"
+          },
+          "dirty": {
+            "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": "23910503523",
+            "0xceff51756c56ceffca006cd410b03ffc46dd3a58": "812026822348"
+          },
+          "raw": [
+            {
+              "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              "key": "0x14ac31782b75d0b8926aa44db6f6caf09df8257632d9c607f23247258a0f6d0b",
+              "original": "0x000000000000000000000000000000000000000000000000000000bcffe58e0e",
+              "dirty": "0x000000000000000000000000000000000000000000000000000000bd1091fecc"
+            },
+            {
+              "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              "key": "0xe8acf4e71944f21a87be322192ce1cecff81769ce0c309adb158120955039ba2",
+              "original": "0x00000000000000000000000000000000000000000000000000000005a1d9c521",
+              "dirty": "0x00000000000000000000000000000000000000000000000000000005912d5463"
+            }
+          ]
+        },
+        {
+          "address": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2",
+          "soltype": {
+            "name": "_balances",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "indexed": false
+          },
+          "original": {
+            "0x795065dcc9f64b5614c407a6efdc400da6221fb0": "18654959824231177621943891",
+            "0x8798249c2e607446efb7ad49ec89dd1865ff4272": "70396435282416227181112166"
+          },
+          "dirty": {
+            "0x795065dcc9f64b5614c407a6efdc400da6221fb0": "18644115142162672343185219",
+            "0x8798249c2e607446efb7ad49ec89dd1865ff4272": "70407279964484732459870838"
+          },
+          "raw": [
+            {
+              "address": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2",
+              "key": "0x7680d8abe5dc20991fcb0c7b95636582d139e7626e26f5e78ea0d53ad541434d",
+              "original": "0x0000000000000000000000000000000000000000003a3b066746a263c85bab66",
+              "dirty": "0x0000000000000000000000000000000000000000003a3d524b78f61b71eaea76"
+            },
+            {
+              "address": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2",
+              "key": "0xa60c07f2aed92cf0e2ca94448542cb8f5cc91bf932d411877ec1850bf66a155f",
+              "original": "0x0000000000000000000000000000000000000000000f6e5766010517b9513653",
+              "dirty": "0x0000000000000000000000000000000000000000000f6c0b81ceb1600fc1f743"
+            }
+          ]
+        },
+        {
+          "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "soltype": {
+            "name": "reserve1",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 112,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "112540606575770623396180",
+          "dirty": "112606264801292553559595",
+          "raw": [
+            {
+              "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc52d0000000017d4d6a866f9964dc9540000000f6e5766010517b9513653",
+              "dirty": "0x600dc57d0000000017d865d9473707701e2b0000000f6c0b81ceb1600fc1f743"
+            }
+          ]
+        },
+        {
+          "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "soltype": {
+            "name": "reserve0",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "18654959824231177621943891",
+          "dirty": "18644115142162672343185219",
+          "raw": [
+            {
+              "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc52d0000000017d4d6a866f9964dc9540000000f6e5766010517b9513653",
+              "dirty": "0x600dc57d0000000017d865d9473707701e2b0000000f6c0b81ceb1600fc1f743"
+            }
+          ]
+        },
+        {
+          "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "soltype": {
+            "name": "blockTimestampLast",
+            "type": "uint32",
+            "storage_location": "storage",
+            "offset": 224,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": 1611515181,
+          "dirty": 1611515261,
+          "raw": [
+            {
+              "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc52d0000000017d4d6a866f9964dc9540000000f6e5766010517b9513653",
+              "dirty": "0x600dc57d0000000017d865d9473707701e2b0000000f6c0b81ceb1600fc1f743"
+            }
+          ]
+        },
+        {
+          "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "soltype": {
+            "name": "price0CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000009",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "203912105432065918892584359178490430249",
+          "dirty": "203914611336097819149807150872297743769",
+          "raw": [
+            {
+              "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000009",
+              "original": "0x0000000000000000000000000000000099680b013a01d9484769469cda594329",
+              "dirty": "0x000000000000000000000000000000009968868e2ea1f482769ad17e07882599"
+            }
+          ]
+        },
+        {
+          "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "soltype": {
+            "name": "price1CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x000000000000000000000000000000000000000000000000000000000000000a",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "22485359610699067495727309223125738039477469",
+          "dirty": "22485428465554031323755159348006853447118429",
+          "raw": [
+            {
+              "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000a",
+              "original": "0x0000000000000000000000000001021e887274c0b42f18eff8449b3d3f2b04dd",
+              "dirty": "0x0000000000000000000000000001021ebc3f6b3427643e62d7c30f12f319ee5d"
+            }
+          ]
+        },
+        {
+          "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+          "soltype": {
+            "name": "_shareBalances",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+            "indexed": false
+          },
+          "original": {
+            "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": "2548999796606561520770947284270713884576873400965723590661806371107195649365",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "444785548985223824553155131163142118597960528125445440402181301320203"
+          },
+          "dirty": {
+            "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": "2519523102416398604989657899487565850161554545079584815950243138039741703051",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "29477138975711901005113937938279197557437453846666900157003635248755266517"
+          },
+          "raw": [
+            {
+              "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+              "key": "0x39db55f021b976dbb1c25a07923d2b96db02c15700924f5ddabb3ca24a5d270f",
+              "original": "0x000000107f7dc6abb25c30ccb0a6f5659b904c9ec5dd48fd9742422053b9ba0b",
+              "dirty": "0x0010aef7da185520e9dd2a367d240bb760751e96b8764f6e3751976e6b8e53d5"
+            },
+            {
+              "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+              "key": "0x646d6143e9b226942c733a9c81bf781a537dbface8dfb7589b79b7af8e8c60c1",
+              "original": "0x05a2aec93c9b05838c0d15de3bd178f028b7673c043027fad593bff86e7cfd55",
+              "dirty": "0x0591ffe1e200770e548c1c746f54629e63d295441197218a35846aaa56a8638b"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "totalSupply",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "45713292422",
+          "dirty": "45184663190",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "original": "0x0000000000000000000000000000000000000000000000000000000aa4b97c86",
+              "dirty": "0x0000000000000000000000000000000000000000000000000000000a85373e96"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "blockTimestampLast",
+            "type": "uint32",
+            "storage_location": "storage",
+            "offset": 224,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": 1611514957,
+          "dirty": 1611515261,
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc44d00000000000000000016f706846e00000000000000000005a1d9c521",
+              "dirty": "0x600dc57d00000000000000000016b30a4f0400000000000000000005912d5463"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "reserve1",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 112,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "98633679982",
+          "dirty": "97493077764",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc44d00000000000000000016f706846e00000000000000000005a1d9c521",
+              "dirty": "0x600dc57d00000000000000000016b30a4f0400000000000000000005912d5463"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "reserve0",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "24190240033",
+          "dirty": "23910503523",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc44d00000000000000000016f706846e00000000000000000005a1d9c521",
+              "dirty": "0x600dc57d00000000000000000016b30a4f0400000000000000000005912d5463"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "price0CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000009",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "4581079719476338913307693743916153566819",
+          "dirty": "4587515750916678342310376543386605265347",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000009",
+              "original": "0x0000000000000000000000000000000d766bdc6654e2351e2f622dd8eef7f663",
+              "dirty": "0x0000000000000000000000000000000d7b43653fbd90b8ab5e08f87733f921c3"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "price1CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x000000000000000000000000000000000000000000000000000000000000000a",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "158114745809835415235143177725816057591",
+          "dirty": "158501867975767530855225543832422627255",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000a",
+              "original": "0x0000000000000000000000000000000076f3cad82225ecb4a7afd6a6282faef7",
+              "dirty": "0x00000000000000000000000000000000773e5970cf3281c10cf2bb4c5a10b7b7"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "kLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x000000000000000000000000000000000000000000000000000000000000000b",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "2385972160484266630104",
+          "dirty": "2331108579344234962572",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000b",
+              "original": "0x0000000000000000000000000000000000000000000000815803ee89c4065bd8",
+              "dirty": "0x00000000000000000000000000000000000000000000007e5ea1562bc69dde8c"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "balanceOf",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000001",
+            "indexed": false
+          },
+          "original": {
+            "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50": "528629604"
+          },
+          "dirty": {
+            "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50": "372"
+          },
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x9058b6d4e584dfbf42c919272a856e58e1145461a3adb3422d51a605645b8ca7",
+              "original": "0x000000000000000000000000000000000000000000000000000000001f823f64",
+              "dirty": "0x0000000000000000000000000000000000000000000000000000000000000174"
+            }
+          ]
+        },
+        {
+          "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "soltype": {
+            "name": "balanceOf",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000003",
+            "indexed": false
+          },
+          "original": {
+            "0x795065dcc9f64b5614c407a6efdc400da6221fb0": "112540606575770623396180",
+            "0xceff51756c56ceffca006cd410b03ffc46dd3a58": "191164894844918723337277",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "1000000000000000"
+          },
+          "dirty": {
+            "0x795065dcc9f64b5614c407a6efdc400da6221fb0": "112606264801292553559595",
+            "0xceff51756c56ceffca006cd410b03ffc46dd3a58": "191099237619381658601240",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "15134572622"
+          },
+          "raw": [
+            {
+              "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "key": "0x20db7a6b0cae05dc43c7588d71a84c7675222d2a6ca56a16f22ea9ae044b0146",
+              "original": "0x0000000000000000000000000000000000000000000017d4d6a866f9964dc954",
+              "dirty": "0x0000000000000000000000000000000000000000000017d865d9473707701e2b"
+            },
+            {
+              "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "key": "0x36f24f1a13b1605a12efeae03b95d767f9348b9f6e556c8bca57d1b16e3df44e",
+              "original": "0x00000000000000000000000000000000000000000000000000038d7ea4c68000",
+              "dirty": "0x000000000000000000000000000000000000000000000000000000038617404e"
+            },
+            {
+              "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "key": "0x96693869bd9caff1b0916c4e11fe79467174d34d9d4aad910b52d5a6333d2192",
+              "original": "0x00000000000000000000000000000000000000000000287b11d8d26ebb015c3d",
+              "dirty": "0x00000000000000000000000000000000000000000000287782ab7fac688e4718"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "blockTimestampLast",
+            "type": "uint32",
+            "storage_location": "storage",
+            "offset": 224,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": 1611515083,
+          "dirty": 1611515261,
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4cb00000000287b11d8d26ebb015c3d000000000000000000bcffe58e0e",
+              "dirty": "0x600dc57d00000000287782ab7fac688e4718000000000000000000bd1091fecc"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "reserve0",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "811747085838",
+          "dirty": "812026822348",
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4cb00000000287b11d8d26ebb015c3d000000000000000000bcffe58e0e",
+              "dirty": "0x600dc57d00000000287782ab7fac688e4718000000000000000000bd1091fecc"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "reserve1",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 112,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "191164894844918723337277",
+          "dirty": "191099237619381658601240",
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4cb00000000287b11d8d26ebb015c3d000000000000000000bcffe58e0e",
+              "dirty": "0x600dc57d00000000287782ab7fac688e4718000000000000000000bd1091fecc"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "price0CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000009",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "18146567188827555377824348884559739074623317118698951",
+          "dirty": "18146784842961768190179016243296041346030272396950197",
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000009",
+              "original": "0x000000000000000000003080629780c9acc9fcc258f01ca92327e3739dde45c7",
+              "dirty": "0x00000000000000000000308088b773b6acf75aa00a301c1b54eecc5756c47ab5"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "price1CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x000000000000000000000000000000000000000000000000000000000000000a",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "11064007347144174068966114058779",
+          "dirty": "11064011271714471303953735484095",
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000a",
+              "original": "0x000000000000000000000000000000000000008ba5bc5fec76fd9dda7dc5e21b",
+              "dirty": "0x000000000000000000000000000000000000008ba5bf9efbd8d0047b1aec02bf"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "reserve0",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "17211",
+          "dirty": "1140619429",
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4d900000000000000038d7ea4c68000000000000000000000000000433b",
+              "dirty": "0x600dc57d000000000000000000038617404e0000000000000000000043fc78a5"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "blockTimestampLast",
+            "type": "uint32",
+            "storage_location": "storage",
+            "offset": 224,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": 1611515097,
+          "dirty": 1611515261,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4d900000000000000038d7ea4c68000000000000000000000000000433b",
+              "dirty": "0x600dc57d000000000000000000038617404e0000000000000000000043fc78a5"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "reserve1",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 112,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "1000000000000000",
+          "dirty": "15134572622",
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4d900000000000000038d7ea4c68000000000000000000000000000433b",
+              "dirty": "0x600dc57d000000000000000000038617404e0000000000000000000043fc78a5"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "price0CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000009",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "0",
+          "dirty": "49476304967736431995758607750397753994538376576",
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000009",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x00000000000000000000000008aa9820790bdad081b3fe27d548018c02cbdd80"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "price1CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x000000000000000000000000000000000000000000000000000000000000000a",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "0",
+          "dirty": "14655797882087838603600632",
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000a",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x0000000000000000000000000000000000000000000c1f7c65296dcac45ce2f8"
+            }
+          ]
+        }
+      ],
+      "balance_diff": [
+        {
+          "address": "0x51841D9AFe10fE55571bDB8f4Af1060415003528",
+          "original": "23553641319304785243",
+          "dirty": "23511493455304785243",
+          "is_miner": false
+        },
+        {
+          "address": "0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c",
+          "original": "28313298087270160531",
+          "dirty": "28355445951270160531",
+          "is_miner": true
+        }
+      ],
+      "balance_changes": [
+        {
+          "address": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "dollar_value": "146147.522058403126113",
+          "transfers": [
+            9,
+            10
+          ]
+        },
+        {
+          "address": "0x8798249c2e607446efb7ad49ec89dd1865ff4272",
+          "dollar_value": "2510.5872046326988285237",
+          "transfers": [
+            10
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "dollar_value": "-213128.98521432010993",
+          "transfers": [
+            0,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "dollar_value": "64229.233663014872224",
+          "transfers": [
+            7,
+            8
+          ]
+        },
+        {
+          "address": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "dollar_value": "0",
+          "transfers": [
+            0,
+            1,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "dollar_value": "241.64228826941276282",
+          "transfers": [
+            5,
+            6
+          ]
+        }
+      ],
+      "asset_changes": [
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+            "symbol": "SLP",
+            "name": "SushiSwap LP Token",
+            "decimals": 18,
+            "dollar_value": "0"
+          },
+          "type": "Transfer",
+          "from": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "to": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "amount": "0.000000000528629604",
+          "raw_amount": "528629604",
+          "dollar_value": "0",
+          "from_before_balance": "0x1f823f64",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+            "symbol": "SLP",
+            "name": "SushiSwap LP Token",
+            "decimals": 18,
+            "dollar_value": "0"
+          },
+          "type": "Mint",
+          "to": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "amount": "0.000000000000000372",
+          "raw_amount": "372",
+          "dollar_value": "0",
+          "from_before_balance": "0x0",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+            "symbol": "SLP",
+            "name": "SushiSwap LP Token",
+            "decimals": 18,
+            "dollar_value": "0"
+          },
+          "type": "Burn",
+          "from": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "amount": "0.000000000528629604",
+          "raw_amount": "528629604",
+          "dollar_value": "0",
+          "from_before_balance": "0x1f823f64",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            "symbol": "wbtc",
+            "name": "Wrapped Bitcoin",
+            "logo": "https://coin-images.coingecko.com/coins/images/7598/large/WBTCLOGO.png?1764496367",
+            "decimals": 8,
+            "dollar_value": "76102"
+          },
+          "type": "Transfer",
+          "from": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "to": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "amount": "2.7973651",
+          "raw_amount": "279736510",
+          "dollar_value": "212885.0788402",
+          "from_before_balance": "0x5a1d9c521",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+            "symbol": "digg",
+            "name": "DIGG",
+            "logo": "https://coin-images.coingecko.com/coins/images/13737/large/digg.PNG?1696513481",
+            "decimals": 9,
+            "dollar_value": "213.83999633789062"
+          },
+          "type": "Transfer",
+          "from": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "to": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "amount": "1.140602218",
+          "raw_amount": "1140602218",
+          "dollar_value": "243.90637412010992431",
+          "from_before_balance": "0x5a2aec93c9b05838c0d15de3bd178f028b7673c043027fad593bff86e7cfd55",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+            "symbol": "digg",
+            "name": "DIGG",
+            "logo": "https://coin-images.coingecko.com/coins/images/13737/large/digg.PNG?1696513481",
+            "decimals": 9,
+            "dollar_value": "213.83999633789062"
+          },
+          "type": "Transfer",
+          "from": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "to": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "amount": "1.140602218",
+          "raw_amount": "1140602218",
+          "dollar_value": "243.90637412010992431",
+          "from_before_balance": "0x43fc356a",
+          "to_before_balance": "0x107f7dc6abb25c30ccb0a6f5659b904c9ec5dd48fd9742422053b9ba0b"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "symbol": "weth",
+            "name": "WETH",
+            "logo": "https://coin-images.coingecko.com/coins/images/2518/large/weth.png?1696503332",
+            "decimals": 18,
+            "dollar_value": "2264.1201171875"
+          },
+          "type": "Transfer",
+          "from": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "to": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "amount": "0.000999984865427378",
+          "raw_amount": "999984865427378",
+          "dollar_value": "2.2640858506971614948",
+          "from_before_balance": "0x38d7ea4c68000",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            "symbol": "wbtc",
+            "name": "Wrapped Bitcoin",
+            "logo": "https://coin-images.coingecko.com/coins/images/7598/large/WBTCLOGO.png?1764496367",
+            "decimals": 8,
+            "dollar_value": "76102"
+          },
+          "type": "Transfer",
+          "from": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "to": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "amount": "2.7973651",
+          "raw_amount": "279736510",
+          "dollar_value": "212885.0788402",
+          "from_before_balance": "0x10ac70be",
+          "to_before_balance": "0xbcffe58e0e"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "symbol": "weth",
+            "name": "WETH",
+            "logo": "https://coin-images.coingecko.com/coins/images/2518/large/weth.png?1696503332",
+            "decimals": 18,
+            "dollar_value": "2264.1201171875"
+          },
+          "type": "Transfer",
+          "from": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "to": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "amount": "65.657225537064736036",
+          "raw_amount": "65657225537064736037",
+          "dollar_value": "148655.845177185127778",
+          "from_before_balance": "0x287b11d8d26ebb015c3d",
+          "to_before_balance": "0x38d7b1eaf3fb2"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "symbol": "weth",
+            "name": "WETH",
+            "logo": "https://coin-images.coingecko.com/coins/images/2518/large/weth.png?1696503332",
+            "decimals": 18,
+            "dollar_value": "2264.1201171875"
+          },
+          "type": "Transfer",
+          "from": "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50",
+          "to": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "amount": "65.658225521930163414",
+          "raw_amount": "65658225521930163415",
+          "dollar_value": "148658.10926303582494",
+          "from_before_balance": "0x38f30e03d712254d7",
+          "to_before_balance": "0x17d4d6a866f9964dc954"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2",
+            "symbol": "sushi",
+            "name": "Sushi",
+            "logo": "https://coin-images.coingecko.com/coins/images/12271/large/512x512_Logo_no_chop.png?1696512101",
+            "decimals": 18,
+            "dollar_value": "0.23150399327278137"
+          },
+          "type": "Transfer",
+          "from": "0x795065dcc9f64b5614c407a6efdc400da6221fb0",
+          "to": "0x8798249c2e607446efb7ad49ec89dd1865ff4272",
+          "amount": "10844.682068505278758672",
+          "raw_amount": "10844682068505278758672",
+          "dollar_value": "2510.5872046326988285237",
+          "from_before_balance": "0xf6e5766010517b9513653",
+          "to_before_balance": "0x3a3b066746a263c85bab66"
+        }
+      ]
+    },
+    "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9": {
+      "hash": "0x868fee3bbf8079f317c7d9626e51ee22cb25dac7df1cac6cf70a643decdc44cd",
+      "block_hash": "",
+      "block_number": 11720137,
+      "transaction_index": 0,
+      "timestamp": 1611515261,
+      "from": "0x51841D9AFe10fE55571bDB8f4Af1060415003528",
+      "to": "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+      "value": {
+        "wei": 1000000000000000,
+        "eth": 0.001
+      },
+      "input_data": "0xb6f9de950000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000051841d9afe10fe55571bdb8f4af1060415003528ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000004000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000798d1be841a82a273720ce31c822c61a67a601c30000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "function_signature": "0xb6f9de95",
+      "nonce": 424,
+      "gas": {
+        "limit": 986666,
+        "used": 292644,
+        "used_percentage": 29.66,
+        "waste_percentage": 70.34,
+        "price_wei": 100000000000,
+        "effective_price_wei": 100000000000,
+        "cumulative_used": 0
+      },
+      "cost": {
+        "total_wei": 29264400000000000,
+        "total_eth": 0.0292644
+      },
+      "status": {
+        "code": 1,
+        "success": true,
+        "description": "success"
+      },
+      "contract_address": "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+      "type_analysis": {
+        "transaction_type": "contract_call",
+        "is_contract_creation": true,
+        "is_contract_interaction": true,
+        "chain_id": 1
+      },
+      "log_analysis": {
+        "total_logs": 11,
+        "transfer_events": 0,
+        "interacted_addresses": [
+          "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0xf41e354eb138b328d56957b36b7f814826708724",
+          "0x798d1be841a82a273720ce31c822c61a67a601c3",
+          "0xfabec03b04279c6e73f27aaf25866acc844448ae",
+          "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "0xceff51756c56ceffca006cd410b03ffc46dd3a58"
+        ],
+        "detailed_logs": [
+          "[DEPOSIT] Wrapped Ether(0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2) | dst: 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f, wad: 1000000000000000",
+          "[TRANSFER] 0.001 Wrapped Ether (Raw: 1000000000000000, Decimals: 18, Address: 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2) | 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f -> SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724)",
+          "[TRANSFER] 0.000008592 Digg (Raw: 8592, Decimals: 9, Address: 0x798d1be841a82a273720ce31c822c61a67a601c3) | SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724) -> SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3)",
+          "[SYNC] SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724) | reserve0: 8619, reserve1: 2000000000000000",
+          "[SWAP] Contract: SushiSwap LP Token(0xf41e354eb138b328d56957b36b7f814826708724) | Details: {'sender': '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f', 'amount0In': '0', 'amount1In': '1000000000000000', 'amount0Out': '8592', 'amount1Out': '0', 'to': '0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3'}",
+          "[TRANSFER] 0.000021 Wrapped BTC (Raw: 2100, Decimals: 8, Address: 0x2260fac5e5542a773aa44fbcfedf7c193bc2c599) | SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) -> 0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "[SYNC] SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) | reserve0: 24190237933, reserve1: 98633688574",
+          "[SWAP] Contract: SushiSwap LP Token(0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3) | Details: {'sender': '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f', 'amount0In': '0', 'amount1In': '8592', 'amount0Out': '2100', 'amount1Out': '0', 'to': '0xceff51756c56ceffca006cd410b03ffc46dd3a58'}",
+          "[TRANSFER] 0.000493062366699223 Wrapped Ether (Raw: 493062366699223, Decimals: 18, Address: 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2) | 0xceff51756c56ceffca006cd410b03ffc46dd3a58 -> 0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "[SYNC] 0xceff51756c56ceffca006cd410b03ffc46dd3a58 | reserve0: 811747087938, reserve1: 191164894351856356638054",
+          "[SWAP] Contract: 0xceff51756c56ceffca006cd410b03ffc46dd3a58 | Details: {'sender': '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f', 'amount0In': '2100', 'amount1In': '0', 'amount0Out': '0', 'amount1Out': '493062366699223', 'to': '0x51841d9afe10fe55571bdb8f4af1060415003528'}"
+        ]
+      },
+      "state_diff": [
+        {
+          "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "soltype": {
+            "name": "balances",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "indexed": false
+          },
+          "original": {
+            "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": "24190240033",
+            "0xceff51756c56ceffca006cd410b03ffc46dd3a58": "811747085838"
+          },
+          "dirty": {
+            "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": "24190237933",
+            "0xceff51756c56ceffca006cd410b03ffc46dd3a58": "811747087938"
+          },
+          "raw": [
+            {
+              "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              "key": "0x14ac31782b75d0b8926aa44db6f6caf09df8257632d9c607f23247258a0f6d0b",
+              "original": "0x000000000000000000000000000000000000000000000000000000bcffe58e0e",
+              "dirty": "0x000000000000000000000000000000000000000000000000000000bcffe59642"
+            },
+            {
+              "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+              "key": "0xe8acf4e71944f21a87be322192ce1cecff81769ce0c309adb158120955039ba2",
+              "original": "0x00000000000000000000000000000000000000000000000000000005a1d9c521",
+              "dirty": "0x00000000000000000000000000000000000000000000000000000005a1d9bced"
+            }
+          ]
+        },
+        {
+          "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+          "soltype": {
+            "name": "_shareBalances",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x00000000000000000000000000000000000000000000000000000000000000a1",
+            "indexed": false
+          },
+          "original": {
+            "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": "2548999796606561520770947284270713884576873400965723590661806371107195649365",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "444785548985223824553155131163142118597960528125445440402181301320203"
+          },
+          "dirty": {
+            "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": "2549000018650454198770081591441063483886447684486545021945707593322159390181",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "222741656307224690245984781563832544314439706694161539179966337579387"
+          },
+          "raw": [
+            {
+              "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+              "key": "0x39db55f021b976dbb1c25a07923d2b96db02c15700924f5ddabb3ca24a5d270f",
+              "original": "0x000000107f7dc6abb25c30ccb0a6f5659b904c9ec5dd48fd9742422053b9ba0b",
+              "dirty": "0x00000008430ef9058748010e4961d8493d4de2a21016dd6c90b0a492c132f97b"
+            },
+            {
+              "address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+              "key": "0x646d6143e9b226942c733a9c81bf781a537dbface8dfb7589b79b7af8e8c60c1",
+              "original": "0x05a2aec93c9b05838c0d15de3bd178f028b7673c043027fad593bff86e7cfd55",
+              "dirty": "0x05a2aed17909d329b721459ca316960c86f9d138b9f6938bdc255d860103bde5"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "reserve0",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "24190240033",
+          "dirty": "24190237933",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc44d00000000000000000016f706846e00000000000000000005a1d9c521",
+              "dirty": "0x600dc57d00000000000000000016f706a5fe00000000000000000005a1d9bced"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "reserve1",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 112,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "98633679982",
+          "dirty": "98633688574",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc44d00000000000000000016f706846e00000000000000000005a1d9c521",
+              "dirty": "0x600dc57d00000000000000000016f706a5fe00000000000000000005a1d9bced"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "blockTimestampLast",
+            "type": "uint32",
+            "storage_location": "storage",
+            "offset": 224,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": 1611514957,
+          "dirty": 1611515261,
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc44d00000000000000000016f706846e00000000000000000005a1d9c521",
+              "dirty": "0x600dc57d00000000000000000016f706a5fe00000000000000000005a1d9bced"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "price0CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000009",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "4581079719476338913307693743916153566819",
+          "dirty": "4587515750916678342310376543386605265347",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000009",
+              "original": "0x0000000000000000000000000000000d766bdc6654e2351e2f622dd8eef7f663",
+              "dirty": "0x0000000000000000000000000000000d7b43653fbd90b8ab5e08f87733f921c3"
+            }
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "soltype": {
+            "name": "price1CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x000000000000000000000000000000000000000000000000000000000000000a",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "158114745809835415235143177725816057591",
+          "dirty": "158501867975767530855225543832422627255",
+          "raw": [
+            {
+              "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000a",
+              "original": "0x0000000000000000000000000000000076f3cad82225ecb4a7afd6a6282faef7",
+              "dirty": "0x00000000000000000000000000000000773e5970cf3281c10cf2bb4c5a10b7b7"
+            }
+          ]
+        },
+        {
+          "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "soltype": {
+            "name": "balanceOf",
+            "type": "mapping (address => uint256)",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000003",
+            "indexed": false
+          },
+          "original": {
+            "0x51841d9afe10fe55571bdb8f4af1060415003528": "3123682304441098365",
+            "0xceff51756c56ceffca006cd410b03ffc46dd3a58": "191164894844918723337277",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "1000000000000000"
+          },
+          "dirty": {
+            "0x51841d9afe10fe55571bdb8f4af1060415003528": "3124175366807797588",
+            "0xceff51756c56ceffca006cd410b03ffc46dd3a58": "191164894351856356638054",
+            "0xf41e354eb138b328d56957b36b7f814826708724": "2000000000000000"
+          },
+          "raw": [
+            {
+              "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "key": "0x36f24f1a13b1605a12efeae03b95d767f9348b9f6e556c8bca57d1b16e3df44e",
+              "original": "0x00000000000000000000000000000000000000000000000000038d7ea4c68000",
+              "dirty": "0x00000000000000000000000000000000000000000000000000071afd498d0000"
+            },
+            {
+              "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "key": "0x75253f5d62cef9f0b590f50b8a0a10aa95567b4182286a8d84d0450498897919",
+              "original": "0x0000000000000000000000000000000000000000000000002b598c818362a07d",
+              "dirty": "0x0000000000000000000000000000000000000000000000002b5b4cf18a9abf54"
+            },
+            {
+              "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "key": "0x96693869bd9caff1b0916c4e11fe79467174d34d9d4aad910b52d5a6333d2192",
+              "original": "0x00000000000000000000000000000000000000000000287b11d8d26ebb015c3d",
+              "dirty": "0x00000000000000000000000000000000000000000000287b11d711feb3c93d66"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "reserve0",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "811747085838",
+          "dirty": "811747087938",
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4cb00000000287b11d8d26ebb015c3d000000000000000000bcffe58e0e",
+              "dirty": "0x600dc57d00000000287b11d711feb3c93d66000000000000000000bcffe59642"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "reserve1",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 112,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "191164894844918723337277",
+          "dirty": "191164894351856356638054",
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4cb00000000287b11d8d26ebb015c3d000000000000000000bcffe58e0e",
+              "dirty": "0x600dc57d00000000287b11d711feb3c93d66000000000000000000bcffe59642"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "blockTimestampLast",
+            "type": "uint32",
+            "storage_location": "storage",
+            "offset": 224,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": 1611515083,
+          "dirty": 1611515261,
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4cb00000000287b11d8d26ebb015c3d000000000000000000bcffe58e0e",
+              "dirty": "0x600dc57d00000000287b11d711feb3c93d66000000000000000000bcffe59642"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "price0CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000009",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "18146567188827555377824348884559739074623317118698951",
+          "dirty": "18146784842961768190179016243296041346030272396950197",
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000009",
+              "original": "0x000000000000000000003080629780c9acc9fcc258f01ca92327e3739dde45c7",
+              "dirty": "0x00000000000000000000308088b773b6acf75aa00a301c1b54eecc5756c47ab5"
+            }
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "soltype": {
+            "name": "price1CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x000000000000000000000000000000000000000000000000000000000000000a",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "11064007347144174068966114058779",
+          "dirty": "11064011271714471303953735484095",
+          "raw": [
+            {
+              "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000a",
+              "original": "0x000000000000000000000000000000000000008ba5bc5fec76fd9dda7dc5e21b",
+              "dirty": "0x000000000000000000000000000000000000008ba5bf9efbd8d0047b1aec02bf"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "blockTimestampLast",
+            "type": "uint32",
+            "storage_location": "storage",
+            "offset": 224,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": 1611515097,
+          "dirty": 1611515261,
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4d900000000000000038d7ea4c68000000000000000000000000000433b",
+              "dirty": "0x600dc57d00000000000000071afd498d000000000000000000000000000021ab"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "reserve0",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "17211",
+          "dirty": "8619",
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4d900000000000000038d7ea4c68000000000000000000000000000433b",
+              "dirty": "0x600dc57d00000000000000071afd498d000000000000000000000000000021ab"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "reserve1",
+            "type": "uint112",
+            "storage_location": "storage",
+            "offset": 112,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000008",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "1000000000000000",
+          "dirty": "2000000000000000",
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000008",
+              "original": "0x600dc4d900000000000000038d7ea4c68000000000000000000000000000433b",
+              "dirty": "0x600dc57d00000000000000071afd498d000000000000000000000000000021ab"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "price0CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x0000000000000000000000000000000000000000000000000000000000000009",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "0",
+          "dirty": "49476304967736431995758607750397753994538376576",
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000009",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x00000000000000000000000008aa9820790bdad081b3fe27d548018c02cbdd80"
+            }
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "soltype": {
+            "name": "price1CumulativeLast",
+            "type": "uint256",
+            "storage_location": "storage",
+            "offset": 0,
+            "index": "0x000000000000000000000000000000000000000000000000000000000000000a",
+            "indexed": false,
+            "simple_type": {
+              "type": "uint"
+            }
+          },
+          "original": "0",
+          "dirty": "14655797882087838603600632",
+          "raw": [
+            {
+              "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+              "key": "0x000000000000000000000000000000000000000000000000000000000000000a",
+              "original": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "dirty": "0x0000000000000000000000000000000000000000000c1f7c65296dcac45ce2f8"
+            }
+          ]
+        }
+      ],
+      "balance_diff": [
+        {
+          "address": "0x51841D9AFe10fE55571bDB8f4Af1060415003528",
+          "original": "23553641319304785243",
+          "dirty": "23523376919304785243",
+          "is_miner": false
+        },
+        {
+          "address": "0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c",
+          "original": "28313298087270160531",
+          "dirty": "28342562487270160531",
+          "is_miner": true
+        },
+        {
+          "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "original": "5381996373692964556668274",
+          "dirty": "5381996374692964556668274",
+          "is_miner": false
+        }
+      ],
+      "balance_changes": [
+        {
+          "address": "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "dollar_value": "-1.0870875179344591236",
+          "transfers": [
+            4,
+            5
+          ]
+        },
+        {
+          "address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "dollar_value": "-1.5963046867514648437",
+          "transfers": [
+            2,
+            3
+          ]
+        },
+        {
+          "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "dollar_value": "2.20343994140625",
+          "transfers": [
+            6
+          ]
+        },
+        {
+          "address": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "dollar_value": "0.48178957652820912356",
+          "transfers": [
+            3,
+            4
+          ]
+        },
+        {
+          "address": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "dollar_value": "0",
+          "transfers": [
+            0,
+            1,
+            5,
+            6
+          ]
+        },
+        {
+          "address": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "dollar_value": "2.2622828039389648435",
+          "transfers": [
+            1,
+            2
+          ]
+        }
+      ],
+      "asset_changes": [
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "symbol": "weth",
+            "name": "WETH",
+            "logo": "https://coin-images.coingecko.com/coins/images/2518/large/weth.png?1696503332",
+            "decimals": 18,
+            "dollar_value": "2264.1201171875"
+          },
+          "type": "Mint",
+          "to": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "amount": "0.001",
+          "raw_amount": "1000000000000000",
+          "dollar_value": "2.2641201171874999999",
+          "from_before_balance": "0x0",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "symbol": "weth",
+            "name": "WETH",
+            "logo": "https://coin-images.coingecko.com/coins/images/2518/large/weth.png?1696503332",
+            "decimals": 18,
+            "dollar_value": "2264.1201171875"
+          },
+          "type": "Transfer",
+          "from": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "to": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "amount": "0.001",
+          "raw_amount": "1000000000000000",
+          "dollar_value": "2.2641201171874999999",
+          "from_before_balance": "0x38d7ea4c68000",
+          "to_before_balance": "0x38d7ea4c68000"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+            "symbol": "digg",
+            "name": "DIGG",
+            "logo": "https://coin-images.coingecko.com/coins/images/13737/large/digg.PNG?1696513481",
+            "decimals": 9,
+            "dollar_value": "213.83999633789062"
+          },
+          "type": "Transfer",
+          "from": "0xf41e354eb138b328d56957b36b7f814826708724",
+          "to": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "amount": "0.000008592",
+          "raw_amount": "8592",
+          "dollar_value": "0.0018373132485351562499",
+          "from_before_balance": "0x107f7dc6abb25c30ccb0a6f5659b904c9ec5dd48fd9742422053b9ba0b",
+          "to_before_balance": "0x5a2aec93c9b05838c0d15de3bd178f028b7673c043027fad593bff86e7cfd55"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            "symbol": "wbtc",
+            "name": "Wrapped Bitcoin",
+            "logo": "https://coin-images.coingecko.com/coins/images/7598/large/WBTCLOGO.png?1764496367",
+            "decimals": 8,
+            "dollar_value": "76102"
+          },
+          "type": "Transfer",
+          "from": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+          "to": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "amount": "0.000021",
+          "raw_amount": "2100",
+          "dollar_value": "1.598142",
+          "from_before_balance": "0x5a1d9c521",
+          "to_before_balance": "0xbcffe58e0e"
+        },
+        {
+          "token_info": {
+            "standard": "ERC20",
+            "type": "Fungible",
+            "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "symbol": "weth",
+            "name": "WETH",
+            "logo": "https://coin-images.coingecko.com/coins/images/2518/large/weth.png?1696503332",
+            "decimals": 18,
+            "dollar_value": "2264.1201171875"
+          },
+          "type": "Transfer",
+          "from": "0xceff51756c56ceffca006cd410b03ffc46dd3a58",
+          "to": "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "amount": "0.000493062366699223",
+          "raw_amount": "493062366699223",
+          "dollar_value": "1.1163524234717908764",
+          "from_before_balance": "0x287b11d8d26ebb015c3d",
+          "to_before_balance": "0x2b598c818362a07d"
+        },
+        {
+          "token_info": {
+            "standard": "NativeCurrency",
+            "type": "Fungible",
+            "contract_address": "0x0000000000000000000000000000000000000000",
+            "symbol": "ETH",
+            "name": "Ether",
+            "logo": "https://coin-images.coingecko.com/coins/images/279/large/ethereum.png?1696501628",
+            "decimals": 18,
+            "dollar_value": "2203.43994140625"
+          },
+          "type": "Transfer",
+          "from": "0x51841d9afe10fe55571bdb8f4af1060415003528",
+          "to": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "amount": "0.001",
+          "raw_amount": "1000000000000000",
+          "dollar_value": "2.20343994140625",
+          "from_before_balance": "0x146df57fcc41fed5b",
+          "to_before_balance": "0x0"
+        },
+        {
+          "token_info": {
+            "standard": "NativeCurrency",
+            "type": "Fungible",
+            "contract_address": "0x0000000000000000000000000000000000000000",
+            "symbol": "ETH",
+            "name": "Ether",
+            "logo": "https://coin-images.coingecko.com/coins/images/279/large/ethereum.png?1696501628",
+            "decimals": 18,
+            "dollar_value": "2203.43994140625"
+          },
+          "type": "Transfer",
+          "from": "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",
+          "to": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amount": "0.001",
+          "raw_amount": "1000000000000000",
+          "dollar_value": "2.20343994140625",
+          "from_before_balance": "0x38d7ea4c68000",
+          "to_before_balance": "0x473ae9ba812dd31a67d72"
+        }
+      ]
+    }
+  },
+  "transaction_to_property": {
+    "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f": [
+      {
+        "contract_address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+        "name": "Digg",
+        "token_symbol": "DIGG",
+        "decimals": 9,
+        "total_supply": 573926523410
+      },
+      {
+        "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "name": "Wrapped Ether",
+        "token_symbol": "WETH",
+        "decimals": 18,
+        "total_supply": 2212018751637112318773304
+      },
+      {
+        "contract_address": "0xf41e354eb138b328d56957b36b7f814826708724",
+        "name": "SushiSwap LP Token",
+        "token_symbol": "SLP",
+        "decimals": 18,
+        "total_supply": 244855547279
+      }
+    ],
+    "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f": [
+      {
+        "contract_address": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3",
+        "name": "SushiSwap LP Token",
+        "token_symbol": "SLP",
+        "decimals": 18,
+        "total_supply": 6027849141
+      },
+      {
+        "contract_address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+        "name": "Wrapped BTC",
+        "token_symbol": "WBTC",
+        "decimals": 8,
+        "total_supply": 12141446883569
+      },
+      {
+        "contract_address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+        "name": "Digg",
+        "token_symbol": "DIGG",
+        "decimals": 9,
+        "total_supply": 573926523410
+      },
+      {
+        "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "name": "Wrapped Ether",
+        "token_symbol": "WETH",
+        "decimals": 18,
+        "total_supply": 2212018751637112318773304
+      },
+      {
+        "contract_address": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2",
+        "name": "SushiToken",
+        "token_symbol": "SUSHI",
+        "decimals": 18,
+        "total_supply": 287676365314802845010395247
+      }
+    ],
+    "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9": [
+      {
+        "contract_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "name": "Wrapped Ether",
+        "token_symbol": "WETH",
+        "decimals": 18,
+        "total_supply": 2212018751637112318773304
+      },
+      {
+        "contract_address": "0x798d1be841a82a273720ce31c822c61a67a601c3",
+        "name": "Digg",
+        "token_symbol": "DIGG",
+        "decimals": 9,
+        "total_supply": 573926523410
+      },
+      {
+        "contract_address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+        "name": "Wrapped BTC",
+        "token_symbol": "WBTC",
+        "decimals": 8,
+        "total_supply": 12141446883569
+      }
+    ]
+  },
+  "transaction_hash_list": [
+    "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f",
+    "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f",
+    "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9"
+  ],
+  "transfer_graph": "Graph[DApp_Transfer_Graph] {\n    node_list: [\n        0x51841d9afe10fe55571bdb8f4af1060415003528(),\n    0xf41e354eb138b328d56957b36b7f814826708724(),\n    0x0000000000000000000000000000000000000000(),\n    0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f(),\n    0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2(),\n    0x51841D9AFe10fE55571bDB8f4Af1060415003528(),\n    0xOUT_GAS_OR_OTHER(),\n    0xSOURCE(),\n    0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2(),\n    0xMINER(),\n    0xEA674fdDe714fd979de3EdF0F56AA9716B898ec8(),\n    0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50(),\n    0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3(),\n    0xceff51756c56ceffca006cd410b03ffc46dd3a58(),\n    0x795065dcc9f64b5614c407a6efdc400da6221fb0(),\n    0x8798249c2e607446efb7ad49ec89dd1865ff4272(),\n    0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c()\n    ],\n    edge_list: [\n        (0x51841d9afe10fe55571bdb8f4af1060415003528 -> 0xf41e354eb138b328d56957b36b7f814826708724): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Transfer_0, amount=1.7211e-05, raw_amount=17211, symbol=digg, token_address=0x798d1be841a82a273720ce31c822c61a67a601c3, dollar_value=1.3420280605185106, timestamp=1611515097]),\n    (0x51841d9afe10fe55571bdb8f4af1060415003528 -> 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Transfer_5, amount=0.001, raw_amount=1000000000000000, symbol=ETH, token_address=0x0000000000000000000000000000000000000000, dollar_value=1.3267620361204444, timestamp=1611515097]),\n    (0x51841d9afe10fe55571bdb8f4af1060415003528 -> 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Transfer_5, amount=0.001, raw_amount=1000000000000000, symbol=ETH, token_address=0x0000000000000000000000000000000000000000, dollar_value=1.3267620361204444, timestamp=1611515261]),\n    (0xf41e354eb138b328d56957b36b7f814826708724 -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_6, amount=0.000999984865427378, raw_amount=999984865427378, symbol=weth, token_address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, dollar_value=1.3330856193557221, timestamp=1611515261]),\n    (0xf41e354eb138b328d56957b36b7f814826708724 -> 0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Transfer_2, amount=8.592e-06, raw_amount=8592, symbol=digg, token_address=0x798d1be841a82a273720ce31c822c61a67a601c3, dollar_value=0.6699613674960807, timestamp=1611515261]),\n    (0x0000000000000000000000000000000000000000 -> 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Mint_1, amount=0.001, raw_amount=1000000000000000, symbol=weth, token_address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, dollar_value=1.3331057953421945, timestamp=1611515097]),\n    (0x0000000000000000000000000000000000000000 -> 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Mint_0, amount=0.001, raw_amount=1000000000000000, symbol=weth, token_address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, dollar_value=1.3331057953421945, timestamp=1611515261]),\n    (0x0000000000000000000000000000000000000000 -> 0x51841d9afe10fe55571bdb8f4af1060415003528): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Mint_4, amount=4.148613226e-09, raw_amount=4148613226, symbol=SLP, token_address=0xf41e354eb138b328d56957b36b7f814826708724, dollar_value=0.0, timestamp=1611515097]),\n    (0x0000000000000000000000000000000000000000 -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Mint_1, amount=3.72e-16, raw_amount=372, symbol=SLP, token_address=0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3, dollar_value=0.0, timestamp=1611515261]),\n    (0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f -> 0xf41e354eb138b328d56957b36b7f814826708724): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Transfer_2, amount=0.001, raw_amount=1000000000000000, symbol=weth, token_address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, dollar_value=1.3331057953421945, timestamp=1611515097]),\n    (0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f -> 0xf41e354eb138b328d56957b36b7f814826708724): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Transfer_1, amount=0.001, raw_amount=1000000000000000, symbol=weth, token_address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, dollar_value=1.3331057953421945, timestamp=1611515261]),\n    (0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f -> 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Transfer_6, amount=0.001, raw_amount=1000000000000000, symbol=ETH, token_address=0x0000000000000000000000000000000000000000, dollar_value=1.3267620361204444, timestamp=1611515097]),\n    (0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f -> 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Transfer_6, amount=0.001, raw_amount=1000000000000000, symbol=ETH, token_address=0x0000000000000000000000000000000000000000, dollar_value=1.3267620361204444, timestamp=1611515261]),\n    (0x51841D9AFe10fE55571bDB8f4Af1060415003528 -> 0xOUT_GAS_OR_OTHER): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Native_Out_0, amount=0.226235494, symbol=native, dollar_value=301.5958481635043, timestamp=1611515097]),\n    (0x51841D9AFe10fE55571bDB8f4Af1060415003528 -> 0xOUT_GAS_OR_OTHER): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Native_Out_0, amount=0.042147864, symbol=native, dollar_value=56.18756175969465, timestamp=1611515261]),\n    (0x51841D9AFe10fE55571bDB8f4Af1060415003528 -> 0xOUT_GAS_OR_OTHER): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Native_Out_0, amount=0.0302644, symbol=native, dollar_value=40.34564703255432, timestamp=1611515261]),\n    (0xSOURCE -> 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Native_In_1, amount=0.001, symbol=native, dollar_value=1.3331057953421945, timestamp=1611515097]),\n    (0xSOURCE -> 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Native_In_2, amount=0.001, symbol=native, dollar_value=1.3331057953421945, timestamp=1611515261]),\n    (0xMINER -> 0xEA674fdDe714fd979de3EdF0F56AA9716B898ec8): [edge_key=0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f_Native_In_2, amount=0.225235494, symbol=native, dollar_value=300.2627423681621, timestamp=1611515097]),\n    (0xMINER -> 0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Native_In_1, amount=0.042147864, symbol=native, dollar_value=56.18756175969465, timestamp=1611515261]),\n    (0xMINER -> 0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Native_In_1, amount=0.0292644, symbol=native, dollar_value=39.01254123721212, timestamp=1611515261]),\n    (0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 -> 0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_0, amount=5.28629604e-10, raw_amount=528629604, symbol=SLP, token_address=0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3, dollar_value=0.0, timestamp=1611515261]),\n    (0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 -> 0xf41e354eb138b328d56957b36b7f814826708724): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_5, amount=1.140602218, raw_amount=1140602218, symbol=digg, token_address=0x798d1be841a82a273720ce31c822c61a67a601c3, dollar_value=88938.48018393188, timestamp=1611515261]),\n    (0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 -> 0xceff51756c56ceffca006cd410b03ffc46dd3a58): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_7, amount=2.7973651, raw_amount=279736510, symbol=wbtc, token_address=0x2260fac5e5542a773aa44fbcfedf7c193bc2c599, dollar_value=89174.79041592327, timestamp=1611515261]),\n    (0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50 -> 0x795065dcc9f64b5614c407a6efdc400da6221fb0): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_9, amount=65.65822552193016, raw_amount=65658225521930163415, symbol=weth, token_address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, dollar_value=87529.36095516989, timestamp=1611515261]),\n    (0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3 -> 0x0000000000000000000000000000000000000000): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Burn_2, amount=5.28629604e-10, raw_amount=528629604, symbol=SLP, token_address=0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3, dollar_value=0.0, timestamp=1611515261]),\n    (0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3 -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_3, amount=2.7973651, raw_amount=279736510, symbol=wbtc, token_address=0x2260fac5e5542a773aa44fbcfedf7c193bc2c599, dollar_value=89174.79041592327, timestamp=1611515261]),\n    (0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3 -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_4, amount=1.140602218, raw_amount=1140602218, symbol=digg, token_address=0x798d1be841a82a273720ce31c822c61a67a601c3, dollar_value=88938.48018393188, timestamp=1611515261]),\n    (0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3 -> 0xceff51756c56ceffca006cd410b03ffc46dd3a58): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Transfer_3, amount=2.1e-05, raw_amount=2100, symbol=wbtc, token_address=0x2260fac5e5542a773aa44fbcfedf7c193bc2c599, dollar_value=0.6694408959110804, timestamp=1611515261]),\n    (0xceff51756c56ceffca006cd410b03ffc46dd3a58 -> 0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_8, amount=65.65722553706473, raw_amount=65657225537064736037, symbol=weth, token_address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, dollar_value=87528.02786955053, timestamp=1611515261]),\n    (0xceff51756c56ceffca006cd410b03ffc46dd3a58 -> 0x51841d9afe10fe55571bdb8f4af1060415003528): [edge_key=0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9_Transfer_4, amount=0.000493062366699223, raw_amount=493062366699223, symbol=weth, token_address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2, dollar_value=0.6573042985118726, timestamp=1611515261]),\n    (0x795065dcc9f64b5614c407a6efdc400da6221fb0 -> 0x8798249c2e607446efb7ad49ec89dd1865ff4272): [edge_key=0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f_Transfer_10, amount=10844.682068505279, raw_amount=10844682068505278758672, symbol=sushi, token_address=0x6b3595068778dd592e39a122f4f5a5cf09c90fe2, dollar_value=87514.11885145554, timestamp=1611515261])\n    ]\n}",
+  "trace_tree": {
+    "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f": "[71] [CALL] SushiMaker.convert(address token0=Digg, address token1=Wrapped BTC) -> () [0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50] (Gas: 497536)\n├── [285] [STATICCALL] SushiMaker.getPair(address =Digg, address =Wrapped BTC) -> (address =SushiSwap LP Token) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 1344, [S: 0/L: 1])\n├── [474] [STATICCALL] SushiMaker.balanceOf(address =SushiMaker) -> (uint256 =528629604) [0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3] (Gas: 1192, [S: 0/L: 1])\n├── [937] [CALL] SushiMaker.transfer(address to=SushiSwap LP Token, uint256 value=528629604) -> (bool =True) [0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3] (Gas: 29376)\n├── [7591] [CALL] SushiMaker.burn(address to=SushiMaker) -> (uint256 amount0=279736510, uint256 amount1=1140602218) [0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3] (Gas: 158584, Logs: 1, [S: 3/L: 6])\n│   ├── [1402] [STATICCALL] UniswapV2Pair.balanceOf(address _owner=SushiSwap LP Token) -> (uint256 =24190240033) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 1495, [S: 0/L: 1])\n│   ├── [1813] [STATICCALL] UniswapV2Pair.balanceOf(address who=SushiSwap LP Token) -> (uint256 =98633679982) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 5135)\n│   │   └── ... (1 sub-calls collapsed)\n│   ├── [1978] [STATICCALL] UniswapV2Pair.feeTo() -> (address =SushiMaker) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 1038, [S: 0/L: 1])\n│   ├── [5538] [CALL] UniswapV2Pair.transfer(address _to=SushiMaker, uint256 _value=279736510) -> (bool =True) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 31703, Logs: 1, [S: 2/L: 4])\n│   ├── [6411] [CALL] UniswapV2Pair.transfer(address to=SushiMaker, uint256 value=1140602218) -> (bool =True) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 33669)\n│   │   └── ... (1 sub-calls collapsed)\n│   ├── [6682] [STATICCALL] UniswapV2Pair.balanceOf(address _owner=SushiSwap LP Token) -> (uint256 =23910503523) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 1495, [S: 0/L: 1])\n│   └── [7092] [STATICCALL] UniswapV2Pair.balanceOf(address who=SushiSwap LP Token) -> (uint256 =97493077764) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 5135)\n│       └── ... (1 sub-calls collapsed)\n├── [7759] [STATICCALL] SushiMaker.token0() -> (address =Wrapped BTC) [0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3] (Gas: 1149, [S: 0/L: 1])\n├── [8244] [STATICCALL] SushiMaker.getPair(address =Digg, address =Wrapped Ether) -> (address =SushiSwap LP Token) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 1344, [S: 0/L: 1])\n├── [8436] [STATICCALL] SushiMaker.getReserves() -> (uint112 _reserve0=17211, uint112 _reserve1=1000000000000000, uint32 _blockTimestampLast=1611515097) [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 1217, [S: 0/L: 1])\n├── [8644] [STATICCALL] SushiMaker.token0() -> (address =Digg) [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 1149, [S: 0/L: 1])\n├── [9593] [CALL] SushiMaker.transfer(address to=SushiSwap LP Token, uint256 value=1140602218) -> (bool =True) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 14469)\n│   └── [9580] [DELEGATECALL] AdminUpgradeabilityProxy.transfer(address to=SushiSwap LP Token, uint256 value=1140602218) -> (bool =True) [0xfabec03b04279c6e73f27aaf25866acc844448ae] (Gas: 11690, Logs: 1, [S: 2/L: 3])\n├── [12015] [CALL] SushiMaker.swap(uint256 amount0Out=0, uint256 amount1Out=999984865427378, address to=SushiMaker, bytes data=0x) -> () [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 105927, Logs: 1, [S: 2/L: 3])\n│   ├── [10555] [CALL] UniswapV2Pair.transfer(address dst=SushiMaker, uint256 wad=999984865427378) -> (bool =True) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 30162)\n│   ├── [11024] [STATICCALL] UniswapV2Pair.balanceOf(address who=SushiSwap LP Token) -> (uint256 =1140619429) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 5135)\n│   │   └── ... (1 sub-calls collapsed)\n│   └── [11211] [STATICCALL] UniswapV2Pair.balanceOf(address =SushiSwap LP Token) -> (uint256 =15134572622) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])\n├── [12250] [STATICCALL] SushiMaker.getPair(address =Wrapped BTC, address =Wrapped Ether) -> (address =UniswapV2Pair) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 1344, [S: 0/L: 1])\n├── [12442] [STATICCALL] SushiMaker.getReserves() -> (uint112 _reserve0=811747085838, uint112 _reserve1=191164894844918723337277, uint32 _blockTimestampLast=1611515083) [0xceff51756c56ceffca006cd410b03ffc46dd3a58] (Gas: 1217, [S: 0/L: 1])\n├── [12650] [STATICCALL] SushiMaker.token0() -> (address =Wrapped BTC) [0xceff51756c56ceffca006cd410b03ffc46dd3a58] (Gas: 1149, [S: 0/L: 1])\n├── [13364] [CALL] SushiMaker.transfer(address _to=UniswapV2Pair, uint256 _value=279736510) -> (bool =True) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 12503, Logs: 1, [S: 2/L: 4])\n├── [15593] [CALL] SushiMaker.swap(uint256 amount0Out=0, uint256 amount1Out=65657225537064736037, address to=SushiMaker, bytes data=0x) -> () [0xceff51756c56ceffca006cd410b03ffc46dd3a58] (Gas: 53087, Logs: 1, [S: 2/L: 3])\n│   ├── [14326] [CALL] UniswapV2Pair.transfer(address dst=SushiMaker, uint256 wad=65657225537064736037) -> (bool =True) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 10962)\n│   ├── [14602] [STATICCALL] UniswapV2Pair.balanceOf(address _owner=UniswapV2Pair) -> (uint256 =812026822348) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 1495, [S: 0/L: 1])\n│   └── [14789] [STATICCALL] UniswapV2Pair.balanceOf(address =UniswapV2Pair) -> (uint256 =191099237619381658601240) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])\n├── [15919] [STATICCALL] SushiMaker.getPair(address =Wrapped Ether, address =SushiToken) -> (address =UniswapV2Pair) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 1344, [S: 0/L: 1])\n├── [16111] [STATICCALL] SushiMaker.getReserves() -> (uint112 _reserve0=18654959824231177621943891, uint112 _reserve1=112540606575770623396180, uint32 _blockTimestampLast=1611515181) [0x795065dcc9f64b5614c407a6efdc400da6221fb0] (Gas: 1217, [S: 0/L: 1])\n├── [16319] [STATICCALL] SushiMaker.token0() -> (address =SushiToken) [0x795065dcc9f64b5614c407a6efdc400da6221fb0] (Gas: 1149, [S: 0/L: 1])\n├── [16945] [CALL] SushiMaker.transfer(address dst=UniswapV2Pair, uint256 wad=65658225521930163415) -> (bool =True) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 10962)\n└── [19191] [CALL] SushiMaker.swap(uint256 amount0Out=10844682068505278758672, uint256 amount1Out=0, address to=0x8798249c2e607446efb7ad49ec89dd1865ff4272, bytes data=0x) -> () [0x795065dcc9f64b5614c407a6efdc400da6221fb0] (Gas: 56433, Logs: 1, [S: 2/L: 3])\n    ├── [17935] [CALL] UniswapV2Pair.transfer(address recipient=0x8798249c2e607446efb7ad49ec89dd1865ff4272, uint256 amount=10844682068505278758672) -> (bool =True) [0x6b3595068778dd592e39a122f4f5a5cf09c90fe2] (Gas: 14525)\n    ├── [18196] [STATICCALL] UniswapV2Pair.balanceOf(address account=UniswapV2Pair) -> (uint256 =18644115142162672343185219) [0x6b3595068778dd592e39a122f4f5a5cf09c90fe2] (Gas: 1278, [S: 0/L: 1])\n    └── [18383] [STATICCALL] UniswapV2Pair.balanceOf(address =UniswapV2Pair) -> (uint256 =112606264801292553559595) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])",
+    "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9": "[138] [CALL] UniswapV2Router02.swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin=0, address[] path=['0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', '0x798d1be841a82a273720ce31c822c61a67a601c3', '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'], address to=0x51841d9afe10fe55571bdb8f4af1060415003528, uint256 deadline=115792089237316195423570985008687907853269984665640564039457584007913129639935) -> () [0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f] (Gas: 300632, Val: 1.1529 ETH)\n├── [356] [CALL] UniswapV2Router02.deposit() -> () [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 22674, Val: 1.1529 ETH, Logs: 1, [S: 1/L: 1])\n├── [941] [CALL] UniswapV2Router02.transfer(address dst=SushiSwap LP Token, uint256 wad=1000000000000000) -> (bool =True) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 10962)\n├── [1154] [STATICCALL] UniswapV2Router02.balanceOf(address =0x51841d9afe10fe55571bdb8f4af1060415003528) -> (uint256 =3123682304441098365) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])\n├── [1720] [STATICCALL] UniswapV2Router02.getReserves() -> (uint112 _reserve0=17211, uint112 _reserve1=1000000000000000, uint32 _blockTimestampLast=1611515097) [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 1217, [S: 0/L: 1])\n├── [1952] [STATICCALL] UniswapV2Router02.balanceOf(address =SushiSwap LP Token) -> (uint256 =2000000000000000) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])\n├── [5118] [CALL] UniswapV2Router02.swap(uint256 amount0Out=8592, uint256 amount1Out=0, address to=SushiSwap LP Token, bytes data=0x) -> () [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 94434, Logs: 1, [S: 2/L: 3])\n│   ├── [3649] [CALL] UniswapV2Pair.transfer(address to=SushiSwap LP Token, uint256 value=8592) -> (bool =True) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 18669)\n│   │   └── ... (1 sub-calls collapsed)\n│   ├── [4123] [STATICCALL] UniswapV2Pair.balanceOf(address who=SushiSwap LP Token) -> (uint256 =8619) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 5135)\n│   │   └── ... (1 sub-calls collapsed)\n│   └── [4310] [STATICCALL] UniswapV2Pair.balanceOf(address =SushiSwap LP Token) -> (uint256 =2000000000000000) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])\n├── [5631] [STATICCALL] UniswapV2Router02.getReserves() -> (uint112 _reserve0=24190240033, uint112 _reserve1=98633679982, uint32 _blockTimestampLast=1611514957) [0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3] (Gas: 1217, [S: 0/L: 1])\n├── [6086] [STATICCALL] UniswapV2Router02.balanceOf(address who=SushiSwap LP Token) -> (uint256 =98633688574) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 5135)\n│   └── [6073] [DELEGATECALL] AdminUpgradeabilityProxy.balanceOf(address who=SushiSwap LP Token) -> (uint256 =98633688574) [0xfabec03b04279c6e73f27aaf25866acc844448ae] (Gas: 2359, [S: 0/L: 2])\n├── [9046] [CALL] UniswapV2Router02.swap(uint256 amount0Out=2100, uint256 amount1Out=0, address to=UniswapV2Pair, bytes data=0x) -> () [0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3] (Gas: 62729, Logs: 1, [S: 2/L: 3])\n│   ├── [7547] [CALL] UniswapV2Pair.transfer(address _to=UniswapV2Pair, uint256 _value=2100) -> (bool =True) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 16703, Logs: 1, [S: 2/L: 4])\n│   ├── [7828] [STATICCALL] UniswapV2Pair.balanceOf(address _owner=SushiSwap LP Token) -> (uint256 =24190237933) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 1495, [S: 0/L: 1])\n│   └── [8238] [STATICCALL] UniswapV2Pair.balanceOf(address who=SushiSwap LP Token) -> (uint256 =98633688574) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 5135)\n│       └── ... (1 sub-calls collapsed)\n├── [9557] [STATICCALL] UniswapV2Router02.getReserves() -> (uint112 _reserve0=811747085838, uint112 _reserve1=191164894844918723337277, uint32 _blockTimestampLast=1611515083) [0xceff51756c56ceffca006cd410b03ffc46dd3a58] (Gas: 1217, [S: 0/L: 1])\n├── [9818] [STATICCALL] UniswapV2Router02.balanceOf(address _owner=UniswapV2Pair) -> (uint256 =811747087938) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 1495, [S: 0/L: 1])\n├── [12253] [CALL] UniswapV2Router02.swap(uint256 amount0Out=0, uint256 amount1Out=493062366699223, address to=0x51841d9afe10fe55571bdb8f4af1060415003528, bytes data=0x) -> () [0xceff51756c56ceffca006cd410b03ffc46dd3a58] (Gas: 57287, Logs: 1, [S: 2/L: 3])\n│   ├── [10986] [CALL] UniswapV2Pair.transfer(address dst=0x51841d9afe10fe55571bdb8f4af1060415003528, uint256 wad=493062366699223) -> (bool =True) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 15162)\n│   ├── [11262] [STATICCALL] UniswapV2Pair.balanceOf(address _owner=UniswapV2Pair) -> (uint256 =811747087938) [0x2260fac5e5542a773aa44fbcfedf7c193bc2c599] (Gas: 1495, [S: 0/L: 1])\n│   └── [11449] [STATICCALL] UniswapV2Pair.balanceOf(address =UniswapV2Pair) -> (uint256 =191164894351856356638054) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])\n└── [12486] [STATICCALL] UniswapV2Router02.balanceOf(address =0x51841d9afe10fe55571bdb8f4af1060415003528) -> (uint256 =3124175366807797588) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])",
+    "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f": "[98] [CALL] UniswapV2Router02.addLiquidityETH(address token=Digg, uint256 amountTokenDesired=17211, uint256 amountTokenMin=17211, uint256 amountETHMin=1000000000000000, address to=0x51841d9afe10fe55571bdb8f4af1060415003528, uint256 deadline=1611516272) -> (uint256 amountToken=17211, uint256 amountETH=1000000000000000, uint256 liquidity=4148613226) [0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f] (Gas: 2306038, Val: 1.1529 ETH)\n├── [329] [STATICCALL] UniswapV2Router02.getPair(address =Digg, address =Wrapped Ether) -> (address =0x0000000000000000000000000000000000000000) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 1344, [S: 0/L: 1])\n├── [1192] [CALL] UniswapV2Router02.createPair(address tokenA=Digg, address tokenB=Wrapped Ether) -> (address pair=SushiSwap LP Token) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 2032462, Logs: 1, [S: 4/L: 6])\n│   ├── [828] [CREATE2] UniswapV2Factory.0x60806040 (Unverified)(bytes init_code=0x60806040526001600c5534801561001557600080fd5b50604080518082018252...[size=18704]...9abf186abb737e72524583bdf420105a289791e24864736f6c634300060c0033) -> () [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 1878878, [S: 3/L: 1])\n│   └── [1026] [CALL] UniswapV2Factory.initialize(address _token0=Digg, address _token1=Wrapped Ether) -> () [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 42828, [S: 2/L: 3])\n├── [1656] [STATICCALL] UniswapV2Router02.getReserves() -> (uint112 _reserve0=0, uint112 _reserve1=0, uint32 _blockTimestampLast=0) [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 1217, [S: 0/L: 1])\n├── [2830] [CALL] UniswapV2Router02.transferFrom(address from=0x51841d9afe10fe55571bdb8f4af1060415003528, address to=SushiSwap LP Token, uint256 value=17211) -> (bool =True) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 39647)\n│   └── [2817] [DELEGATECALL] AdminUpgradeabilityProxy.transferFrom(address from=0x51841d9afe10fe55571bdb8f4af1060415003528, address to=SushiSwap LP Token, uint256 value=17211) -> (bool =True) [0xfabec03b04279c6e73f27aaf25866acc844448ae] (Gas: 36862, Logs: 1, [S: 3/L: 4])\n├── [3078] [CALL] UniswapV2Router02.deposit() -> () [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 22674, Val: 1.1529 ETH, Logs: 1, [S: 1/L: 1])\n├── [3424] [CALL] UniswapV2Router02.transfer(address dst=SushiSwap LP Token, uint256 wad=1000000000000000) -> (bool =True) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 25962)\n└── [6327] [CALL] UniswapV2Router02.mint(address to=0x51841d9afe10fe55571bdb8f4af1060415003528) -> (uint256 liquidity=4148613226) [0xf41e354eb138b328d56957b36b7f814826708724] (Gas: 161924, Logs: 1, [S: 3/L: 6])\n    ├── [4013] [STATICCALL] UniswapV2Pair.balanceOf(address who=SushiSwap LP Token) -> (uint256 =17211) [0x798d1be841a82a273720ce31c822c61a67a601c3] (Gas: 5135)\n    │   └── ... (1 sub-calls collapsed)\n    ├── [4205] [STATICCALL] UniswapV2Pair.balanceOf(address =SushiSwap LP Token) -> (uint256 =1000000000000000) [0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2] (Gas: 1234, [S: 0/L: 1])\n    ├── [4420] [STATICCALL] UniswapV2Pair.feeTo() -> (address =0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 1038, [S: 0/L: 1])\n    └── [4602] [STATICCALL] UniswapV2Pair.migrator() -> (address =0x0000000000000000000000000000000000000000) [0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac] (Gas: 1037, [S: 0/L: 1])"
+  },
+  "transaction_roles": {
+    "0x51841d9afe10fe55571bdb8f4af1060415003528": {
+      "role": "attacker",
+      "description": "The initiator of all transactions, providing initial liquidity, triggering the complex arbitrage, and ultimately benefiting from the attack by converting assets into SUSHI."
+    },
+    "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50": {
+      "role": "attacker_controlled_contract",
+      "description": "A custom aggregation/router contract deployed or controlled by the attacker, used to execute the multi-step swap and liquidity removal in the main attack transaction."
+    },
+    "0xf41e354eb138b328d56957b36b7f814826708724": {
+      "role": "manipulated_liquidity_pool",
+      "description": "The Digg/WETH liquidity pool created by the attacker with extremely low liquidity, potentially used to manipulate the price of DIGG during the attack."
+    },
+    "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": {
+      "role": "exploited_liquidity_pool",
+      "description": "The Digg/WBTC liquidity pool from which the attacker removed liquidity, obtaining large amounts of DIGG and WBTC that were later swapped for profit."
+    },
+    "0xceff51756c56ceffca006cd410b03ffc46dd3a58": {
+      "role": "exploited_liquidity_pool",
+      "description": "The WBTC/WETH liquidity pool used by the attacker to swap WBTC for WETH during the attack."
+    },
+    "0x795065dcc9f64b5614c407a6efdc400da6221fb0": {
+      "role": "exploited_liquidity_pool",
+      "description": "The SUSHI/WETH liquidity pool used by the attacker to swap WETH for SUSHI, finalizing the profit conversion."
+    },
+    "0x8798249c2e607446efb7ad49ec89dd1865ff4272": {
+      "role": "profit_receiver",
+      "description": "The SushiSwap MasterChef contract where the final SUSHI tokens were sent, possibly for staking or later withdrawal by the attacker."
+    },
+    "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f": {
+      "role": "dex_router",
+      "description": "The SushiSwap router contract used by the attacker to execute swaps and liquidity operations; a standard DeFi component leveraged in the attack."
+    },
+    "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+      "role": "token_contract",
+      "description": "The DIGG token contract, the elastic supply token involved in the attack as a medium of exchange and manipulation."
+    },
+    "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+      "role": "token_contract",
+      "description": "The WBTC token contract, used as an intermediate asset during the attack swaps."
+    },
+    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+      "role": "token_contract",
+      "description": "The WETH token contract, used as the base trading pair and profit denomination in the attack."
+    },
+    "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2": {
+      "role": "token_contract",
+      "description": "The SUSHI token contract, the final profit token obtained by the attacker."
+    },
+    "0xea674fdde714fd979de3edf0f56aa9716b898ec8": {
+      "role": "miner",
+      "description": "The miner address that received the gas fees from the first auxiliary transaction, with no active role in the attack."
+    },
+    "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c": {
+      "role": "miner",
+      "description": "The miner address that received the gas fees from the second and third transactions, with no active role in the attack."
+    }
+  },
+  "balance_change": {
+    "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f": {
+      "0x51841d9afe10fe55571bdb8f4af1060415003528": {
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "raw_amount": -226235494000000000,
+          "fmt_amount": -0.226235494,
+          "usd_value": -301.5958481635043,
+          "is_token": false,
+          "contract": "N/A"
+        },
+        "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+          "symbol": "digg",
+          "name": "DIGG",
+          "decimals": 9,
+          "raw_amount": -17211,
+          "fmt_amount": -1.7211e-05,
+          "usd_value": -1.3420280605185106,
+          "is_token": true,
+          "contract": "0x798d1be841a82a273720ce31c822c61a67a601c3"
+        },
+        "0xf41e354eb138b328d56957b36b7f814826708724": {
+          "symbol": "SLP",
+          "name": "SushiSwap LP Token",
+          "decimals": 18,
+          "raw_amount": 4148613226,
+          "fmt_amount": 4.148613226e-09,
+          "usd_value": null,
+          "is_token": true,
+          "contract": "0xf41e354eb138b328d56957b36b7f814826708724"
+        }
+      },
+      "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "raw_amount": 1000000000000000,
+          "fmt_amount": 0.001,
+          "usd_value": 1.3331057953421945,
+          "is_token": false,
+          "contract": "N/A"
+        }
+      },
+      "0xea674fdde714fd979de3edf0f56aa9716b898ec8": {
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "raw_amount": 225235494000000000,
+          "fmt_amount": 0.225235494,
+          "usd_value": 300.2627423681621,
+          "is_token": false,
+          "contract": "N/A"
+        }
+      },
+      "0xf41e354eb138b328d56957b36b7f814826708724": {
+        "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+          "symbol": "digg",
+          "name": "DIGG",
+          "decimals": 9,
+          "raw_amount": 17211,
+          "fmt_amount": 1.7211e-05,
+          "usd_value": 1.3420280605185106,
+          "is_token": true,
+          "contract": "0x798d1be841a82a273720ce31c822c61a67a601c3"
+        },
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "symbol": "weth",
+          "name": "WETH",
+          "decimals": 18,
+          "raw_amount": 1000000000000000,
+          "fmt_amount": 0.001,
+          "usd_value": 1.3331057953421945,
+          "is_token": true,
+          "contract": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        }
+      }
+    },
+    "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f": {
+      "0x51841d9afe10fe55571bdb8f4af1060415003528": {
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "raw_amount": -42147864000000000,
+          "fmt_amount": -0.042147864,
+          "usd_value": -56.18756175969465,
+          "is_token": false,
+          "contract": "N/A"
+        }
+      },
+      "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c": {
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "raw_amount": 42147864000000000,
+          "fmt_amount": 0.042147864,
+          "usd_value": 56.18756175969465,
+          "is_token": false,
+          "contract": "N/A"
+        }
+      },
+      "0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50": {
+        "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": {
+          "symbol": "SLP",
+          "name": "SushiSwap LP Token",
+          "decimals": 18,
+          "raw_amount": -528629232,
+          "fmt_amount": -5.28629232e-10,
+          "usd_value": null,
+          "is_token": true,
+          "contract": "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3"
+        }
+      },
+      "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": {
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "symbol": "wbtc",
+          "name": "Wrapped Bitcoin",
+          "decimals": 8,
+          "raw_amount": -279736510,
+          "fmt_amount": -2.7973651,
+          "usd_value": -89174.79041592327,
+          "is_token": true,
+          "contract": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+        },
+        "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+          "symbol": "digg",
+          "name": "DIGG",
+          "decimals": 9,
+          "raw_amount": -1140602218,
+          "fmt_amount": -1.140602218,
+          "usd_value": -88938.48018393188,
+          "is_token": true,
+          "contract": "0x798d1be841a82a273720ce31c822c61a67a601c3"
+        }
+      },
+      "0xf41e354eb138b328d56957b36b7f814826708724": {
+        "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+          "symbol": "digg",
+          "name": "DIGG",
+          "decimals": 9,
+          "raw_amount": 1140602218,
+          "fmt_amount": 1.140602218,
+          "usd_value": 88938.48018393188,
+          "is_token": true,
+          "contract": "0x798d1be841a82a273720ce31c822c61a67a601c3"
+        },
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "symbol": "weth",
+          "name": "WETH",
+          "decimals": 18,
+          "raw_amount": -999984865427378,
+          "fmt_amount": -0.000999984865427378,
+          "usd_value": -1.3330856193557221,
+          "is_token": true,
+          "contract": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        }
+      },
+      "0xceff51756c56ceffca006cd410b03ffc46dd3a58": {
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "symbol": "wbtc",
+          "name": "Wrapped Bitcoin",
+          "decimals": 8,
+          "raw_amount": 279736510,
+          "fmt_amount": 2.7973651,
+          "usd_value": 89174.79041592327,
+          "is_token": true,
+          "contract": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+        },
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "symbol": "weth",
+          "name": "WETH",
+          "decimals": 18,
+          "raw_amount": -65657225537064736037,
+          "fmt_amount": -65.65722553706473,
+          "usd_value": -87528.02786955053,
+          "is_token": true,
+          "contract": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        }
+      },
+      "0x795065dcc9f64b5614c407a6efdc400da6221fb0": {
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "symbol": "weth",
+          "name": "WETH",
+          "decimals": 18,
+          "raw_amount": 65658225521930163415,
+          "fmt_amount": 65.65822552193016,
+          "usd_value": 87529.36095516989,
+          "is_token": true,
+          "contract": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        },
+        "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2": {
+          "symbol": "sushi",
+          "name": "Sushi",
+          "decimals": 18,
+          "raw_amount": -10844682068505278758672,
+          "fmt_amount": -10844.682068505279,
+          "usd_value": -87514.11885145554,
+          "is_token": true,
+          "contract": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2"
+        }
+      },
+      "0x8798249c2e607446efb7ad49ec89dd1865ff4272": {
+        "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2": {
+          "symbol": "sushi",
+          "name": "Sushi",
+          "decimals": 18,
+          "raw_amount": 10844682068505278758672,
+          "fmt_amount": 10844.682068505279,
+          "usd_value": 87514.11885145554,
+          "is_token": true,
+          "contract": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2"
+        }
+      }
+    },
+    "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9": {
+      "0x51841d9afe10fe55571bdb8f4af1060415003528": {
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "raw_amount": -30264400000000000,
+          "fmt_amount": -0.0302644,
+          "usd_value": -40.34564703255432,
+          "is_token": false,
+          "contract": "N/A"
+        },
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "symbol": "weth",
+          "name": "WETH",
+          "decimals": 18,
+          "raw_amount": 493062366699223,
+          "fmt_amount": 0.000493062366699223,
+          "usd_value": 0.6573042985118726,
+          "is_token": true,
+          "contract": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        }
+      },
+      "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c": {
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "raw_amount": 29264400000000000,
+          "fmt_amount": 0.0292644,
+          "usd_value": 39.01254123721212,
+          "is_token": false,
+          "contract": "N/A"
+        }
+      },
+      "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+          "symbol": "ETH",
+          "name": "Ether",
+          "decimals": 18,
+          "raw_amount": 1000000000000000,
+          "fmt_amount": 0.001,
+          "usd_value": 1.3331057953421945,
+          "is_token": false,
+          "contract": "N/A"
+        }
+      },
+      "0xf41e354eb138b328d56957b36b7f814826708724": {
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "symbol": "weth",
+          "name": "WETH",
+          "decimals": 18,
+          "raw_amount": 1000000000000000,
+          "fmt_amount": 0.001,
+          "usd_value": 1.3331057953421945,
+          "is_token": true,
+          "contract": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        },
+        "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+          "symbol": "digg",
+          "name": "DIGG",
+          "decimals": 9,
+          "raw_amount": -8592,
+          "fmt_amount": -8.592e-06,
+          "usd_value": -0.6699613674960807,
+          "is_token": true,
+          "contract": "0x798d1be841a82a273720ce31c822c61a67a601c3"
+        }
+      },
+      "0x9a13867048e01c663ce8ce2fe0cdae69ff9f35e3": {
+        "0x798d1be841a82a273720ce31c822c61a67a601c3": {
+          "symbol": "digg",
+          "name": "DIGG",
+          "decimals": 9,
+          "raw_amount": 8592,
+          "fmt_amount": 8.592e-06,
+          "usd_value": 0.6699613674960807,
+          "is_token": true,
+          "contract": "0x798d1be841a82a273720ce31c822c61a67a601c3"
+        },
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "symbol": "wbtc",
+          "name": "Wrapped Bitcoin",
+          "decimals": 8,
+          "raw_amount": -2100,
+          "fmt_amount": -2.1e-05,
+          "usd_value": -0.6694408959110804,
+          "is_token": true,
+          "contract": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+        }
+      },
+      "0xceff51756c56ceffca006cd410b03ffc46dd3a58": {
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+          "symbol": "wbtc",
+          "name": "Wrapped Bitcoin",
+          "decimals": 8,
+          "raw_amount": 2100,
+          "fmt_amount": 2.1e-05,
+          "usd_value": 0.6694408959110804,
+          "is_token": true,
+          "contract": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+        },
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+          "symbol": "weth",
+          "name": "WETH",
+          "decimals": 18,
+          "raw_amount": -493062366699223,
+          "fmt_amount": -0.000493062366699223,
+          "usd_value": -0.6573042985118726,
+          "is_token": true,
+          "contract": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        }
+      }
+    }
+  },
+  "attack_transactions": [
+    "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f"
+  ],
+  "auxiliary_transactions": [
+    "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f",
+    "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9"
+  ],
+  "transactions_need_analyze": [
+    "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f"
+  ],
+  "bug_summary": "I. Failed Transaction Phenomena\n尽管所有列出交易在链上显示为成功状态，但攻击事件暴露了系统性漏洞。关键异常现象包括：攻击者首先创建了一个流动性极低的Digg/WETH交易对，初始储备仅为0.000017211 DIGG和0.001 WETH，这导致该池代币价格极易被操纵。随后，攻击者从流动性较高的Digg/WBTC池中移除大量流动性，获取了1.140602218 DIGG和2.7973651 WBTC。然后，攻击者将获取的DIGG在低流动性Digg/WETH池中交换为WETH，由于池储备扭曲，此次交换以微小投入换取了0.000999984865427378 WETH，但结合后续操作，整体实现了套利。最终，攻击者通过一系列交换将资产转换为10844.682068505278758672 SUSHI并发送至收益合约，完成获利。辅助交易中尝试的三角套利因高Gas成本和不利滑点而亏损，进一步凸显了价格操纵风险。\n\nII. Failed Transaction Core Operations\n攻击核心操作涉及多笔交易中的智能合约调用链：在交易0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f中，攻击者通过SushiSwap路由合约调用addLiquidityETH函数，创建Digg/WETH池并注入初始流动性，追踪显示工厂合约创建新池及代币转移。在交易0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f中，攻击者通过自定义合约0xe11fc0b43ab98eb91e9836129d1ee7c3bc95df50执行convert操作，调用路径包括：销毁Digg/WBTC SLP代币以提取DIGG和WBTC；将DIGG转入Digg/WETH池进行swap换取WETH；将WBTC转入WBTC/WETH池进行swap换取WETH；合并WETH后在SUSHI/WETH池进行swap换取SUSHI并转移至MasterChef。交易0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9则通过SushiSwap路由尝试三角套利但未成功，凸显攻击主路径的依赖性。漏洞根源在于低流动性池的价格可操纵性，攻击者利用创建池子的微小初始储备扭曲DIGG定价，并在其他池子中基于此进行套利，反映了DeFi协议在流动性不足时对价格攻击的脆弱性。",
+  "token_used": {
+    "total_token": 64042,
+    "detail": 20398,
+    "role": 21764,
+    "filter": 0,
+    "fault": 21880
+  },
+  "time_used": {
+    "total_time": 492.97744941711426,
+    "detail": 216.20888423919678,
+    "role": 188.52411651611328,
+    "filter": 0,
+    "fault": 68.63070392608643
+  }
+}

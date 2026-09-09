@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api.account import router as account_router
+from app.attackpilot.api import router as attackpilot_router
 from app.api.analysis_reports import router as analysis_reports_router
 from app.api.auth import SESSION_COOKIE_NAME, router as auth_router
 from app.api.coin_library import router as coin_library_router
@@ -59,6 +60,7 @@ logger = logging.getLogger("cryptorisk.api")
 app = FastAPI(title="CryptoRisk Agent Backend")
 
 DEFAULT_CORS_ORIGINS = [
+    "https://crypto.kassa-wiki.top",
     "https://kassa-wiki.top",
     "https://www.kassa-wiki.top",
 ]
@@ -200,6 +202,23 @@ app.include_router(favorites_router)
 app.include_router(daily_report_router)
 app.include_router(user_assets_router)
 app.include_router(feishu_router)
+app.include_router(attackpilot_router)
+
+
+@app.on_event("startup")
+async def start_attackpilot() -> None:
+    from app.attackpilot import settings, store
+    from app.attackpilot.manager import manager
+    seed = settings.PACKAGE_ROOT / "data/demo-seed.json"
+    if seed.exists():
+        store.import_seed(json.loads(seed.read_text()))
+    await manager.start()
+
+
+@app.on_event("shutdown")
+async def stop_attackpilot() -> None:
+    from app.attackpilot.manager import manager
+    await manager.stop()
 
 
 @app.on_event("startup")

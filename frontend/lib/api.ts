@@ -1088,7 +1088,7 @@ export function clearApiCache() {
   }
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   assertApiPath(path);
   const { headers, ...restInit } = init || {};
   const response = await apiFetch(path, {

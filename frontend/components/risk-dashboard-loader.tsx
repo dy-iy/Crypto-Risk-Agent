@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { LoadingDots } from "@/components/ui/loading-states";
 
 type ActiveView =
+  | "attackpilot"
   | "home"
   | "chat"
   | "news"

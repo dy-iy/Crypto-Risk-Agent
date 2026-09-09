@@ -1,0 +1,18 @@
+{
+    "name": "DFXFinance",
+    "cause": "Reentrancy",
+    "platform": "Ethereum",
+    "transaction_hash": [
+        "0x6bfd9e286e37061ed279e4f139fbc03c8bd707a2cdd15f7260549052cbba79b7"
+    ],
+    "time": "2022-11-10 19:27:59 UTC",
+    "lost": "$4M",
+    "detection": {
+        "time": "2022-11-11 06:51:00 UTC",
+        "link": "['https://x.com/BlockSecTeam/status/1590960299246780417']"
+    },
+    "root_cause": "flash",
+    "report": "The attacker exploited a cross-function reentrancy vulnerability between the `flash` (flash loan) and `deposit` functions. The `flash` function used `IERC20(derivatives[i]).balanceOf(address(this))` to check if the borrowed amounts plus fees were repaid. By reentering the contract within the flash loan callback and calling `deposit`, the attacker deposited the borrowed tokens (plus the exact fee amount) back into the pool. This deposit action increased the contract's token balance, which satisfied the `flash` function's repayment check (`balance0Before + fee0 <= balance0After`) before the `deposit` function's own non-reentrant guard could take effect. The attacker then used `withdraw` to retrieve the deposited tokens, ultimately draining approximately 3,000 ETH (~$4 million) from the pool.",
+    "report_link": "https://learnblockchain.cn/article/7562?column_id=93",
+    "report_zh": "攻击者利用了`flash`（闪电贷）和`deposit`函数之间的跨函数重入漏洞。`flash`函数使用`IERC20(derivatives[i]).balanceOf(address(this))`来检查所借金额加手续费是否已偿还。通过在闪电贷回调中重入合约并调用`deposit`，攻击者将借来的代币（加上精确的手续费金额）存回池中。这一存款操作增加了合约的代币余额，从而在`deposit`函数的不可重入保护生效之前，满足了`flash`函数的还款检查（`balance0Before + fee0 <= balance0After`）。随后攻击者使用`withdraw`提取存入的代币，最终从池中盗取约3000 ETH（约400万美元）。"
+}

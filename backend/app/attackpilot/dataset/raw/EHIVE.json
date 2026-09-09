@@ -1,0 +1,14 @@
+{
+    "name": "EHIVE",
+    "cause": "Business Logic Flaw",
+    "platform": "Ethereum",
+    "transaction_hash": [
+        "0xd9156f507c701a09d3312e1987383c7c882df50b3127e1adfd74d74052642114"
+    ],
+    "time": "2023-07-14 08:24:59 UTC",
+    "lost": "~$15K",
+    "root_cause": "stake",
+    "report": "The attacker exploited a validation flaw between the stake and unstake functions. They created a position by staking nothing, waited 38 days, then took a WETH loan, swapped it to EHIVE, and sent it to initial contracts. By unstaking across all contracts, they received more WETH despite not having staked anything initially.",
+    "report_link": "https://web3sec.notion.site/Insufficient-Validation-Between-Stake-and-Unstake-functions-d7639d8579d9444eae7800f68dcf2280?pvs=23",
+    "report_zh": "攻击者利用了质押（stake）和解除质押（unstake）函数之间的验证缺陷。他们通过质押零代币创建了一个头寸，等待38天，然后借入WETH贷款，将其兑换为EHIVE，并发送到初始合约。通过在所有合约中解除质押，他们虽然最初没有质押任何东西，却获得了更多的WETH。"
+}

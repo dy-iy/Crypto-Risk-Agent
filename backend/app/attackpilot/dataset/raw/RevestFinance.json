@@ -1,0 +1,21 @@
+{
+    "name": "Revest Finance",
+    "cause": "Reentrancy",
+    "platform": "Ethereum",
+    "time": "2022/3/27 1:41",
+    "transaction_hash": [
+        "0xe0b0c2672b760bef4e2851e91c69c8c0ad135c6987bbf1f43f5846d89e691428"
+    ],
+    "report": "The root cause of this security incident is that the NFT contract updates nextId after minting, violating the 'Checks-Effects-Interactions' pattern, and lacks a reentrancy guard, making the contract functions reentrant and ultimately leading to a reentrancy attack, resulting in a loss of approximately $2 million.",
+    "detection": {
+        "time": "2022/3/27 2:24",
+        "link": "https://revestfinance.medium.com/revest-protocol-exploit-recovery-plan-b06ca33fbdf5"
+    },
+    "disclosure": {
+        "time": "2022/3/27 12:57",
+        "link": "https://twitter.com/BlockSecTeam/status/1508065573250678793"
+    },
+    "root_cause": "depositAdditionalToFNFT + mint",
+    "report_link": "https://www.freebuf.com/articles/blockchain-articles/326466.html",
+    "report_zh": "此次安全事件的根本原因是NFT合约在铸造后更新nextId，违反了'检查-效果-交互'模式，且缺少重入锁，导致合约函数可重入，最终引发重入攻击，造成约200万美元的损失。"
+}

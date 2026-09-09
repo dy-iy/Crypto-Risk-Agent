@@ -52,7 +52,7 @@ NEG_INTERNAL_TRANSFER = [
     "官方钱包迁移"
 ]
 
-NEG_POSITIVE_MOVE = ["小幅上涨", "微涨", "温和上涨", "企稳回升", "慢牛", "持续走高", "反弹", "回升", "上涨", "涨幅收窄", "回暖", "普涨", "板块轮动", "领涨"]
+NEG_POSITIVE_MOVE = ["小幅上涨", "微涨", "温和上涨", "企稳回升", "慢牛", "持续走高", "反弹", "回升", "上涨", "涨幅收窄", "回暖", "普涨", "板块轮动", "领涨", "增长", "快速增长"]
 NEG_STAT_DESC = ["平均", "均值", "中位数", "标准差", "方差", "统计", "概率", "分布", "回归", "相关性"]
 NEG_VOL_FORECAST = ["预测", "调查", "预期", "有望", "预计", "展望", "分析报告", "或将", "可能", "可能将", "预判"]
 
@@ -283,6 +283,46 @@ def has_hack_real_loss(text):
     return has_any(text, HACK_REAL_LOSS_EVIDENCE)
 
 
+def has_positive_reserve_context(text):
+    reserve_positive = [
+        "储备量约", "储备量为", "储备资产约", "储备资产为", "储备证明",
+        "覆盖全部流通供应", "足额储备", "现金和国债覆盖",
+    ]
+    reserve_pressure = [
+        "储备不足", "储备透明度不足", "储备缺口", "储备承压", "准备金不足",
+        "挤兑", "暂停赎回", "资不抵债", "偿付危机", "资金缺口", "坏账",
+        "浮亏", "未实现损失", "亏损扩大",
+    ]
+    return has_any(text, reserve_positive) and not has_any(text, reserve_pressure)
+
+
+def has_benign_financial_context(text):
+    benign = [
+        "净亏损收窄", "营收增长", "同比增", "毛利率升", "订单积压",
+        "利润增长", "业绩增长", "创逾", "股价上涨", "飙涨",
+    ]
+    crisis = [
+        "流动性危机", "偿付危机", "资不抵债", "坏账", "挤兑",
+        "无法兑付", "亏损扩大", "浮亏扩大", "未实现亏损扩大",
+        "资金缺口", "储备不足",
+    ]
+    return has_any(text, benign) and not has_any(text, crisis)
+
+
+def has_dominant_net_inflow_context(text):
+    if "净流入" not in (text or ""):
+        return False
+    first_inflow = str(text or "").find("净流入")
+    first_outflow = str(text or "").find("净流出")
+    if first_outflow >= 0 and (first_inflow < 0 or first_outflow < first_inflow):
+        return False
+    outflow_count = str(text or "").count("净流出")
+    inflow_count = str(text or "").count("净流入")
+    if has_any(text, ["连续净流出", "总净流出", "累计净流出", "七周来首次净流出"]):
+        return False
+    return inflow_count >= outflow_count
+
+
 def extract_max_pct(text):
     mx = 0.0
     for m in PCT_RE.finditer(text or ""):
@@ -307,6 +347,27 @@ def extract_usd_equiv(text):
     return usd
 
 
+def extract_max_usd_near_terms(text: str, terms: list[str], window: int = 24) -> float:
+    max_usd = 0.0
+    value = text or ""
+    for m in AMT_RE.finditer(value):
+        start = max(0, m.start() - window)
+        end = min(len(value), m.end() + window)
+        nearby = value[start:end]
+        if not has_any(nearby, terms):
+            continue
+        if has_any(nearby, ["历史总净流出", "历史累计净流出", "历史总流出", "累计净流出"]):
+            continue
+        raw, unit = m.group(1), m.group(2)
+        raw = raw.replace(",", "")
+        try:
+            amount = float(raw) * USD_UNIT_MULT.get(unit.upper(), 0.0)
+        except Exception:
+            continue
+        max_usd = max(max_usd, amount)
+    return max_usd
+
+
 def clip01(x: float) -> float:
     return 0.0 if x < 0 else (1.0 if x > 1 else float(x))
 
@@ -321,8 +382,19 @@ def smooth_strength(x, x0, scale):
 
 # 1) 合约/链上漏洞攻击 (v3.1 强化安全语境抑制，提升漏洞与事后处理信号)
 def score_hack(text):
+    if (
+        has_any(text, ["空头", "多头", "杠杆", "平仓", "交易员", "仓位", "资金费用"])
+        and has_any(text, ["损失", "亏损"])
+        and not has_any(text, ["攻击", "被盗", "盗取", "漏洞", "黑客", "私钥泄露", "安全事件", "非法铸造"])
+    ):
+        return 0.0
     if has_any(text, ["未造成用户损失", "未造成代币超发"]) and not has_any(text, ["攻击者", "被盗", "盗取", "资金丢失", "资金外流"]):
         return 0.0
+    if has_any(text, ["攻击者", "黑客地址"]) and has_any(text, ["Tornadocash", "Tornado Cash", "TornadoCash", "兑换", "存入"]):
+        base = 0.78
+        if has_any(text, ["被盗资金", "赃款", "攻击者仍持有", "已下跌", "暴跌"]):
+            base = 0.85
+        return base
     if has_illicit_fund_flow(text) and not has_any(text, ["漏洞利用", "利用漏洞", "私钥泄露", "热钱包私钥", "遭受攻击", "损失约"]):
         return 0.55
 
@@ -570,11 +642,13 @@ def score_outage(text):
 # 5) 稳定币异常 (保持)
 STABLES = ["USDT", "USDC", "DAI", "FDUSD", "TUSD", "UST", "USDD", "FRAX", "PYUSD", "稳定币"]
 STABLE_HINTS = ["脱锚", "锚定", "锚离", "peg", "depeg", "跌破1美元", "跌破 1 美元", "回到1美元"]
-STABLE_NUM = re.compile(r'\b0\.9\d\b|\b1\.0\d\b')
+STABLE_NUM = re.compile(r'\b(?:0\.9\d|1\.0\d)\b(?!\s*[%％])')
 
 
 def score_stablecoin(text):
     if not has_any(text, STABLES):
+        return 0.0
+    if has_any(text, ["资金费率", "标记价格", "价格上下限"]) and not has_any(text, ["脱锚", "失去锚定", "偏离锚定", "赎回", "储备不足"]):
         return 0.0
     if has_any(text, ["覆盖全部流通供应", "储备证明", "现金和国债覆盖", "未出现赎回暂停"]):
         return 0.30
@@ -849,6 +923,8 @@ KW_SOLV = [
 
 
 def score_solvency(text):
+    if has_positive_reserve_context(text) or has_benign_financial_context(text):
+        return 0.0
     if has_any(text, ["未出现赎回暂停", "覆盖全部流通供应", "没有坏账", "无坏账"]):
         return 0.0
     # 排除代币化/增持等中性上下文，除非出现强危机词
@@ -857,6 +933,15 @@ def score_solvency(text):
             return 0.0
 
     if has_any(text, KW_SOLV):
+        if has_any(text, ["储备", "储备资产", "储备量"]) and not has_any(
+            text,
+            [
+                "储备不足", "储备透明度不足", "储备缺口", "储备承压", "准备金不足",
+                "挤兑", "暂停赎回", "资不抵债", "偿付危机", "资金缺口", "坏账",
+                "浮亏", "未实现损失", "亏损扩大", "流动性危机", "无法兑付",
+            ],
+        ):
+            return 0.0
         if has_any(text, STABLES) or has_any(text, ["发行方", "储备资产"]):
             return 0.88
         return 0.78
@@ -946,17 +1031,29 @@ KW_BRIDGE = [
 def score_bridge(text):
     if not has_any(text, KW_BRIDGE):
         return 0.0
+    if has_any(text, ["流入", "桥接流入", "资金面显著增量", "创", "新高"]) and not has_any(
+        text,
+        ["攻击", "被攻击", "漏洞", "被盗", "暂停", "异常", "资产流出", "资金转移", "exploit", "hack"],
+    ):
+        return 0.0
+    if has_any(text, ["永久关闭", "关闭", "停止所有转账", "停止转账功能", "截止日期", "完成未处理", "未回收资产", "提取"]) and not has_any(
+        text,
+        ["交易所", "中心化交易平台", "币安"],
+    ):
+        return 0.60
     usd = extract_usd_equiv(text)
     if has_any(text, ["私钥泄露", "热钱包私钥"]) and has_any(text, ["通过跨链桥"]):
         return 0.55
     if has_any(text, NEG_PLANNED_MAINT) and not has_any(text, ["攻击", "被攻击", "漏洞", "资产流出", "被盗", "exploit", "hack"]):
         return 0.20
-    if has_any(text, NEG_NO_RISK) or has_any(text, ["已恢复", "完成修复"]):
-        return 0.35
     if has_any(text, ["未发现漏洞攻击", "未发生攻击"]):
         return 0.45
     if has_any(text, ["攻击", "被攻击", "漏洞", "被盗", "攻击者", "错误释放资产", "资产流出异常", "exploit", "hack"]):
-        return clip01(0.99 + 0.01 * smooth_strength(usd, 1_000_000, 50_000_000))
+        if has_any(text, ["已恢复", "完全恢复", "补入", "销毁"]) and not has_any(text, ["被盗", "借出", "错误释放资产", "未发生对应销毁", "市场受影响"]):
+            return 0.45
+        return clip01(0.88 + 0.10 * smooth_strength(usd, 1_000_000, 50_000_000))
+    if has_any(text, NEG_NO_RISK) or has_any(text, ["已恢复", "完成修复"]):
+        return 0.35
     if has_any(text, ["暂停", "异常", "资产异常", "资金转移", "资产流出", "桥接服务"]):
         return 0.72 if has_any(text, ["紧急", "损失仍在统计", "资产流出"]) else 0.50
     return 0.45
@@ -1013,6 +1110,347 @@ def score_macro(text):
         base *= 0.15
     score_val = clip01(base + 0.05 * smooth_strength(pct, 5, 15))
     return min(score_val, 0.15)
+
+
+def _set_soft_score(
+    scores: dict[str, dict[str, object]],
+    risk_type: str,
+    score: float,
+    reason: str,
+    matched_terms: list[str],
+) -> None:
+    current = float(scores.get(risk_type, {}).get("score", 0.0))
+    if score <= current:
+        return
+    scores[risk_type] = {
+        "score": clip01(score),
+        "reason": reason,
+        "matched_terms": matched_terms,
+    }
+
+
+def _soft_score_from_pct(pct: float, base: float, high: float = 0.75) -> float:
+    if pct >= 80:
+        return min(high, max(base, 0.72))
+    if pct >= 50:
+        return min(high, max(base, 0.65))
+    if pct >= 30:
+        return min(high, max(base, 0.55))
+    if pct >= 15:
+        return min(high, max(base, 0.45))
+    return base
+
+
+def _has_plain_listing(text: str) -> bool:
+    return has_any(text, ["将上线", "上线交易对", "上线以下", "开放交易", "现货交易对"]) and not has_any(
+        text,
+        ["最高杠杆", "自动平仓", "强制平仓", "暂停", "停止支持", "清算", "Pre-IPO", "代币化证券"],
+    )
+
+
+def _is_plain_campaign_or_product_launch(text: str) -> bool:
+    if has_any(text, ["MiCA", "监管", "SEC", "CFTC", "法院", "法案", "公开咨询", "征求意见"]):
+        return False
+    launch_terms = [
+        "交易者联盟", "交易竞赛", "奖池", "活动时间", "上线交易对", "将上线", "合约平台将上线",
+        "合约上线以来", "开放交易", "推出实时区块链数据流服务", "合作支持",
+    ]
+    risk_terms = [
+        "攻击", "被盗", "漏洞", "脱锚", "净流出", "暴跌", "闪崩", "强制平仓", "自动平仓",
+        "清算", "暂停提现", "停止支持", "无法访问", "亏损", "损失", "回撤", "平仓", "操纵", "坏账", "挤兑",
+    ]
+    if has_any(text, launch_terms) and not has_any(text, risk_terms):
+        return True
+    if has_any(text, ["上线以来累计上涨", "浮盈", "回报率"]) and not has_any(text, ["清算价", "爆仓", "强平", "亏损"]):
+        return True
+    return False
+
+
+def _is_asset_tokenization_progress(text: str) -> bool:
+    if has_any(text, ["风险规避", "Risk-off", "risk-off", "宏观环境急剧恶化", "避险情绪", "需求动能远低"]):
+        return False
+    return has_any(text, ["资产代币化", "代币化金融资产", "代币化证券", "Securitize", "纳斯达克试点", "试点获批", "合规沙盒"]) and has_any(
+        text,
+        ["推进", "加速", "合作", "试点获批", "推出", "框架下合作", "支持", "合规参与"],
+    ) and not has_any(text, ["执法", "罚款", "指控", "起诉", "禁令", "停止服务", "暂停", "无法访问", "损失全部投资"])
+
+
+def _is_policy_consultation_only(text: str) -> bool:
+    return has_any(text, ["MiCA", "公开咨询", "法规审查", "监管框架", "监管咨询", "目标咨询", "问卷", "征求意见"]) and not has_any(
+        text,
+        ["执法", "罚款", "指控", "起诉", "处罚", "制裁", "查封", "停止服务", "业务暂停", "禁止交易", "禁止提供"],
+    )
+
+
+def _is_positive_bridge_flow(text: str) -> bool:
+    return has_any(text, ["跨链桥", "桥接"]) and has_any(text, ["流入", "净流入", "资金面显著增量", "创", "新高"]) and not has_any(
+        text,
+        ["攻击", "被攻击", "漏洞", "被盗", "异常", "资产流出", "资金转移", "暂停", "停止所有转账"],
+    )
+
+
+def _is_long_term_price_prediction(text: str) -> bool:
+    head = str(text or "")[:160]
+    return has_any(head, ["预计", "可能达到", "目标价", "最终可能达到", "看跌情绪", "市场底部"]) and not has_any(
+        text,
+        ["亏损", "浮亏", "减持", "清仓", "抛售", "净流出", "暴跌", "强平", "清算", "坏账", "挤兑"],
+    )
+
+
+def _is_positive_flow_or_recovery_context(text: str) -> bool:
+    if has_any(text, ["风险规避", "Risk-off", "risk-off", "宏观环境急剧恶化", "避险情绪升温", "需求动能远低", "失去结构性上涨动能"]):
+        return False
+    return (
+        has_dominant_net_inflow_context(text)
+        or has_any(text, ["流入推动市场复苏", "市场复苏", "回暖", "需求回升"])
+    ) and not has_any(text, ["七周来首次净流出", "连续净流出", "总净流出", "累计净流出", "避险情绪升温"])
+
+
+def _apply_news_context_caps(text: str, raw_scores: dict[str, float]) -> dict[str, float]:
+    scores = dict(raw_scores)
+
+    if _is_plain_campaign_or_product_launch(text):
+        for risk_type in ["score_regulatory", "score_liquidation", "score_outage", "score_whale", "score_volatility"]:
+            scores[risk_type] = min(scores.get(risk_type, 0.0), 0.15)
+
+    if _is_asset_tokenization_progress(text):
+        for risk_type in ["score_regulatory", "score_macro", "score_whale", "score_volatility", "score_solvency"]:
+            scores[risk_type] = min(scores.get(risk_type, 0.0), 0.20)
+
+    if _is_policy_consultation_only(text):
+        scores["score_regulatory"] = min(scores.get("score_regulatory", 0.0), 0.35)
+        scores["score_macro"] = min(scores.get("score_macro", 0.0), 0.20)
+        scores["score_solvency"] = min(scores.get("score_solvency", 0.0), 0.20)
+
+    if _is_positive_bridge_flow(text):
+        scores["score_bridge"] = 0.0
+        scores["score_liquidation"] = 0.0
+        scores["score_volatility"] = 0.0
+
+    if _is_positive_flow_or_recovery_context(text):
+        for risk_type in ["score_volatility", "score_macro", "score_whale", "score_solvency"]:
+            scores[risk_type] = min(scores.get(risk_type, 0.0), 0.20)
+
+    if _is_long_term_price_prediction(text):
+        for risk_type in ["score_whale", "score_volatility", "score_macro", "score_regulatory"]:
+            scores[risk_type] = min(scores.get(risk_type, 0.0), 0.05)
+
+    if has_any(text, ["净亏损", "财报", "财务业绩"]) and has_any(text, ["债务"]) and not has_any(
+        text,
+        ["美债", "收益率", "通胀", "避险", "风险偏好", "地缘", "战争", "宏观环境"],
+    ):
+        scores["score_macro"] = min(scores.get("score_macro", 0.0), 0.20)
+
+    if has_any(text, ["未平仓合约大幅下降", "未平仓合约总额", "杠杆率较峰值下降"]) and has_any(text, ["市场份额"]) and not has_any(
+        text,
+        ["价格暴跌", "闪崩", "爆仓", "强平", "强制清算", "自动平仓"],
+    ):
+        scores["score_volatility"] = min(scores.get("score_volatility", 0.0), 0.25)
+        scores["score_liquidation"] = max(min(scores.get("score_liquidation", 0.0), 0.35), 0.30)
+
+    return scores
+
+
+def score_soft_news_risks(text: str) -> dict[str, dict[str, object]]:
+    """补充新闻排行榜口径的软风险召回，不覆盖硬攻击/脱锚类规则。"""
+    t = str(text or "")
+    scores: dict[str, dict[str, object]] = {}
+    pct = extract_max_pct(t)
+    usd = extract_usd_equiv(t)
+
+    if _has_plain_listing(t):
+        return scores
+    if _is_plain_campaign_or_product_launch(t):
+        return scores
+    if has_any(t, ["收购", "接管", "推出"]) and has_any(t, ["基金", "收益率", "资产管理", "投资组合"]) and not has_any(
+        t,
+        ["亏损", "下跌", "暴跌", "净流出", "清算", "爆仓", "暂停", "赎回", "挤兑", "攻击", "被盗"],
+    ):
+        return scores
+
+    # ETF / 投资产品资金流：净流出、连续流出、避险驱动通常体现市场/宏观压力。
+    if has_any(t, ["ETF", "投资产品", "基金"]) and has_any(t, ["净流出", "流出"]) and not has_dominant_net_inflow_context(t):
+        terms = _matched_terms(t, ["ETF", "投资产品", "净流出", "连续", "创历史", "避险", "伊朗", "地缘"])
+        outflow_usd = extract_max_usd_near_terms(t, ["净流出", "流出"])
+        score = 0.35
+        if outflow_usd >= 1_000_000_000:
+            score = 0.65
+        elif outflow_usd >= 300_000_000:
+            score = 0.45
+        if has_any(t, ["连续", "创历史", "第三高", "第二高", "最大"]):
+            score = max(score, 0.55 if outflow_usd >= 1_000_000_000 else 0.50)
+        if has_any(t, ["避险", "地缘", "伊朗", "风险偏好"]):
+            _set_soft_score(scores, "score_macro", max(score, 0.60), "投资产品大额流出叠加宏观避险", terms)
+        else:
+            _set_soft_score(scores, "score_volatility", score, "ETF/投资产品大额或连续净流出", terms)
+
+    # 市场、板块、DEX、TVL、NFT 流动性下滑。
+    if has_any(t, ["加密市场", "板块", "DEX", "TVL", "总锁仓", "交易量", "NFT", "地板价", "持币数据"]) and has_any(
+        t,
+        ["下跌", "暴跌", "大跌", "骤降", "降至", "跌破", "回落", "流出", "降温", "流动性趋紧", "几乎无成交"],
+    ):
+        if has_any(t, ["板块普涨", "多数上涨", "普遍上涨", "普涨", "表现突出"]) and not has_any(
+            t,
+            ["全线下跌", "暴跌", "流动性枯竭", "几乎无成交", "大幅下降", "大规模清算"],
+        ):
+            return scores
+        terms = _matched_terms(t, ["下跌", "暴跌", "骤降", "降至", "跌破", "流动性趋紧", "几乎无成交", "TVL", "DEX"])
+        score = _soft_score_from_pct(pct, 0.45, 0.75)
+        if has_any(t, ["暴跌", "闪崩", "全线下跌", "流动性枯竭", "几乎无成交"]):
+            score = max(score, 0.60)
+        if has_any(t, ["TVL", "持币数据", "长期持有者", "资金流出"]) and has_any(t, ["周降", "30天降", "一周", "下跌约"]):
+            score = max(score, 0.60)
+        if has_any(t, ["NFT", "地板价"]) and has_any(t, ["无法访问", "停止支持", "无法提现"]):
+            _set_soft_score(scores, "score_solvency", max(score, 0.55), "NFT/协议流动性和持续经营压力", terms)
+        else:
+            _set_soft_score(scores, "score_volatility", score, "市场、板块或链上交易活跃度显著下滑", terms)
+
+    if has_any(t, ["期权到期", "最大痛点", "关键链上支撑", "短期持有者成本", "价格区间", "被压制"]) and has_any(
+        t,
+        ["BTC", "比特币", "以太坊", "ETH", "加密市场"],
+    ):
+        terms = _matched_terms(t, ["期权到期", "最大痛点", "关键链上支撑", "短期持有者成本", "价格区间", "被压制"])
+        score = 0.50
+        if usd >= 1_000_000_000:
+            score = 0.55
+        _set_soft_score(scores, "score_volatility", score, "期权到期与链上支撑压制价格波动", terms)
+
+    # 爆仓、杠杆、清算价、自动平仓。
+    if has_any(t, ["杠杆", "永续", "合约", "清算价", "爆仓", "强平", "强制平仓", "自动平仓", "平仓", "未平仓合约"]):
+        terms = _matched_terms(t, ["杠杆", "永续", "清算价", "爆仓", "强平", "自动平仓", "未平仓合约", "亏损"])
+        if has_any(t, ["爆仓", "强平", "强制平仓", "自动平仓", "被迫平仓", "清算价", "距爆仓"]):
+            score = 0.60
+            if usd >= 100_000_000:
+                score = 0.85
+            elif usd >= 5_000_000:
+                score = 0.75
+            elif usd >= 1_000_000:
+                score = 0.60
+            if has_any(t, ["净回撤", "市场操纵", "资金费率"]) and has_any(t, ["被迫平仓", "平仓"]):
+                score = max(score, 0.70)
+            _set_soft_score(scores, "score_liquidation", score, "明确清算、强平或接近爆仓信号", terms)
+        elif has_any(t, ["空头", "多头", "仓位", "交易员", "资金费用"]) and has_any(t, ["锁定", "关闭", "亏损", "损失"]):
+            score = 0.55
+            if usd >= 10_000_000:
+                score = 0.75
+            elif usd >= 1_000_000:
+                score = 0.60
+            _set_soft_score(scores, "score_liquidation", score, "杠杆仓位已实现大额亏损", terms)
+        elif has_any(t, ["最高杠杆", "资金费率", "保证金阶梯", "抵押率", "未平仓合约"]):
+            score = 0.25
+            if has_any(t, ["Pre-IPO", "转换为标准", "合约转换"]) and has_any(t, ["交易功能不受影响", "仓位不会被取消"]):
+                score = 0.15
+            if has_any(t, ["调整抵押率", "保证金阶梯", "下调", "资金费率"]):
+                score = 0.30
+            if has_any(t, ["Pre-IPO", "转换为标准", "合约转换"]) and has_any(t, ["交易功能不受影响", "仓位不会被取消"]):
+                score = min(score, 0.15)
+            if has_any(t, ["未平仓合约"]) and (usd >= 1_000_000_000 or pct >= 50):
+                score = 0.45
+            _set_soft_score(scores, "score_liquidation", score, "合约杠杆、保证金或资金费率变化带来清算压力", terms)
+
+    # 交易所服务调整、暂停、停止支持。
+    if has_any(t, ["交易所", "币安", "Binance", "钱包", "合约", "杠杆", "NFT服务"]) and has_any(
+        t,
+        ["暂停", "停止支持", "仅可取消", "cancel-only", "自动平仓", "移除", "升级", "维护", "无法访问", "停止所有转账"],
+    ):
+        terms = _matched_terms(t, ["暂停", "停止支持", "仅可取消", "自动平仓", "移除", "升级", "维护", "无法访问"])
+        score = 0.25
+        if has_any(t, ["自动平仓", "停止支持", "无法访问", "停止所有转账"]):
+            score = 0.60
+        elif has_any(t, ["暂停", "仅可取消", "TRADING_HALT", "cancel-only"]):
+            score = 0.35
+        _set_soft_score(scores, "score_outage", score, "交易所服务暂停、迁移或功能限制", terms)
+
+    # 代币解锁、供应收缩/异常、流通量剧烈变化。
+    if (
+        has_any(t, ["新币", "新上线代币", "代币市场", "解锁抛压", "空投演变为退出流动性"])
+        and has_any(t, ["中位数跌", "跌幅达", "跑输", "抛压", "退出流动性"])
+    ):
+        terms = _matched_terms(t, ["新币", "新上线代币", "中位数跌", "跌幅达", "解锁", "抛压", "退出流动性"])
+        score = 0.75 if pct >= 50 else 0.65
+        _set_soft_score(scores, "score_token_issuance", score, "新币解锁与发行结构导致持续抛压", terms)
+
+    if has_any(t, ["解锁", "流通量", "供应量", "销毁", "增发", "代币结构调整"]):
+        if has_any(t, ["USDC", "USDT", "稳定币"]) and has_positive_reserve_context(t):
+            pass
+        elif has_any(t, ["流通量增加", "发行约", "赎回约"]) and has_any(t, ["储备量约", "国债", "回购"]):
+            pass
+        elif all(term in t for term in ["补偿", "未来", "解锁"]) and not has_any(t, ["解锁抛压", "大额解锁", "供应异常", "异常增发"]):
+            pass
+        elif has_any(t, ["持仓", "持有", "购入", "增持"]) and has_any(t, ["流通供应量", "总供应量", "供应量的"]) and not has_any(t, ["解锁", "增发", "销毁", "减少", "异常", "超发"]):
+            pass
+        else:
+            terms = _matched_terms(t, ["解锁", "流通量", "供应量", "销毁", "增发", "代币结构调整"])
+            score = 0.15
+            if has_any(t, ["大额解锁", "超", "超过"]) or pct >= 3:
+                score = 0.50
+            if pct >= 20 or usd >= 100_000_000:
+                score = 0.65
+            if has_any(t, ["减少", "降", "销毁"]) and pct >= 50:
+                score = 0.45 if not has_any(t, ["异常", "超发", "攻击", "被盗", "用户损失", "供应量异常"]) else 0.75
+            _set_soft_score(scores, "score_token_issuance", score, "代币解锁或供应结构剧烈变化", terms)
+
+    # 巨鲸/企业财库集中持仓和减持。
+    if has_any(t, ["巨鲸", "大户", "财库", "持有", "持仓", "增持", "减持", "清仓", "转至", "质押"]) and has_any(
+        t,
+        ["ETH", "以太坊", "BTC", "比特币", "SOL", "供应量", "总供应量", "亏损", "浮亏", "抛售", "减持", "清仓"],
+    ):
+        terms = _matched_terms(t, ["巨鲸", "大户", "财库", "持仓", "增持", "减持", "清仓", "质押", "供应量", "浮亏"])
+        if has_any(t, ["增持", "买入", "持有", "持仓"]) and not has_any(t, ["亏损", "浮亏", "抛售", "减持", "清仓", "集中", "供应量的"]):
+            score = 0.15
+        else:
+            score = 0.35
+        if has_any(t, ["清仓", "减持", "抛售", "转至"]) and usd >= 1_000_000:
+            score = 0.60
+        if has_any(t, ["占以太坊总供应量", "流通供应", "总供应量", "供应量的", "供应量达"]) and (pct >= 3 or usd >= 1_000_000_000):
+            score = max(score, 0.55)
+        if has_any(t, ["持有", "持仓", "购入", "增持"]) and has_any(t, ["万枚ETH", "枚ETH", "流通供应", "供应量"]) and (pct >= 3 or usd >= 100_000_000):
+            score = max(score, 0.55)
+        has_large_treasury_position = has_any(t, ["持有", "持仓", "购入", "增持"]) and has_any(t, ["万枚ETH", "枚ETH", "流通供应", "总供应量", "供应量"])
+        if _is_long_term_price_prediction(t) and not has_large_treasury_position:
+            score = min(score, 0.20)
+        _set_soft_score(scores, "score_whale", score, "巨鲸或企业财库集中持仓/减持", terms)
+
+    # 财务亏损、坏账、储备承压。
+    if (
+        has_any(t, ["净亏损", "浮亏", "坏账", "挤兑", "救助", "储备", "偿付", "亏损扩大", "财务困境", "利润率跌破"])
+        and not has_positive_reserve_context(t)
+        and not has_benign_financial_context(t)
+    ):
+        terms = _matched_terms(t, ["净亏损", "浮亏", "坏账", "挤兑", "救助", "储备", "亏损扩大", "利润率跌破"])
+        score = 0.45
+        if has_any(t, ["净亏损"]) and usd >= 100_000_000:
+            score = 0.60
+        if has_any(t, ["浮亏", "亏损扩大", "坏账", "挤兑", "救助"]):
+            score = 0.75
+        if usd >= 1_000_000_000 and has_any(t, ["浮亏", "坏账", "挤兑", "亏损扩大", "资金缺口"]):
+            score = 0.80
+        _set_soft_score(scores, "score_solvency", score, "财务亏损、坏账或储备承压", terms)
+
+    # 监管不确定性、代币化证券、休眠钱包所有权诉讼。
+    if has_any(t, ["法案", "监管", "SEC", "CFTC", "法院", "法官", "诉讼", "MiCA", "代币化证券", "Pre-IPO"]):
+        terms = _matched_terms(t, ["法案", "监管", "SEC", "法院", "法官", "诉讼", "MiCA", "代币化证券", "Pre-IPO"])
+        if has_any(t, ["Pre-IPO"]) and has_any(t, ["币安", "Binance", "合约"]) and has_any(t, ["合约转换", "转换为标准", "标记价格", "过渡", "调整", "仅限取消"]):
+            _set_soft_score(scores, "score_outage", 0.20, "Pre-IPO 合约转换属于交易所产品迁移", terms)
+        else:
+            score = 0.25
+            if has_any(t, ["不确定性", "悬而未决", "诉讼", "所有权", "审查", "咨询"]):
+                score = 0.55
+            if has_any(t, ["代币化证券", "Pre-IPO", "股票代币"]):
+                score = max(score, 0.45)
+            _set_soft_score(scores, "score_regulatory", score, "监管、诉讼或代币化证券不确定性", terms)
+
+    # 宏观避险和地缘风险对数字资产资金面影响。
+    if has_any(t, ["避险", "风险规避", "Risk-off", "risk-off", "地缘", "伊朗", "战争", "债务", "美债", "收益率", "通胀", "风险偏好"]):
+        terms = _matched_terms(t, ["避险", "风险规避", "Risk-off", "risk-off", "地缘", "伊朗", "战争", "债务", "美债", "收益率", "通胀", "风险偏好"])
+        linked = has_any(t, ["加密", "数字资产", "比特币", "以太坊", "ETF", "投资产品", "币市"])
+        if linked:
+            score = 0.35
+            if has_any(t, ["流出", "下跌", "避险情绪升温", "风险偏好回落", "风险规避", "Risk-off", "risk-off", "宏观环境急剧恶化"]):
+                score = 0.65
+            _set_soft_score(scores, "score_macro", score, "宏观避险或政策冲击影响数字资产", terms)
+
+    return scores
 
 
 # ---------------- 风险配置 ----------------
@@ -1111,8 +1549,8 @@ HIGH_RISK_FLOOR_RULES = {
         "groups": {
             "exploit": ["漏洞利用", "利用漏洞", "被利用", "exploit", "exploited"],
             "security_event": ["安全事件", "攻击事件", "被黑", "黑客攻击", "遭受攻击", "合约异常", "黑客", "疑似黑客", "钓鱼活动"],
-            "illicit_funds": ["被盗资金", "钓鱼资金", "赃款", "非法资金", "黑客地址", "疑似黑客或钓鱼活动相关资金"],
-            "fund_flow": ["链上监测", "资金", "持续买入", "买入", "购入", "转入", "转出", "流入", "流出"],
+            "illicit_funds": ["被盗资金", "钓鱼资金", "赃款", "非法资金", "黑客地址", "攻击者", "疑似黑客或钓鱼活动相关资金"],
+            "fund_flow": ["链上监测", "资金", "持续买入", "买入", "购入", "转入", "转出", "流入", "流出", "兑换", "存入", "Tornadocash", "Tornado Cash"],
             "market_impact": ["明显影响", "价格影响", "市场价格", "价格产生"],
             "abnormal_mint": ["无限铸币", "无限铸造", "异常铸造", "未授权铸造", "非法铸造", "被铸造"],
             "pause_interaction": ["暂勿交互", "暂停交互", "暂勿与", "不要交互", "避免交互", "合约暂停"],
@@ -1163,6 +1601,8 @@ HIGH_RISK_FLOOR_RULES = {
             "solvency": ["资不抵债", "偿付能力", "破产", "流动性危机", "坏账"],
             "reserve": ["储备不足", "准备金不足", "资产缺口", "负债缺口"],
             "withdrawal": ["暂停提现", "无法兑付", "挤兑", "赎回延迟"],
+            "treasury_loss": ["浮亏", "未实现亏损", "账面亏损", "亏损扩大", "储备账面浮亏"],
+            "treasury_exposure": ["储备", "财库", "持仓", "总供应量", "价格或进一步", "支撑"],
             "official": ["官方承认", "审计显示", "披露", "监管调查"],
         },
         "reason": "偿付/储备强信号组合",
@@ -1194,9 +1634,10 @@ HIGH_RISK_FLOOR_RULES = {
         "trigger_score": 0.60,
         "groups": {
             "mint": ["未授权铸造", "异常增发", "无限铸币", "无限铸造", "非法铸造", "异常铸造"],
-            "supply": ["供应量异常", "代币供应异常", "超发", "大量增发", "新增供应"],
+            "supply": ["供应量异常", "代币供应异常", "超发", "大量增发", "新增供应", "新币", "新上线代币", "代币解锁"],
             "exploit": ["漏洞", "被利用", "攻击者", "权限被滥用", "铸造权限"],
-            "impact": ["抛售", "价格暴跌", "市场冲击", "储备受损", "可变现"],
+            "unlock": ["解锁", "固定时间解锁", "解锁抛压", "退出流动性", "空投"],
+            "impact": ["抛售", "价格暴跌", "市场冲击", "储备受损", "可变现", "中位数跌", "跌幅达", "跑输", "抛压"],
         },
         "reason": "代币异常增发/未授权铸造强信号组合",
     },
@@ -1206,7 +1647,7 @@ HIGH_RISK_FLOOR_RULES = {
         "groups": {
             "bridge": ["跨链桥", "桥接", "bridge"],
             "attack": ["攻击", "被攻击", "漏洞", "被盗", "exploit", "hack"],
-            "flow": ["跨链资金", "资金转移", "资产被盗", "异常转出", "流出"],
+            "flow": ["跨链资金", "资金转移", "资产被盗", "异常转出", "流出", "释放", "伪造消息", "未发生对应销毁", "借出", "市场受影响"],
             "pause": ["暂停", "桥暂停", "合约暂停", "停止跨链"],
         },
         "reason": "跨链桥攻击/跨链资金异常强信号组合",
@@ -1250,7 +1691,7 @@ HIGH_RISK_FLOOR_RULES = {
         "groups": {
             "shock": ["战争", "军事行动", "制裁", "危机", "金融风暴", "地缘冲突"],
             "market": ["加密市场", "比特币", "以太坊", "币市", "数字资产市场"],
-            "impact": ["暴跌", "流动性冲击", "避险情绪", "风险偏好下降", "市场冲击"],
+            "impact": ["暴跌", "流动性冲击", "避险情绪", "风险规避", "Risk-off", "risk-off", "风险偏好下降", "宏观环境急剧恶化", "市场冲击"],
             "policy": ["资本管制", "禁令", "封锁", "加息", "监管冲击"],
         },
         "reason": "宏观/政策冲击强信号组合",
@@ -1284,6 +1725,23 @@ RISK_TYPE_ORDER = [
     "score_liquidation",
     "score_regulatory",
 ]
+
+PRIMARY_PRIORITY = {
+    "score_hack": 100,
+    "score_stablecoin": 98,
+    "score_solvency": 94,
+    "score_bridge": 92,
+    "score_liquidation": 90,
+    "score_regulatory": 80,
+    "score_token_issuance": 76,
+    "score_volatility": 72,
+    "score_whale": 65,
+    "score_outage": 60,
+    "score_infra": 55,
+    "score_team": 50,
+    "score_fraud": 45,
+    "score_macro": 40,
+}
 
 NEGATIVE_PATTERNS = {
     "planned_maintenance": ["例行维护", "计划内维护", "计划内钱包维护", "钱包维护", "系统升级", "常规维护", "升级维护", "计划内升级维护"],
@@ -1335,6 +1793,11 @@ def score_to_label(score_01: float) -> str:
     return "low"
 
 
+def _primary_score_key(item: tuple[str, float]) -> tuple[float, int]:
+    risk_type, score = item
+    return (float(score), PRIMARY_PRIORITY.get(risk_type, 0))
+
+
 def score_all_risks(text: str) -> dict:
     if has_any(text, NEG_TICKER_COLLISION):
         zero_scores = {k: 0.0 for k in RISK_SCORERS.keys()}
@@ -1345,7 +1808,11 @@ def score_all_risks(text: str) -> dict:
         return zero_scores
 
     raw_scores = {name: fn(text) for name, fn in RISK_SCORERS.items()}
-    max_score_name = max(raw_scores, key=raw_scores.get)
+    soft_news_risks = score_soft_news_risks(text)
+    for risk_type, soft_result in soft_news_risks.items():
+        raw_scores[risk_type] = max(raw_scores.get(risk_type, 0.0), float(soft_result.get("score", 0.0)))
+    raw_scores = _apply_news_context_caps(text, raw_scores)
+    max_score_name = max(raw_scores.items(), key=_primary_score_key)[0]
     max_score_01 = raw_scores[max_score_name]
 
     # 主类别选取，对 score_macro 特殊处理：若它是最高分但低于0.3，尝试次选
@@ -1375,6 +1842,7 @@ def score_all_risks(text: str) -> dict:
     result["rule_label"] = effective_label
     result["rule_types"] = "|".join(hit_types)
     result["rule_primary_type"] = primary_type
+    result["soft_news_risks"] = soft_news_risks
 
     return result
 
@@ -1394,10 +1862,30 @@ def _negative_signals(text: str) -> list[Signal]:
                 has_any(text, REG_ACTORS + REG_CRYPTO_DOMAIN + REG_WEAK_SIGNALS + REG_MODERATE_SIGNALS)
                 and has_any(text, ["监管", "法规", "政策", "咨询", "草案", "指引", "法院", "SEC", "CFTC"])
             ):
+                if has_any(
+                    text,
+                    [
+                        "净流出", "暴跌", "大跌", "闪崩", "爆仓", "清算", "强平",
+                        "攻击", "被盗", "漏洞", "脱锚", "解锁抛压", "中位数跌",
+                        "浮亏", "坏账", "挤兑", "储备不足", "暂停提现",
+                        "风险规避", "Risk-off", "risk-off", "宏观环境急剧恶化",
+                    ],
+                ):
+                    continue
                 scenario = None
+            if signal_type == "positive_regulatory_clarity" and not (
+                has_any(text, REG_ACTORS + REG_CRYPTO_DOMAIN + REG_WEAK_SIGNALS + REG_MODERATE_SIGNALS)
+                and has_any(text, ["监管", "法规", "政策", "咨询", "草案", "指引", "法院", "SEC", "CFTC"])
+            ):
+                continue
             if signal_type == "security_research_only" and has_any(text, ["稳定币", "储备", "准备金率", "储备证明"]):
                 continue
             if signal_type == "resolved_or_repaired":
+                if has_any(text, ["跨链攻击", "跨链桥"]) and has_any(
+                    text,
+                    ["攻击者", "被盗", "伪造消息", "错误释放资产", "未发生对应销毁", "借出", "市场受影响", "资产外流"],
+                ):
+                    continue
                 if has_any(text, ["交易所", "提现", "充值", "登录异常", "钱包维护"]):
                     scenario = "S2_EXCHANGE_ABNORMALITY"
                 elif has_any(text, ["RPC", "预言机", "网络", "出块"]):
@@ -1485,6 +1973,111 @@ def _high_risk_route(raw_scores: dict[str, float]) -> dict[str, object]:
 
 def _high_risk_floor_signals(text: str, raw_scores: dict[str, float]) -> list[dict[str, object]]:
     signals: list[dict[str, object]] = []
+    soft_floor_rules = [
+        (
+            "score_volatility",
+            0.55,
+            55,
+            ["ETF", "投资产品", "净流出", "全线下跌", "暴跌", "DEX", "TVL", "期权到期", "价格区间"],
+            "市场波动/资金流出软风险地板",
+        ),
+        (
+            "score_liquidation",
+            0.55,
+            60,
+            ["自动平仓", "强制平仓", "被迫平仓", "锁定", "清算", "爆仓", "亏损", "损失"],
+            "清算/平仓软风险地板",
+        ),
+        (
+            "score_solvency",
+            0.55,
+            60,
+            ["净亏损", "浮亏", "坏账", "挤兑", "救助", "储备", "亏损扩大"],
+            "偿付/储备软风险地板",
+        ),
+        (
+            "score_bridge",
+            0.55,
+            60,
+            ["跨链桥", "桥接", "永久关闭", "停止所有转账", "提取", "未回收资产"],
+            "跨链桥关闭/资金可达性地板",
+        ),
+        (
+            "score_token_issuance",
+            0.55,
+            55,
+            ["解锁", "大额解锁", "供应", "抛压", "新币中位数跌"],
+            "代币解锁/供应冲击地板",
+        ),
+        (
+            "score_whale",
+            0.55,
+            55,
+            ["巨鲸", "财库", "持仓", "增持", "购入", "供应量", "最大单周购买"],
+            "巨鲸/企业财库集中持仓地板",
+        ),
+        (
+            "score_macro",
+            0.55,
+            60,
+            ["风险规避", "Risk-off", "risk-off", "宏观环境急剧恶化", "避险情绪", "ETF需求动能"],
+            "宏观 risk-off 软风险地板",
+        ),
+    ]
+    for risk_type, trigger_score, floor, terms, reason in soft_floor_rules:
+        score = float(raw_scores.get(risk_type, 0.0))
+        if score < trigger_score or not has_any(text, terms):
+            continue
+        signals.append(
+            {
+                "risk_type": risk_type,
+                "risk_name": RISK_NAME_MAP[risk_type],
+                "scenario": RISK_SCENARIO_MAP[risk_type],
+                "floor": max(floor, int(round(score * 100))),
+                "score_100": int(round(score * 100)),
+                "matched_groups": ["soft_news_risk"],
+                "matched_terms": {"soft_news_risk": _matched_terms(text, terms)},
+                "reason": reason,
+            }
+        )
+
+    if (
+        raw_scores.get("score_volatility", 0.0) >= 0.60
+        and has_any(text, ["ETF", "投资产品"])
+        and has_any(text, ["净流出", "流出"])
+        and not has_dominant_net_inflow_context(text)
+    ):
+        signals.append(
+            {
+                "risk_type": "score_volatility",
+                "risk_name": RISK_NAME_MAP["score_volatility"],
+                "scenario": RISK_SCENARIO_MAP["score_volatility"],
+                "floor": 65,
+                "score_100": int(round(raw_scores.get("score_volatility", 0.0) * 100)),
+                "matched_groups": ["fund_flow", "scale"],
+                "matched_terms": {
+                    "fund_flow": _matched_terms(text, ["ETF", "投资产品", "净流出", "流出"]),
+                    "scale": _matched_terms(text, ["亿美元", "连续", "创历史", "第二高", "第三高", "最大"]),
+                },
+                "reason": "ETF/投资产品大额净流出强信号组合",
+            }
+        )
+    if raw_scores.get("score_solvency", 0.0) >= 0.75 and has_any(text, ["浮亏", "未实现亏损", "亏损扩大"]) and has_any(text, ["储备", "财库", "持仓"]):
+        signals.append(
+            {
+                "risk_type": "score_solvency",
+                "risk_name": RISK_NAME_MAP["score_solvency"],
+                "scenario": RISK_SCENARIO_MAP["score_solvency"],
+                "floor": 75,
+                "score_100": int(round(raw_scores.get("score_solvency", 0.0) * 100)),
+                "matched_groups": ["treasury_loss", "treasury_exposure"],
+                "matched_terms": {
+                    "treasury_loss": _matched_terms(text, ["浮亏", "未实现亏损", "亏损扩大"]),
+                    "treasury_exposure": _matched_terms(text, ["储备", "财库", "持仓"]),
+                },
+                "reason": "企业财库/储备大额浮亏强信号组合",
+            }
+        )
     for risk_type, rule in HIGH_RISK_FLOOR_RULES.items():
         score = float(raw_scores.get(risk_type, 0.0))
         trigger_score = float(rule["trigger_score"])
@@ -1498,6 +2091,10 @@ def _high_risk_floor_signals(text: str, raw_scores: dict[str, float]) -> list[di
             if hits:
                 matched_groups.append(group_name)
                 matched_terms[group_name] = hits
+        if risk_type == "score_regulatory" and not ({"enforcement", "impact"} & set(matched_groups)):
+            continue
+        if risk_type == "score_volatility" and not ({"move", "liquidity"} & set(matched_groups)):
+            continue
         if len(matched_groups) < 2:
             continue
         signals.append(
@@ -1583,6 +2180,7 @@ def scan_fast_signals(text: str) -> SignalScanResult:
             "risk_type_stats": risk_type_stats,
             "high_risk_route": high_risk_route,
             "high_risk_floor_signals": high_risk_floor_signals,
+            "soft_news_risks": raw.get("soft_news_risks", {}),
         },
     )
 

@@ -1,31 +1,31 @@
 {
   "method": "llm_ranking",
   "input_csv": "llm_ranking/llm_ranking_results.csv",
-  "gold_csv": "data/crypto_market_news_100_labeled.csv",
+  "gold_csv": "data/crypto_market_news_100_labeled_v2.csv",
   "total_predictions": 100,
   "matched_gold_rows": 100,
   "unmatched_prediction_ids": [],
   "missing_prediction_ids": [],
   "score_metrics": {
     "labeled_count": 100,
-    "mae": 10.34,
-    "within_tolerance_accuracy": 0.66,
+    "mae": 11.49,
+    "within_tolerance_accuracy": 0.64,
     "score_tolerance": 10,
-    "max_abs_error": 40
+    "max_abs_error": 60
   },
   "level_metrics": {
     "labeled_count": 100,
-    "accuracy": 0.65,
+    "accuracy": 0.64,
     "confusion_matrix": {
       "中风险": {
-        "中风险": 13,
+        "中风险": 12,
         "低风险": 1,
-        "高风险": 23
+        "高风险": 20
       },
       "低风险": {
-        "中风险": 10,
+        "中风险": 11,
         "低风险": 43,
-        "高风险": 1
+        "高风险": 4
       },
       "高风险": {
         "高风险": 9
@@ -34,7 +34,7 @@
   },
   "type_metrics": {
     "labeled_count": 100,
-    "accuracy": 0.63,
+    "accuracy": 0.57,
     "confusion_matrix": {
       "交易所与系统运维风险": {
         "交易所与系统运维风险": 10
@@ -43,9 +43,8 @@
         "代币发行 / 异常增发风险": 4
       },
       "偿付能力 / 储备 / 流动性风险": {
-        "偿付能力 / 储备 / 流动性风险": 4,
-        "链上漏洞 / 攻击风险": 1,
-        "项目治理 / 团队异常风险": 1
+        "偿付能力 / 储备 / 流动性风险": 3,
+        "链上漏洞 / 攻击风险": 2
       },
       "大额转账 / 巨鲸行为风险": {
         "大额转账 / 巨鲸行为风险": 5
@@ -54,49 +53,48 @@
         "宏观 / 政策冲击风险": 6
       },
       "异常行情波动风险": {
+        "偿付能力 / 储备 / 流动性风险": 1,
         "宏观 / 政策冲击风险": 1,
-        "异常行情波动风险": 12
+        "异常行情波动风险": 12,
+        "爆仓 / 清算风险": 1
       },
       "爆仓 / 清算风险": {
-        "交易所与系统运维风险": 1,
         "大额转账 / 巨鲸行为风险": 1,
-        "爆仓 / 清算风险": 10
+        "爆仓 / 清算风险": 7,
+        "项目治理 / 团队异常风险": 1
       },
       "监管与法律风险": {
         "宏观 / 政策冲击风险": 1,
-        "监管与法律风险": 6
+        "监管与法律风险": 5
       },
       "稳定币异常风险": {
         "稳定币异常风险": 1
       },
       "综合风险": {
-        "交易所与系统运维风险": 4,
+        "交易所与系统运维风险": 5,
         "代币发行 / 异常增发风险": 1,
         "偿付能力 / 储备 / 流动性风险": 2,
         "基础设施 / 协议层异常风险": 2,
         "大额转账 / 巨鲸行为风险": 2,
         "宏观 / 政策冲击风险": 1,
         "异常行情波动风险": 8,
-        "监管与法律风险": 5,
+        "爆仓 / 清算风险": 2,
+        "监管与法律风险": 6,
         "稳定币异常风险": 1,
         "跨链桥 / 跨链资金风险": 1,
-        "项目治理 / 团队异常风险": 2
+        "项目治理 / 团队异常风险": 3
       },
       "跨链桥 / 跨链资金风险": {
-        "跨链桥 / 跨链资金风险": 2,
-        "链上漏洞 / 攻击风险": 1
+        "跨链桥 / 跨链资金风险": 2
       },
       "链上漏洞 / 攻击风险": {
         "交易所与系统运维风险": 1,
         "链上漏洞 / 攻击风险": 2
-      },
-      "项目治理 / 团队异常风险": {
-        "项目治理 / 团队异常风险": 1
       }
     }
   },
   "all_three_labeled_count": 100,
-  "all_three_accuracy": 0.2,
+  "all_three_accuracy": 0.19,
   "failed_cases": [
     {
       "原始新闻id": "de389d9a672f7e42",
@@ -173,16 +171,16 @@
       "原始新闻id": "42e8ce62b009c7a9",
       "标题": "山寨币季节指数升至51，Solana链Meme币交易降温",
       "predicted_score": 78,
-      "gold_score": 50,
+      "gold_score": 45,
       "predicted_level": "高风险",
-      "gold_level": "中风险",
+      "gold_level": "低风险",
       "predicted_type": "异常行情波动风险",
       "gold_type": "异常行情波动风险",
       "error_types": [
         "score_out_of_tolerance",
         "level_mismatch"
       ],
-      "score_abs_error": 28
+      "score_abs_error": 33
     },
     {
       "原始新闻id": "8aa58d66bfbe3efb",
@@ -315,15 +313,17 @@
       "原始新闻id": "6134f49017339c7e",
       "标题": "币安将上线交易者联盟第三季，最高300万美元等值奖池",
       "predicted_score": 30,
-      "gold_score": 20,
+      "gold_score": 10,
       "predicted_level": "中风险",
       "gold_level": "低风险",
       "predicted_type": "爆仓 / 清算风险",
-      "gold_type": "爆仓 / 清算风险",
+      "gold_type": "综合风险",
       "error_types": [
-        "level_mismatch"
+        "score_out_of_tolerance",
+        "level_mismatch",
+        "type_mismatch"
       ],
-      "score_abs_error": 10
+      "score_abs_error": 20
     },
     {
       "原始新闻id": "06858b42a71077bd",
@@ -343,15 +343,16 @@
       "原始新闻id": "33f8bc7e6b8d5c89",
       "标题": "日本游戏公司 Enish 清仓 8.063 枚比特币转投 Solana 质押",
       "predicted_score": 30,
-      "gold_score": 25,
+      "gold_score": 20,
       "predicted_level": "中风险",
       "gold_level": "低风险",
       "predicted_type": "项目治理 / 团队异常风险",
-      "gold_type": "项目治理 / 团队异常风险",
+      "gold_type": "综合风险",
       "error_types": [
-        "level_mismatch"
+        "level_mismatch",
+        "type_mismatch"
       ],
-      "score_abs_error": 5
+      "score_abs_error": 10
     },
     {
       "原始新闻id": "bfc85c92b8fae0cc",
@@ -361,7 +362,7 @@
       "predicted_level": "高风险",
       "gold_level": "中风险",
       "predicted_type": "项目治理 / 团队异常风险",
-      "gold_type": "偿付能力 / 储备 / 流动性风险",
+      "gold_type": "爆仓 / 清算风险",
       "error_types": [
         "score_out_of_tolerance",
         "level_mismatch",
@@ -387,16 +388,16 @@
       "原始新闻id": "7ff42d553398cadc",
       "标题": "币安推出 bStocks：支持部分美股与ETF 1:1 代币化并在 Binance Spot 7×24 交易",
       "predicted_score": 85,
-      "gold_score": 60,
+      "gold_score": 45,
       "predicted_level": "高风险",
-      "gold_level": "中风险",
+      "gold_level": "低风险",
       "predicted_type": "监管与法律风险",
       "gold_type": "监管与法律风险",
       "error_types": [
         "score_out_of_tolerance",
         "level_mismatch"
       ],
-      "score_abs_error": 25
+      "score_abs_error": 40
     },
     {
       "原始新闻id": "4874c5b7d0502c85",
@@ -478,7 +479,7 @@
       "predicted_level": "高风险",
       "gold_level": "高风险",
       "predicted_type": "链上漏洞 / 攻击风险",
-      "gold_type": "跨链桥 / 跨链资金风险",
+      "gold_type": "偿付能力 / 储备 / 流动性风险",
       "error_types": [
         "type_mismatch"
       ],
@@ -517,16 +518,15 @@
       "原始新闻id": "0d035e99d39578d5",
       "标题": "币安合约将上线8个USDT本位永续合约，最高杠杆20x",
       "predicted_score": 5,
-      "gold_score": 25,
+      "gold_score": 10,
       "predicted_level": "低风险",
       "gold_level": "低风险",
       "predicted_type": "交易所与系统运维风险",
-      "gold_type": "爆仓 / 清算风险",
+      "gold_type": "综合风险",
       "error_types": [
-        "score_out_of_tolerance",
         "type_mismatch"
       ],
-      "score_abs_error": 20
+      "score_abs_error": 5
     },
     {
       "原始新闻id": "849e2841d9eb4908",
@@ -562,16 +562,17 @@
       "原始新闻id": "501d30f4d964f3f7",
       "标题": "以太坊走弱拖累NFT市值",
       "predicted_score": 75,
-      "gold_score": 55,
+      "gold_score": 50,
       "predicted_level": "高风险",
       "gold_level": "中风险",
       "predicted_type": "偿付能力 / 储备 / 流动性风险",
-      "gold_type": "偿付能力 / 储备 / 流动性风险",
+      "gold_type": "异常行情波动风险",
       "error_types": [
         "score_out_of_tolerance",
-        "level_mismatch"
+        "level_mismatch",
+        "type_mismatch"
       ],
-      "score_abs_error": 20
+      "score_abs_error": 25
     },
     {
       "原始新闻id": "7dc962bb0bde4365",
@@ -620,15 +621,16 @@
       "原始新闻id": "1a77b4ac9c5c018a",
       "标题": "NanoVita称流通量降98.57%",
       "predicted_score": 85,
-      "gold_score": 75,
+      "gold_score": 45,
       "predicted_level": "高风险",
-      "gold_level": "中风险",
+      "gold_level": "低风险",
       "predicted_type": "代币发行 / 异常增发风险",
       "gold_type": "代币发行 / 异常增发风险",
       "error_types": [
+        "score_out_of_tolerance",
         "level_mismatch"
       ],
-      "score_abs_error": 10
+      "score_abs_error": 40
     },
     {
       "原始新闻id": "5396c7b7bd1098cf",
@@ -693,7 +695,7 @@
       "原始新闻id": "8ee78d3c1659e242",
       "标题": "币安NFT服务升级至币安钱包，用户需在2026年07月03日前提现NFT",
       "predicted_score": 30,
-      "gold_score": 65,
+      "gold_score": 55,
       "predicted_level": "低风险",
       "gold_level": "中风险",
       "predicted_type": "交易所与系统运维风险",
@@ -702,7 +704,7 @@
         "score_out_of_tolerance",
         "level_mismatch"
       ],
-      "score_abs_error": 35
+      "score_abs_error": 25
     },
     {
       "原始新闻id": "020c41b5df03e666",
@@ -715,6 +717,20 @@
       "gold_type": "异常行情波动风险",
       "error_types": [
         "level_mismatch"
+      ],
+      "score_abs_error": 5
+    },
+    {
+      "原始新闻id": "6625c165221ab22e",
+      "标题": "QNT 合约上线以来累计上涨 30.5%",
+      "predicted_score": 15,
+      "gold_score": 10,
+      "predicted_level": "低风险",
+      "gold_level": "低风险",
+      "predicted_type": "爆仓 / 清算风险",
+      "gold_type": "综合风险",
+      "error_types": [
+        "type_mismatch"
       ],
       "score_abs_error": 5
     },
@@ -779,15 +795,16 @@
       "原始新闻id": "f64a19480c51c2b9",
       "标题": "Cango 2026 年 Q1 财报：净亏损 2.611 亿美元",
       "predicted_score": 80,
-      "gold_score": 75,
+      "gold_score": 60,
       "predicted_level": "高风险",
       "gold_level": "中风险",
       "predicted_type": "偿付能力 / 储备 / 流动性风险",
       "gold_type": "偿付能力 / 储备 / 流动性风险",
       "error_types": [
+        "score_out_of_tolerance",
         "level_mismatch"
       ],
-      "score_abs_error": 5
+      "score_abs_error": 20
     },
     {
       "原始新闻id": "159d5830aa7b743e",
@@ -807,7 +824,7 @@
       "原始新闻id": "f593029b082a730a",
       "标题": "XLM 因 DTCC 合作上涨 51.75%，但面临回调风险",
       "predicted_score": 80,
-      "gold_score": 65,
+      "gold_score": 55,
       "predicted_level": "高风险",
       "gold_level": "中风险",
       "predicted_type": "异常行情波动风险",
@@ -816,7 +833,7 @@
         "score_out_of_tolerance",
         "level_mismatch"
       ],
-      "score_abs_error": 15
+      "score_abs_error": 25
     },
     {
       "原始新闻id": "3e46381b0e4fafa7",
@@ -1106,31 +1123,33 @@
       "原始新闻id": "a5b5edb266f0f02b",
       "标题": "",
       "predicted_score": 75,
-      "gold_score": 45,
+      "gold_score": 15,
       "predicted_level": "中风险",
       "gold_level": "低风险",
       "predicted_type": "监管与法律风险",
-      "gold_type": "监管与法律风险",
+      "gold_type": "综合风险",
       "error_types": [
         "score_out_of_tolerance",
-        "level_mismatch"
+        "level_mismatch",
+        "type_mismatch"
       ],
-      "score_abs_error": 30
+      "score_abs_error": 60
     },
     {
       "原始新闻id": "f6e05e0a0006e576",
       "标题": "",
       "predicted_score": 70,
-      "gold_score": 55,
+      "gold_score": 35,
       "predicted_level": "中风险",
-      "gold_level": "中风险",
+      "gold_level": "低风险",
       "predicted_type": "宏观 / 政策冲击风险",
       "gold_type": "监管与法律风险",
       "error_types": [
         "score_out_of_tolerance",
+        "level_mismatch",
         "type_mismatch"
       ],
-      "score_abs_error": 15
+      "score_abs_error": 35
     },
     {
       "原始新闻id": "7ab4c48febf3daee",
@@ -1164,15 +1183,16 @@
       "原始新闻id": "c720a07930bb0911",
       "标题": "",
       "predicted_score": 30,
-      "gold_score": 40,
+      "gold_score": 35,
       "predicted_level": "中风险",
       "gold_level": "低风险",
       "predicted_type": "爆仓 / 清算风险",
-      "gold_type": "爆仓 / 清算风险",
+      "gold_type": "异常行情波动风险",
       "error_types": [
-        "level_mismatch"
+        "level_mismatch",
+        "type_mismatch"
       ],
-      "score_abs_error": 10
+      "score_abs_error": 5
     },
     {
       "原始新闻id": "747e02638f8a8401",

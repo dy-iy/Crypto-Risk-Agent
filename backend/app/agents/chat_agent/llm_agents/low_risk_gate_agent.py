@@ -6,9 +6,11 @@ from app.agents.chat_agent.core.scenario_router import select_active_scenarios
 from app.agents.chat_agent.prompts import build_low_risk_gate_prompt
 from app.agents.chat_agent.schemas import RiskCaseInput, Signal, SignalScanResult
 from app.agents.chat_agent.tools.risk_scanner import (
+    DIRECT_HIGH_RISK_TYPES,
     RISK_NAME_MAP,
     RISK_SCENARIO_MAP,
     SIGNAL_TYPES,
+    THRESHOLD_HIGH_RISK_TYPES,
 )
 from app.llm import call_llm_json
 
@@ -143,35 +145,13 @@ def review_low_risk_route(
     for risk_type in confirmed_types:
         if risk_type in suppressed_types:
             continue
-        if risk_type in {
-            "score_hack",
-            "score_fraud",
-            "score_outage",
-            "score_stablecoin",
-            "score_solvency",
-            "score_team",
-            "score_infra",
-        }:
+        if risk_type in DIRECT_HIGH_RISK_TYPES:
             escalate = True
     if corrected_scores:
         for risk_type, score in corrected_scores.items():
-            if risk_type in {
-                "score_hack",
-                "score_fraud",
-                "score_outage",
-                "score_stablecoin",
-                "score_solvency",
-                "score_team",
-                "score_infra",
-            } and score > 0:
+            if risk_type in DIRECT_HIGH_RISK_TYPES and score > 0:
                 escalate = True
-            if risk_type in {
-                "score_whale",
-                "score_volatility",
-                "score_macro",
-                "score_liquidation",
-                "score_regulatory",
-            } and score > 40:
+            if risk_type in THRESHOLD_HIGH_RISK_TYPES and score > 40:
                 escalate = True
 
     raw_scores = dict(signal_scan.raw_rule_scores)
@@ -226,9 +206,28 @@ def review_low_risk_route(
                 "rule": f"{high_risk_route.get('rule') or 'rule_route'}+low_risk_gate_handoff",
             }
         )
+    high_risk_floor_signals = list(signal_scan.debug.get("high_risk_floor_signals", []))
+    for risk_type, score_100 in corrected_scores.items():
+        if risk_type in suppressed_types or score_100 < 50:
+            continue
+        floor = 76 if score_100 >= 76 else 61 if score_100 >= 61 else 50
+        high_risk_floor_signals.append(
+            {
+                "risk_type": risk_type,
+                "risk_name": RISK_NAME_MAP[risk_type],
+                "scenario": RISK_SCENARIO_MAP[risk_type],
+                "floor": floor,
+                "score_100": score_100,
+                "matched_groups": ["low_risk_gate", "reviewed_score"],
+                "matched_terms": {"low_risk_gate": [gate["reason"]]},
+                "reason": "低风险门控修正分触发风险地板",
+            }
+        )
+
     updated_debug = {
         **signal_scan.debug,
         "high_risk_route": high_risk_route,
+        "high_risk_floor_signals": high_risk_floor_signals,
         "low_risk_gate": gate,
         "low_risk_gate_handoff": {
             "risk_types": handoff_types if escalate else [],

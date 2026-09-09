@@ -121,10 +121,40 @@ def has_established_branch(report: dict[str, object]) -> bool:
     return False
 
 
+def rule_primary_category(report: dict[str, object]) -> str:
+    debug = report.get("debug")
+    if not isinstance(debug, dict):
+        return ""
+    signal_scan = debug.get("signal_scan")
+    if not isinstance(signal_scan, dict):
+        return ""
+    scan_debug = signal_scan.get("debug")
+    if not isinstance(scan_debug, dict):
+        return ""
+    category = str(scan_debug.get("rule_primary_type") or "").strip()
+    if category and category != "无明显风险":
+        return category
+    return ""
+
+
+def report_score(report: dict[str, object]) -> int:
+    try:
+        return int(float(report.get("risk_score") or report.get("final_risk_score") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def first_category(report: dict[str, object]) -> str:
     if str(report.get("risk_status") or "") == "low_risk" and not has_established_branch(report):
-        return "综合风险"
+        if report_score(report) <= 10:
+            return "综合风险"
+        return rule_primary_category(report) or "综合风险"
     primary = str(report.get("primary_category") or "").strip()
+    if primary and primary != "综合风险":
+        return primary
+    rule_primary = rule_primary_category(report)
+    if rule_primary:
+        return rule_primary
     if primary:
         return primary
     categories = report.get("risk_categories")
@@ -137,7 +167,16 @@ def event_summary(report: dict[str, object], row: dict[str, str]) -> str:
     return str(report.get("summary") or "").strip() or row.get("标题", "").strip()
 
 
+def three_level_from_score(score: int) -> str:
+    if score >= 80:
+        return "高风险"
+    if score >= 50:
+        return "中风险"
+    return "低风险"
+
+
 def build_output_row(row: dict[str, str], news_id: int, report: dict[str, object]) -> dict[str, object]:
+    score = report_score(report)
     return {
         "新闻id": news_id,
         "原始新闻id": row.get("新闻id", "").strip(),
@@ -146,8 +185,8 @@ def build_output_row(row: dict[str, str], news_id: int, report: dict[str, object
         "内容": row.get("内容", "").strip(),
         "链接": row.get("链接", "").strip(),
         "事件": event_summary(report, row),
-        "风险分数": int(report.get("risk_score") or report.get("final_risk_score") or 0),
-        "风险等级": str(report.get("risk_level") or "低风险"),
+        "风险分数": score,
+        "风险等级": three_level_from_score(score),
         "风险类别": first_category(report),
         "gold_score": "",
         "gold_level": "",

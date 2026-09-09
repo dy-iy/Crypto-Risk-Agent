@@ -10,6 +10,9 @@ experiment/
   data/
     crypto_market_news_100.csv
     crypto_market_news_100_labeled.csv
+    crypto_market_news_100_labeled_v2.csv
+    gold_label_quality_report.json
+    gold_label_v2_changes.csv
     selection_summary.json
 
   chat_agent/
@@ -43,8 +46,10 @@ Each method writes the same CSV fields:
 - `gold_level`
 - `gold_type`
 
-The method CSV `gold_*` fields are kept for compatibility. Manual gold labels should be
-maintained in `experiment/data/crypto_market_news_100_labeled.csv`.
+The method CSV `gold_*` fields are kept for compatibility. The original manual gold file
+is `experiment/data/crypto_market_news_100_labeled.csv`. The reviewed gold file is
+`experiment/data/crypto_market_news_100_labeled_v2.csv`; label changes are documented in
+`experiment/data/gold_label_v2_changes.csv`.
 
 ## Run
 
@@ -54,7 +59,7 @@ From the repository root:
 backend/.venv/bin/python experiment/chat_agent/run_chat_agent.py --concurrency 3
 backend/.venv/bin/python experiment/llm_ranking/run_llm_ranking.py
 backend/.venv/bin/python experiment/risk_scanner/run_risk_scanner.py
-backend/.venv/bin/python experiment/evaluate.py
+backend/.venv/bin/python experiment/evaluate.py --gold experiment/data/crypto_market_news_100_labeled_v2.csv
 ```
 
 Useful options:
@@ -64,6 +69,9 @@ backend/.venv/bin/python experiment/risk_scanner/run_risk_scanner.py --limit 5
 backend/.venv/bin/python experiment/chat_agent/run_chat_agent.py --resume --concurrency 3
 backend/.venv/bin/python experiment/llm_ranking/run_llm_ranking.py --concurrency 8 --output experiment/llm_ranking/llm_ranking_results.csv
 backend/.venv/bin/python experiment/evaluate.py --score-tolerance 10
+backend/.venv/bin/python experiment/audit_gold_labels.py --input experiment/data/crypto_market_news_100_labeled_v2.csv
+backend/.venv/bin/python experiment/evaluate.py --gold experiment/data/crypto_market_news_100_labeled_v2.csv
+backend/.venv/bin/python experiment/summarize_results.py
 ```
 
 ## Notes
@@ -78,3 +86,5 @@ backend/.venv/bin/python experiment/evaluate.py --score-tolerance 10
 - `risk_scanner` uses `backend/app/agents/chat_agent/tools/risk_scanner.py`.
 - `evaluate.py` compares each method result with the unified gold CSV and writes
   `evaluation.json` into each method directory.
+- `summarize_results.py` reads the three `evaluation.json` files and writes a
+  report-ready summary to `experiment/experiment_report.json`.

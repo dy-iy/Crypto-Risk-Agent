@@ -1,0 +1,18 @@
+{
+    "name": "ParticleTrade",
+    "cause": "lack of validation data",
+    "platform": "Ethereum",
+    "transaction_hash": [
+        "0xd9b3e229acc755881890394cc76fde0d7b83b1abd4d046b0f69c1fd9fd495ff6"
+    ],
+    "time": "2024-02-15 06:08:47 UTC",
+    "lost": "~50k",
+    "detection": {
+        "time": "2024-02-15 07:19:00 UTC",
+        "link": "['https://twitter.com/Phalcon_xyz/status/1758028270770250134']"
+    },
+    "root_cause": "onERC721Received",
+    "report": "Attacker use `onERC721Received` override the value of `lien.tokenId`, and then call accountBalance again. At last use `withdrawAccountBalance` to withdraw `$ETH` as same as `accoundBalance`.",
+    "report_link": "https://web3sec.notion.site/Unchecked-User-input-cf59477eac30426ba514b1ef3cc0e723",
+    "report_zh": "攻击者利用`onERC721Received`覆盖`lien.tokenId`的值，然后再次调用accountBalance。最后使用`withdrawAccountBalance`提取与`accoundBalance`相同数量的ETH。"
+}

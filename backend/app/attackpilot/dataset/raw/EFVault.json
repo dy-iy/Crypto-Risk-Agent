@@ -1,0 +1,18 @@
+{
+    "name": "EFVault",
+    "cause": "Storage Collision",
+    "platform": "Ethereum",
+    "transaction_hash": [
+        "0x1fe5a53405d00ce2f3e15b214c7486c69cbc5bf165cf9596e86f797f62e81914"
+    ],
+    "time": "2023-02-24 05:50:11 UTC",
+    "lost": "~$5.1M",
+    "disclosure": {
+        "time": "2023-02-28 08:49:00 UTC",
+        "link": "['https://twitter.com/peckshield/status/1630490333716029440']"
+    },
+    "root_cause": "redeem (assetsPerShare)",
+    "report": "The attacker exploited a critical storage collision vulnerability introduced during a contract upgrade. In the new version, the `assetDecimal` variable was incorrectly placed in the storage slot previously occupied by `maxDeposit`, causing it to inherit an incorrect, arbitrary value. The `assetsPerShare()` function, which is fundamental to calculating redemption values, used this corrupted `assetDecimal` value in its computation (`totalAssets * assetDecimal * 1e18 / totalSupply`). This miscalculation led to a severe mispricing of shares, allowing the attacker to redeem vault shares for a massively inflated amount of underlying assets, resulting in a loss of approximately $5.1 million.",
+    "report_link": "https://medium.com/cryptodevopsacademy/efvault-hacking-a-post-mortem-of-a-solidity-attack-9ce20e9896c3",
+    "report_zh": "攻击者利用了合约升级过程中引入的关键存储冲突漏洞。在新版本中，`assetDecimal`变量错误地放置在了之前由`maxDeposit`占用的存储槽，导致其继承了一个错误的、任意的值。`assetsPerShare()`函数是计算赎回价值的基础，它在计算中使用了这个损坏的`assetDecimal`值（`totalAssets * assetDecimal * 1e18 / totalSupply`）。这一误算导致了份额的严重错误定价，使得攻击者能够赎回金库份额并获得大量虚增的基础资产，造成约510万美元的损失。"
+}

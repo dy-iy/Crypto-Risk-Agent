@@ -101,7 +101,12 @@ import {
   updateUserAsset,
 } from "@/lib/api";
 
-type ActiveView = "home" | "chat" | "news" | "coin" | "daily" | "portfolio" | "sim" | "reports" | "favoriteNews" | "favoriteReports" | "my" | "settings";
+const AttackPilotWorkbench = dynamic(() => import("@/components/attackpilot/workbench"), {
+  ssr: false,
+  loading: () => <LoadingDots label="加载链上攻击复盘" />,
+});
+
+type ActiveView = "attackpilot" | "home" | "chat" | "news" | "coin" | "daily" | "portfolio" | "sim" | "reports" | "favoriteNews" | "favoriteReports" | "my" | "settings";
 type ChatRole = "user" | "assistant";
 
 type ChatMessage = {
@@ -357,6 +362,7 @@ const emptyCoinItem: CoinRankingItem = {
 };
 
 const viewRoutes: Record<ActiveView, string> = {
+  attackpilot: "/attackpilot",
   home: "/",
   chat: "/analysis",
   news: "/news",
@@ -372,6 +378,7 @@ const viewRoutes: Record<ActiveView, string> = {
 };
 
 function resolveViewFromPathname(pathname: string | null, fallback: ActiveView): ActiveView {
+  if (pathname?.startsWith("/attackpilot")) return "attackpilot";
   if (!pathname || pathname === "/") return "home";
   if (pathname.startsWith("/analysize") || pathname.startsWith("/analysis")) return "chat";
   if (pathname.startsWith("/news")) return "news";
@@ -1349,6 +1356,12 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     };
   }, [accountAssets, accountAssetsLoading, activeView, authUser, favoriteNews.length, favoriteReports.length]);
 
+  useEffect(() => {
+    const requestLogin = () => { setAuthError(""); setAuthModalOpen(true); };
+    window.addEventListener("attackpilot:login", requestLogin);
+    return () => window.removeEventListener("attackpilot:login", requestLogin);
+  }, []);
+
   const pageMeta = getPageMeta(activeView);
 
   function handleChangeView(view: ActiveView) {
@@ -2124,7 +2137,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                 <RankingDataStatusBar status={rankingDataStatus} />
               )}
 
-              {activeView !== "chat" && activeView !== "portfolio" && activeView !== "sim" && activeView !== "daily" && activeView !== "reports" && activeView !== "favoriteNews" && activeView !== "favoriteReports" && activeView !== "my" && activeView !== "settings" && (
+              {activeView !== "attackpilot" && activeView !== "chat" && activeView !== "portfolio" && activeView !== "sim" && activeView !== "daily" && activeView !== "reports" && activeView !== "favoriteNews" && activeView !== "favoriteReports" && activeView !== "my" && activeView !== "settings" && (
                 <MetricGrid
                   activeView={activeView}
                   coinItems={displayCoins}
@@ -2200,6 +2213,9 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   subscription={dailyReportSubscription}
                   subscriptionLoading={dailyReportSubscriptionLoading}
                 />
+              )}
+              {activeView === "attackpilot" && (
+                <AttackPilotWorkbench userId={authUser?.id || null} onLogin={() => { setAuthError(""); setAuthModalOpen(true); }} />
               )}
               {activeView === "portfolio" && (
                 <PortfolioRiskRadar />
@@ -2349,6 +2365,7 @@ function Sidebar({
     { key: "portfolio", label: "我的风险资产", icon: <PortfolioIcon /> },
     { key: "daily", label: "资产日报", icon: <BotIcon /> },
     { key: "sim", label: "模拟交易盘", icon: <TradeIcon /> },
+    { key: "attackpilot", label: "链上攻击复盘", icon: <ShieldIcon /> },
   ];
 
   return (
@@ -2363,7 +2380,7 @@ function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 space-y-2 px-4 py-6">
+      <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-6">
         {navItems.slice(0, 5).map((item) => (
           <SidebarButton
             key={item.key}
@@ -2913,6 +2930,7 @@ function MobileNav({
     ["news", "新闻榜"],
     ["coin", "币种榜"],
     ["sim", "模拟盘"],
+    ["attackpilot", "攻击复盘"],
   ];
 
   return (
@@ -8269,6 +8287,7 @@ function CoinMark({ large = false, symbol }: { large?: boolean; symbol: string }
 
 function getPageMeta(view: ActiveView) {
   const map = {
+    attackpilot: ["链上攻击复盘", "AttackPilot 多智能体取证与漏洞分析"],
     home: ["CryptoRisk Agent 风控看板", "多智能体加密风险监测平台"],
     chat: ["事件风险分析", "面向新闻 / 公告 / 链上事件的多智能体风险研判"],
     news: ["新闻风险榜", "基于新闻文本与风险规则的实时风险排行"],

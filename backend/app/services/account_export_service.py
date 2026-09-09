@@ -14,6 +14,8 @@ from app.services.task_audit_service import list_account_security_events
 
 
 def build_account_export(user: AuthUser, current_session_token: str | None = None) -> dict[str, Any]:
+    from app.attackpilot.store import export_user
+    attackpilot = export_user(user.id)
     analysis_reports = [item.model_dump() for item in list_analysis_reports(user.id)]
     favorites = [item.model_dump() for item in list_favorites(user.id)]
     watchlist = [item.model_dump() for item in list_watchlist_records(user.id)]
@@ -35,6 +37,7 @@ def build_account_export(user: AuthUser, current_session_token: str | None = Non
             "created_at": user.created_at,
         },
         "summary": {
+            "attackpilot_tasks": len(attackpilot["tasks"]),
             "analysis_reports": len(analysis_reports),
             "favorites": len(favorites),
             "portfolio_watchlist": len(watchlist),
@@ -47,6 +50,7 @@ def build_account_export(user: AuthUser, current_session_token: str | None = Non
             "auth_sessions": len(auth_sessions),
         },
         "analysis_reports": analysis_reports,
+        "attackpilot": attackpilot,
         "favorites": favorites,
         "portfolio_watchlist": watchlist,
         "daily_reports": daily_reports,
