@@ -156,6 +156,16 @@ def build_automated_review(
     logs: List[Dict[str, Any]],
     macro: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    if task.status != "completed" or not (task.final_report or "").strip():
+        return {
+            "task_id": task.task_id, "dapp_name": task.dapp_name,
+            "generated_at": datetime.now().isoformat(),
+            "review_type": "deterministic_cross_agent_consistency",
+            "status": "unavailable", "score": None, "checks": [],
+            "agent_signals": [], "shared_transactions": [], "shared_functions": [],
+            "next_actions": ["分析尚未完成或未生成有效报告，无法评估结论一致性。"],
+            "llm_review_agent_used": False,
+        }
     agent_signals = _build_agent_signals(logs, task)
     shared_transactions = _shared_values(agent_signals, "transactions")
     shared_functions = _shared_values(agent_signals, "functions")

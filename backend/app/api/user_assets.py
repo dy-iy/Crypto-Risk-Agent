@@ -22,10 +22,13 @@ router = APIRouter(prefix="/api/user-assets", tags=["user-assets"])
 def _resolve_user_id(
     user_id: str | None,
     cryptorisk_session: str | None,
+    *, write: bool = False,
 ) -> str:
+    user = get_user_by_session(cryptorisk_session)
+    if write and not user:
+        raise HTTPException(status_code=401, detail="请先登录后再修改个人资产，游客演示数据仅供查看")
     if user_id and getenv("ALLOW_USER_ID_QUERY_OVERRIDE") == "1":
         return user_id
-    user = get_user_by_session(cryptorisk_session)
     return user.id if user else DEFAULT_USER_ID
 
 
@@ -50,7 +53,7 @@ def create_user_asset(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     try:
-        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
+        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session, write=True)
         item = add_user_asset(payload, resolved_user_id)
         generate_risk_snapshot(item.symbol, resolved_user_id)
         return item
@@ -66,7 +69,7 @@ def patch_user_asset(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     try:
-        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
+        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session, write=True)
         item = update_user_asset(symbol, payload, resolved_user_id)
         generate_risk_snapshot(item.symbol, resolved_user_id)
         return item
@@ -81,7 +84,7 @@ def remove_user_asset(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     try:
-        delete_user_asset(symbol, _resolve_user_id(user_id, cryptorisk_session))
+        delete_user_asset(symbol, _resolve_user_id(user_id, cryptorisk_session, write=True))
         return {"status": "success", "message": "user asset deleted"}
     except PortfolioError as exc:
         raise _handle_asset_error(exc) from exc

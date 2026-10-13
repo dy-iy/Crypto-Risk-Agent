@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.agents.daily_report_agent import run_daily_report_agent
+from app.services.follow_service import follow_snapshot, NoFollowsError
 from app.agents.ranking_agent.graph import run_ranking_agent
 from app.data.update_news import update_news_dataset
 from app.services.auth_service import get_user_by_id
@@ -140,7 +141,7 @@ def run_daily_scheduler_once(*, force: bool = False, run_date: str | None = None
             "last_started_at": started_at,
             "last_finished_at": "",
             "last_status": "running",
-            "last_message": "正在更新新闻并生成订阅用户资产日报",
+            "last_message": "正在更新新闻并生成订阅用户关注日报",
         })
         _save_state_unlocked(state)
 
@@ -158,6 +159,7 @@ def run_daily_scheduler_once(*, force: bool = False, run_date: str | None = None
         ranking = run_ranking_agent("all", date_filter="7d", limit=10)
         subscribed_user_ids = list_subscribed_daily_report_user_ids()
         generated_reports: list[dict[str, str]] = []
+        skipped_no_follows: list[str] = []
         errors: list[dict[str, str]] = []
         feishu_sent_count = 0
         feishu_skipped_count = 0
@@ -174,6 +176,9 @@ def run_daily_scheduler_once(*, force: bool = False, run_date: str | None = None
                 display_name = "Demo 用户"
 
             try:
+                if not follow_snapshot(user_id)["items"]:
+                    skipped_no_follows.append(user_id)
+                    continue
                 report = run_daily_report_agent(
                     "24h",
                     user_id=user_id,
@@ -194,6 +199,8 @@ def run_daily_scheduler_once(*, force: bool = False, run_date: str | None = None
                     })
                 else:
                     feishu_skipped_count += 1
+            except NoFollowsError:
+                skipped_no_follows.append(user_id)
             except Exception as exc:
                 errors.append({"user_id": user_id, "error": str(exc)})
 
@@ -204,6 +211,7 @@ def run_daily_scheduler_once(*, force: bool = False, run_date: str | None = None
             "ranking_date": ranking.get("date"),
             "subscribed_user_count": len(subscribed_user_ids),
             "generated_report_count": len(generated_reports),
+            "skipped_no_follows_count": len(skipped_no_follows),
             "generated_reports": generated_reports,
             "feishu_sent_count": feishu_sent_count,
             "feishu_skipped_count": feishu_skipped_count,

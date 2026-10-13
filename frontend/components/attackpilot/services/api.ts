@@ -1,10 +1,9 @@
 import { ApiRequestError, requestJson } from "@/lib/api";
 import type { AgentLogFileResponse, AgentLogFilesResponse, AssistantChatRequest, AssistantChatResponse, AutomatedReviewResponse, DappCatalogResponse, FullLogResponse, MacroAnalysisResponse, RagSearchRequest, RagSearchResponse, Task, TaskCreateRequest, TaskLogPageResponse, TxDetectRequest, TxDetectResponse, TxReviewRequest, TxReviewResponse, VulnerabilityKnowledgeResponse } from "../types";
 
-const prefix = "/api/attackpilot";
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
-    return await requestJson<T>(`${prefix}${path}`, init);
+    return await requestJson<T>(`/api/attackpilot${path}`, init);
   } catch (error) {
     if (error instanceof ApiRequestError && error.status === 401) window.dispatchEvent(new Event("attackpilot:login"));
     throw error;
@@ -21,6 +20,19 @@ export const startTransactionDeepAnalysis = (payload: TxReviewRequest) => post<T
 export const chatWithAssistant = (payload: AssistantChatRequest) => post<AssistantChatResponse>("/assistant/chat", payload);
 export const searchRagKnowledge = (payload: RagSearchRequest) => post<RagSearchResponse>("/rag/search", payload);
 export const getTask = (taskId: string) => request<Task>(`/tasks/${id(taskId)}`);
+export type ReportTranslation = {
+  task_id: string;
+  language: "zh-CN";
+  source_language: "zh-CN" | "en" | "mixed" | "unknown";
+  source_hash: string;
+  status: "ready" | "missing" | "original";
+  translated_report: string | null;
+  cached: boolean;
+  model: string | null;
+  translated_at: string | null;
+};
+export const getReportTranslation = (taskId: string) => request<ReportTranslation>(`/tasks/${id(taskId)}/report-translation`);
+export const createReportTranslation = (taskId: string) => post<ReportTranslation>(`/tasks/${id(taskId)}/report-translation`);
 export const getMacroAnalysis = (taskId: string) => request<MacroAnalysisResponse>(`/tasks/${id(taskId)}/macro-analysis`);
 export const getAutomatedReview = (taskId: string) => request<AutomatedReviewResponse>(`/tasks/${id(taskId)}/automated-review`);
 export const createTask = (payload: TaskCreateRequest & { modules?: string[] }) => post<Task>("/tasks", payload);

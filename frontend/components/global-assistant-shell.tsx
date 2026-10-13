@@ -1,7 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { fetchCurrentUser } from "@/lib/api";
+import { useEffect, useState, useSyncExternalStore } from "react";
+
+import { getAccountScope, hasStorageWarning, subscribeAccountScope, storageWarningEvent } from "@/lib/browser-storage";
 
 type OpenAssistantDetail = {
   context?: Record<string, unknown>;
@@ -25,6 +29,28 @@ const AskAIOnSelection = dynamic(() => import("@/components/ask-ai-on-selection"
 });
 
 export default function GlobalAssistantShell() {
+  const pathname = usePathname();
+  const hasForensicAssistant = pathname.startsWith("/attackpilot");
+  const scope = useSyncExternalStore(subscribeAccountScope, getAccountScope, () => "guest");
+  const [notice, setNotice] = useState(() => hasStorageWarning() ? "浏览器存储不可用，本次内容仅保留在当前标签页，请及时导出重要报告。" : "");
+  useEffect(() => {
+    const storageWarning = () => setNotice("浏览器存储不可用或已满，本次内容仅保留在当前标签页。请及时导出重要报告。");
+    const syncWarning = () => setNotice("报告已保存在本机，云端同步失败。请检查网络后重新进入报告页重试。");
+    const refreshIdentity = () => { void fetchCurrentUser().catch((error: unknown) => {
+      if (!(error instanceof DOMException && error.name === "AbortError")) console.warn("登录状态暂时无法核验", error);
+    }); };
+    const handleStorage = (event: StorageEvent) => { if (event.key === "cryptorisk.auth.version") refreshIdentity(); };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", refreshIdentity);
+    window.addEventListener(storageWarningEvent, storageWarning);
+    window.addEventListener("cryptorisk:report-sync-error", syncWarning);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", refreshIdentity);
+      window.removeEventListener(storageWarningEvent, storageWarning);
+      window.removeEventListener("cryptorisk:report-sync-error", syncWarning);
+    };
+  }, []);
   const [enabled, setEnabled] = useState(false);
   const [initialOpenRequest, setInitialOpenRequest] = useState<OpenAssistantRequest | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{ x: number; y: number } | null>(null);
@@ -47,8 +73,10 @@ export default function GlobalAssistantShell() {
   useEffect(() => {
     if (enabled) return;
 
+    let selectionTimer: number | undefined;
     function handleSelection() {
-      window.setTimeout(() => {
+      window.clearTimeout(selectionTimer);
+      selectionTimer = window.setTimeout(() => {
         const selection = window.getSelection();
         const text = selection?.toString().trim() || "";
         const anchorElement = getSelectionElement(selection);
@@ -70,7 +98,7 @@ export default function GlobalAssistantShell() {
         setSelectedText(text);
         setSelectionContext(readSelectionContext(anchorElement));
         setButtonPosition({
-          x: rect.left + rect.width / 2,
+          x: Math.max(120, Math.min(window.innerWidth - 120, rect.left + rect.width / 2)),
           y: Math.max(12, rect.top - 44),
         });
       }, 0);
@@ -84,6 +112,7 @@ export default function GlobalAssistantShell() {
     document.addEventListener("touchend", handleSelection);
     window.addEventListener("scroll", clearFloatingButton, true);
     return () => {
+      window.clearTimeout(selectionTimer);
       document.removeEventListener("mouseup", handleSelection);
       document.removeEventListener("touchend", handleSelection);
       window.removeEventListener("scroll", clearFloatingButton, true);
@@ -116,7 +145,10 @@ export default function GlobalAssistantShell() {
 
   return (
     <>
-      {!enabled && buttonPosition && selectedText && (
+      {notice && <div role="status" className="fixed bottom-24 right-4 z-[70] max-w-[min(90vw,420px)] rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 shadow-lg">
+        {notice}<button type="button" className="ml-3 underline" onClick={() => setNotice("")}>关闭</button>
+      </div>}
+      {!hasForensicAssistant && !enabled && buttonPosition && selectedText && (
         <div
           data-ai-selection-ignore
           className="fixed z-50 flex overflow-hidden rounded-full bg-slate-950 shadow-2xl shadow-slate-900/20"
@@ -142,7 +174,7 @@ export default function GlobalAssistantShell() {
           </button>
         </div>
       )}
-      {!enabled && (
+      {!hasForensicAssistant && !enabled && (
         <button
           type="button"
           onClick={openAssistant}
@@ -152,7 +184,7 @@ export default function GlobalAssistantShell() {
           AI
         </button>
       )}
-      {enabled && <AskAIOnSelection initialOpenRequest={initialOpenRequest} />}
+      {!hasForensicAssistant && enabled && <AskAIOnSelection key={scope} initialOpenRequest={initialOpenRequest} />}
     </>
   );
 }

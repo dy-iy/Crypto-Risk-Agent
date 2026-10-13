@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { Button, Layout, Space, Tag, Typography } from "antd";
 import {
   AlertTriangle,
@@ -299,7 +300,7 @@ const LearningCenter: React.FC = () => {
     <Layout className="learning-page">
       <Header className="landing-v2-nav">
         <button className="landing-brand" type="button" onClick={() => navigate("/")}>
-          <span className="landing-brand-mark"></span>
+          <span className="landing-brand-mark"><Image src="/attackpilot/riskpilot_logo.png" width={40} height={40} alt="AttackPilot 标志" /></span>
           <span><strong>AttackPilot</strong><small>漏洞学习中心</small></span>
         </button>
         <Space size={10} className="landing-nav-actions">

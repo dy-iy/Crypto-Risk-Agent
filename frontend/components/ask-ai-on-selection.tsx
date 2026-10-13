@@ -1,5 +1,8 @@
 "use client";
 
+import { getAccountScope, getAccountSignal, localStore } from "@/lib/browser-storage";
+
+
 import { FormEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoadingDots } from "@/components/ui/loading-states";
@@ -78,7 +81,6 @@ const analysisRecordsStorageKey = "cryptorisk.analysisRecords";
 const selectedRecordStorageKey = "cryptorisk.selectedRecordId";
 const reportCreatedEventName = "cryptorisk:analysis-record-created";
 const openAssistantEventName = "cryptorisk:open-risk-assistant";
-const authUsernameStorageKey = "cryptorisk.auth.username";
 const maxAssistantSessions = 8;
 const maxAssistantMessages = 40;
 const assistantScopeLoadDelayMs = 1200;
@@ -109,6 +111,7 @@ function shouldOpenAssistantRequest(detail?: OpenAssistantDetail | null) {
 
 export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRequest?: OpenAssistantRequest | null }) {
   const router = useRouter();
+  const panelRef = useRef<HTMLElement>(null);
   const [storageScope, setStorageScope] = useState(() => readAssistantStorageScope());
   const [sessions, setSessions] = useState<AssistantSession[]>(() => readAssistantSessions(readAssistantStorageScope()));
   const [activeSessionId, setActiveSessionId] = useState(() => readActiveAssistantSessionId(readAssistantStorageScope()));
@@ -118,6 +121,14 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
   const [quote, setQuote] = useState<SelectionQuote | null>(() => buildOpenAssistantQuote(initialOpenRequest?.detail));
   const [panelOpen, setPanelOpen] = useState(() => shouldOpenAssistantRequest(initialOpenRequest?.detail));
   const [question, setQuestion] = useState("");
+  useEffect(() => {
+    if (!panelOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.querySelector<HTMLInputElement>('input[aria-label="向风控助手提问"]')?.focus();
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setPanelOpen(false); };
+    document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("keydown", close); previous?.focus(); };
+  }, [panelOpen]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -148,7 +159,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
     async function loadScope() {
       try {
         const user = await fetchCurrentUser();
-        const nextScope = user?.username?.trim().toLowerCase() || readAssistantStorageScope();
+        const nextScope = user?.id || "guest";
         if (ignore || nextScope === storageScope) return;
         setStorageScope(nextScope);
         const nextSessions = readAssistantSessions(nextScope);
@@ -174,8 +185,10 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
   }, [resolvedActiveSessionId, storageScope]);
 
   useEffect(() => {
+    let selectionTimer: number | undefined;
     const handleSelection = () => {
-      window.setTimeout(() => {
+      window.clearTimeout(selectionTimer);
+      selectionTimer = window.setTimeout(() => {
         const selection = window.getSelection();
         const text = selection?.toString().trim() || "";
         const anchorElement = getSelectionElement(selection);
@@ -198,7 +211,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
         setSelectedText(text);
         setSelectionContext(readSelectionContext(anchorElement));
         setButtonPosition({
-          x: rect.left + rect.width / 2,
+          x: Math.max(120, Math.min(window.innerWidth - 120, rect.left + rect.width / 2)),
           y: Math.max(12, rect.top - 44),
         });
       }, 0);
@@ -210,6 +223,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
     document.addEventListener("touchend", handleSelection);
     window.addEventListener("scroll", clearFloatingButton, true);
     return () => {
+      window.clearTimeout(selectionTimer);
       document.removeEventListener("mouseup", handleSelection);
       document.removeEventListener("touchend", handleSelection);
       window.removeEventListener("scroll", clearFloatingButton, true);
@@ -274,6 +288,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
   }
 
   function handleDeleteSession() {
+    if (!window.confirm("确定删除当前聊天？此操作无法撤销。")) return;
     setSessions((items) => {
       if (items.length <= 1) {
         const session = createAssistantSession();
@@ -354,6 +369,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
   }
 
   async function runQuotedEventAnalysis(supplement: string) {
+    const signal = getAccountSignal();
     if (!quote || loading) return;
     const analysisInput = buildEventAnalysisInput(
       quote.sourceInput || quote.selectedText,
@@ -380,6 +396,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
 
     try {
       const response = await streamChatMessage(analysisInput, () => undefined);
+      signal.throwIfAborted();
       const record = createAnalysisRecord(getReportOriginalInput(quote, analysisInput), response.data);
       storeAnalysisRecord(record);
       const answer = buildBriefAnalysis(record);
@@ -496,6 +513,10 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
       )}
 
       <aside
+        ref={panelRef}
+        role="dialog"
+        aria-label="AI 风控助手"
+        inert={!panelOpen}
         className={`fixed inset-y-0 right-0 z-50 w-full max-w-[420px] transform border-l border-blue-100 bg-white shadow-2xl shadow-slate-900/20 transition-transform duration-300 sm:right-4 sm:top-[108px] sm:bottom-6 sm:h-[calc(100vh-132px)] sm:rounded-lg sm:border ${
           panelOpen ? "translate-x-0" : "translate-x-full sm:translate-x-[calc(100%+2rem)]"
         }`}
@@ -584,7 +605,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
                             <button
                               type="button"
                               onClick={() => {
-                                window.localStorage.setItem(selectedRecordStorageKey, message.reportRecordId || "");
+                                localStore.setItem(selectedRecordStorageKey, message.reportRecordId || "");
                                 router.push(`/reports?record=${encodeURIComponent(message.reportRecordId || "")}`);
                               }}
                               className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white transition-colors duration-200 hover:bg-blue-700"
@@ -635,6 +656,8 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
               <div className="flex min-h-12 items-center gap-3 rounded-lg border border-blue-100 bg-slate-50 px-3 text-sm">
                 <input
                   value={question}
+                  aria-label="向风控助手提问"
+                  maxLength={2000}
                   onChange={(event) => setQuestion(event.target.value)}
                   className="min-w-0 flex-1 bg-transparent text-slate-700 outline-none placeholder:text-slate-400"
                   placeholder={quote?.mode === "deep_analysis" ? "输入问题，发送后先完成事件分析再回答..." : quote ? "继续输入你的问题，也可直接发送..." : "问金融、币种、风险或当前页面..."}
@@ -753,7 +776,7 @@ function buildReportAssistantContext(
 
 function readAssistantStorageScope() {
   if (typeof window === "undefined") return "guest";
-  return window.localStorage.getItem(authUsernameStorageKey)?.trim().toLowerCase() || "guest";
+  return getAccountScope();
 }
 
 function assistantSessionsStorageKey(scope: string) {
@@ -812,7 +835,7 @@ function compactAssistantSession(session: AssistantSession): AssistantSession {
 function readAssistantSessions(scope: string): AssistantSession[] {
   if (typeof window === "undefined") return [createAssistantSession()];
   try {
-    const raw = window.localStorage.getItem(assistantSessionsStorageKey(scope));
+    const raw = localStore.getItem(assistantSessionsStorageKey(scope));
     const parsed = raw ? (JSON.parse(raw) as AssistantSession[]) : [];
     return parsed.length ? parsed.slice(0, maxAssistantSessions).map(compactAssistantSession) : [createAssistantSession()];
   } catch {
@@ -823,17 +846,17 @@ function readAssistantSessions(scope: string): AssistantSession[] {
 function writeAssistantSessions(scope: string, sessions: AssistantSession[]) {
   if (typeof window === "undefined") return;
   const compactSessions = sessions.slice(0, maxAssistantSessions).map(compactAssistantSession);
-  window.localStorage.setItem(assistantSessionsStorageKey(scope), JSON.stringify(compactSessions));
+  localStore.setItem(assistantSessionsStorageKey(scope), JSON.stringify(compactSessions));
 }
 
 function readActiveAssistantSessionId(scope: string) {
   if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(assistantActiveSessionStorageKey(scope)) || "";
+  return localStore.getItem(assistantActiveSessionStorageKey(scope)) || "";
 }
 
 function writeActiveAssistantSessionId(scope: string, sessionId: string) {
   if (typeof window === "undefined" || !sessionId) return;
-  window.localStorage.setItem(assistantActiveSessionStorageKey(scope), sessionId);
+  localStore.setItem(assistantActiveSessionStorageKey(scope), sessionId);
 }
 
 function deriveSessionTitle(session: AssistantSession, nextMessages: ChatMessage[]) {
@@ -931,14 +954,14 @@ function storeAnalysisRecord(record: AnalysisRecord) {
   if (typeof window === "undefined") return;
   let records: AnalysisRecord[] = [];
   try {
-    const raw = window.localStorage.getItem(analysisRecordsStorageKey);
+    const raw = localStore.getItem(analysisRecordsStorageKey);
     records = raw ? (JSON.parse(raw) as AnalysisRecord[]) : [];
   } catch {
     records = [];
   }
-  window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify([record, ...records]));
-  window.localStorage.setItem(selectedRecordStorageKey, record.id);
-  void saveAnalysisReport({
+  localStore.setItem(analysisRecordsStorageKey, JSON.stringify([record, ...(Array.isArray(records) ? records : [])].slice(0, 80)));
+  localStore.setItem(selectedRecordStorageKey, record.id);
+  if (getAccountScope() !== "guest") void saveAnalysisReport({
     id: record.id,
     title: record.title,
     created_at: record.createdAt,
@@ -946,7 +969,11 @@ function storeAnalysisRecord(record: AnalysisRecord) {
     report: record.report,
     disposition: record.disposition || "pending",
     disposition_note: record.dispositionNote || "",
-  }).catch(() => undefined);
+  }).catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    console.warn("报告云端同步失败", error);
+    window.dispatchEvent(new Event("cryptorisk:report-sync-error"));
+  });
   window.dispatchEvent(new CustomEvent(reportCreatedEventName, { detail: { recordId: record.id } }));
 }
 

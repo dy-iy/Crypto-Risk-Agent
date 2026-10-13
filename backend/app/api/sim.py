@@ -1,7 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Cookie, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, FiniteFloat, field_validator
 
 from app.api.auth import SESSION_COOKIE_NAME
 from app.services.sim_account_service import resolve_sim_account_id
@@ -12,14 +12,28 @@ router = APIRouter(prefix="/api/sim", tags=["simulator"])
 
 
 class BuyRequest(BaseModel):
-    symbol: str = Field(..., min_length=1)
-    amount_usdt: float = Field(..., gt=0)
+    symbol: str = Field(..., min_length=1, max_length=24)
+    amount_usdt: FiniteFloat = Field(..., gt=0)
 
 
 class SellRequest(BaseModel):
-    symbol: str = Field(..., min_length=1)
-    quantity: float | str | None = None
-    amount: str | None = None
+    symbol: str = Field(..., min_length=1, max_length=24)
+    quantity: FiniteFloat | str | None = None
+    amount: str | None = Field(default=None, max_length=24)
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def validate_quantity(cls, value):
+        if value is None or isinstance(value, str) and value.upper() == "ALL":
+            return value
+        import math
+        try:
+            number = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("卖出数量必须为正数或 ALL") from exc
+        if not math.isfinite(number) or number <= 0:
+            raise ValueError("卖出数量必须为有限正数")
+        return number
 
 
 class JumpRequest(BaseModel):

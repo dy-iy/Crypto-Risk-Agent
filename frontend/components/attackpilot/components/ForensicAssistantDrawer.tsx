@@ -1,9 +1,11 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Empty, Input, Space, Tag, Typography } from "antd";
 import { Bot, FileSearch, Lightbulb, MessageCircle, Minus, RotateCcw, Send, ShieldCheck } from "lucide-react";
 import { chatWithAssistant, errorMessage } from "../services/api";
 import { AssistantChatRequest, AssistantMessage, AssistantSource } from "../types";
 import MarkdownRenderer from "./MarkdownRenderer";
+import { useAttackPilotIdentity } from "../context";
+import { localStore } from "@/lib/browser-storage";
 
 const { TextArea } = Input;
 const DEFAULT_PANEL_WIDTH = 520;
@@ -64,7 +66,20 @@ function clampWidth(value: number) {
   return Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, value));
 }
 
-const ForensicAssistantDrawer: React.FC<ForensicAssistantDrawerProps> = ({
+function readHistory(storageKey: string | null): LocalMessage[] {
+  if (!storageKey) return [];
+  try {
+    const stored: unknown = JSON.parse(localStore.getItem(storageKey) || "[]");
+    if (!Array.isArray(stored)) return [];
+    return stored.filter((item): item is LocalMessage => Boolean(item && typeof item === "object"
+      && typeof item.id === "string" && typeof item.content === "string"
+      && (item.role === "user" || item.role === "assistant"))).slice(-40);
+  } catch {
+    return [];
+  }
+}
+
+const ForensicAssistantSession: React.FC<ForensicAssistantDrawerProps & { storageKey: string | null }> = ({
   open,
   onOpen,
   onClose,
@@ -73,13 +88,21 @@ const ForensicAssistantDrawer: React.FC<ForensicAssistantDrawerProps> = ({
   txHash,
   chain = "ethereum",
   title = "取证助手",
+  storageKey,
 }) => {
-  const [messages, setMessages] = useState<LocalMessage[]>([]);
+  const [messages, setMessages] = useState<LocalMessage[]>(() => readHistory(storageKey));
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [resizing, setResizing] = useState(false);
+  const requestRef = useRef(0);
+
+  useEffect(() => {
+    if (storageKey) localStore.setItem(storageKey, JSON.stringify(messages.slice(-40)));
+  }, [messages, storageKey]);
+
+  useEffect(() => () => { requestRef.current += 1; }, []);
 
 
   const prompts = useMemo(() => promptSets[scope] ?? promptSets.general, [scope]);
@@ -105,13 +128,17 @@ const ForensicAssistantDrawer: React.FC<ForensicAssistantDrawerProps> = ({
   }, [panelWidth]);
 
   const clearHistory = useCallback(() => {
+    requestRef.current += 1;
     setMessages([]);
     setError("");
-  }, []);
+    setLoading(false);
+    if (storageKey) localStore.removeItem(storageKey);
+  }, [storageKey]);
 
   const sendQuestion = async (question: string) => {
     const value = question.trim();
     if (!value || loading) return;
+    const requestId = ++requestRef.current;
 
     const userMessage: LocalMessage = {
       id: `user-${crypto.randomUUID()}`,
@@ -136,6 +163,7 @@ const ForensicAssistantDrawer: React.FC<ForensicAssistantDrawerProps> = ({
         question: value,
         history,
       });
+      if (requestId !== requestRef.current) return;
 
       setMessages((current) => [
         ...current,
@@ -148,9 +176,9 @@ const ForensicAssistantDrawer: React.FC<ForensicAssistantDrawerProps> = ({
         },
       ]);
     } catch (err) {
-      setError(errorMessage(err));
+      if (requestId === requestRef.current) setError(errorMessage(err));
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setLoading(false);
     }
   };
 
@@ -263,6 +291,14 @@ const ForensicAssistantDrawer: React.FC<ForensicAssistantDrawerProps> = ({
       </div>
     </section>
   );
+};
+
+const ForensicAssistantDrawer: React.FC<ForensicAssistantDrawerProps> = (props) => {
+  const { userId } = useAttackPilotIdentity();
+  const target = (props.taskId || props.txHash || "general").toLowerCase();
+  const sessionKey = `${userId || "guest"}:${props.scope}:${props.chain || "ethereum"}:${target}`;
+  return <ForensicAssistantSession {...props} key={sessionKey}
+    storageKey={userId ? `cryptorisk.attackpilot-assistant:${sessionKey}` : null} />;
 };
 
 export default ForensicAssistantDrawer;

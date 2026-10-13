@@ -44,7 +44,7 @@ def start_feishu_oauth(
     try:
         state = create_feishu_oauth_state(user.id)
         return RedirectResponse(build_feishu_oauth_url(state), status_code=302)
-    except FeishuConfigError as exc:
+    except (FeishuConfigError, OSError) as exc:
         raise HTTPException(status_code=503, detail="飞书应用配置未完成") from exc
 
 
@@ -58,7 +58,11 @@ def feishu_oauth_callback(
     user = get_user_by_session(cryptorisk_session)
     if not user or not code or not state:
         return _daily_redirect("error")
-    if not consume_feishu_oauth_state(state, user.id):
+    try:
+        valid_state = consume_feishu_oauth_state(state, user.id)
+    except OSError:
+        return _daily_redirect("error")
+    if not valid_state:
         record_task_event(
             job_kind="account_security",
             job_id="feishu-oauth-state-failed",
@@ -74,7 +78,7 @@ def feishu_oauth_callback(
     try:
         profile = exchange_code_for_feishu_profile(code)
         binding = upsert_feishu_binding(user.id, profile)
-    except (FeishuApiError, FeishuConfigError, ValueError) as exc:
+    except (FeishuApiError, FeishuConfigError, ValueError, OSError) as exc:
         record_task_event(
             job_kind="account_security",
             job_id="feishu-oauth-bind-failed",

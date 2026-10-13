@@ -1,0 +1,14 @@
+{
+    "name": "BEARNDAO",
+    "cause": "Sandwich attack",
+    "platform": "BNBChain",
+    "time": "2023/12/5",
+    "link": "https://twitter.com/AnciliaInc/status/1732159377749180646",
+    "transaction_hash": [
+        "0x51913be3f31d5ddbfc77da789e5f9653ed6b219a52772309802226445a1edd5f"
+    ],
+    "report": "The attack exploited a bug in ConvertDustToEarned() and used a sandwich attack. Relied on the current balance of the `wantToken` token. But the strategy contract is not supposed to hold a huge amount of dust tokens. The attacker first manipulated the ALPACA/WBNB pool through large-valued swaps and invoked a call to the convertDustToEarned function, thereby artificially inflating the swap ratio of the tokens. The reverse swap allowed the attacker to perform a sandwich attack, letting them take away approximately $768,358 worth of assets as profits.",
+    "root_cause": "convertDustToEarned",
+    "report_link": "https://web3sec.notion.site/Business-Logic-Flaw-e9cc2c625479456784764f748ff4edce?pvs=23",
+    "report_zh": "攻击利用了 ConvertDustToEarned() 中的 bug 并使用了三明治攻击。该函数依赖于 `wantToken` 代币的当前余额，但策略合约本不应持有大量 dust 代币。攻击者首先通过大额交换操纵 ALPACA/WBNB 池，并调用 convertDustToEarned 函数，从而人为提高代币的交换比率。逆向交换让攻击者能够进行三明治攻击，获利约 768,358 美元。"
+}

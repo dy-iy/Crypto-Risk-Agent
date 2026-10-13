@@ -1,6 +1,7 @@
 """Durable task/log/event store. Every public read is scoped at the API boundary."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -42,6 +43,12 @@ def connection():
             payload TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS ap_event_task ON events(task_id, id);
+        CREATE TABLE IF NOT EXISTS report_translations (
+            task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+            source_hash TEXT NOT NULL, language TEXT NOT NULL,
+            translated_report TEXT NOT NULL, model TEXT NOT NULL, translated_at TEXT NOT NULL,
+            PRIMARY KEY(task_id, source_hash, language)
+        );
     """)
     try:
         yield db
@@ -188,6 +195,20 @@ def import_seed(seed: dict) -> dict:
             for entry in seed.get("logs", {}).get(task_id, []):
                 content = entry.get("full_content") or entry.get("message") or ""
                 db.execute("INSERT OR IGNORE INTO logs(task_id,log_id,agent,level,message_type,message,full_content,timestamp,is_truncated) VALUES (?,?,?,?,?,?,?,?,?)", (task_id, entry["log_id"], entry.get("agent"), entry.get("level"), entry.get("message_type"), content[:1000], content, entry.get("timestamp"), len(content) > 1000))
+        translation_file = settings.PACKAGE_ROOT / "data/report-translations.zh-CN.json"
+        if translation_file.is_file():
+            translations = json.loads(translation_file.read_text(encoding="utf-8"))
+            for item in translations.get("items", []):
+                row = db.execute("SELECT final_report FROM tasks WHERE task_id=? AND is_demo=1 AND source='archive'", (item.get("task_id"),)).fetchone()
+                if not row or not row["final_report"] or item.get("language") != "zh-CN":
+                    continue
+                source_hash = hashlib.sha256(row["final_report"].encode("utf-8")).hexdigest()
+                if source_hash != item.get("source_hash") or not item.get("translated_report"):
+                    continue
+                db.execute(
+                    "INSERT OR IGNORE INTO report_translations(task_id,source_hash,language,translated_report,model,translated_at) VALUES (?,?,?,?,?,?)",
+                    (item["task_id"], source_hash, "zh-CN", item["translated_report"], item.get("model", "assistant-translation"), item.get("translated_at") or now()),
+                )
     return {"imported_tasks": added}
 
 def export_user(owner_id: str) -> dict:
@@ -195,4 +216,5 @@ def export_user(owner_id: str) -> dict:
     with connection() as db:
         logs = [dict(row) for row in db.execute("SELECT logs.* FROM logs JOIN tasks USING(task_id) WHERE tasks.owner_id=? AND tasks.is_demo=0", (owner_id,))]
         events = [{**dict(row), "payload": json.loads(row["payload"])} for row in db.execute("SELECT events.* FROM events JOIN tasks USING(task_id) WHERE tasks.owner_id=? AND tasks.is_demo=0", (owner_id,))]
-    return {"tasks": [public_task(task) for task in tasks], "logs": logs, "events": events}
+        translations = [dict(row) for row in db.execute("SELECT report_translations.* FROM report_translations JOIN tasks USING(task_id) WHERE tasks.owner_id=? AND tasks.is_demo=0", (owner_id,))]
+    return {"tasks": [public_task(task) for task in tasks], "logs": logs, "events": events, "report_translations": translations}

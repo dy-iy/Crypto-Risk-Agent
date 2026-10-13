@@ -16,7 +16,7 @@ interface PatchVerificationPanelProps {
 }
 
 interface PatchVerificationSummary {
-  status: "verified" | "partial" | "failed" | "pending";
+  status: "verified" | "failed" | "pending" | "skipped" | "archived";
   title: string;
   description: string;
   score: number;
@@ -92,71 +92,39 @@ function buildSummary(task: Task | null, events: TaskEvent[]): PatchVerification
   const report = task?.final_report ?? "";
   const logs = events.filter(isLogEvent).filter((log) => !isLowValueOperationalLog(log));
   const evidence = buildPatchEvidence(report, logs);
-  const haystack = `${report}\n${logs.map((log) => log.message).join("\n")}`.toLowerCase();
+  const result = task?.result;
+  const verification = result && typeof result === "object" && "verification" in result
+    && result.verification && typeof result.verification === "object"
+    ? result.verification as { status?: string } : null;
 
-  const hasSuccess = /success|verified|passed|blocked|resist|抵挡|阻断|成功|通过/.test(haystack);
-  const hasFailure = /fail|failed|failure|error|not verified|失败|未通过|无法验证/.test(haystack);
-  const hasPatchSignal = /patch|fix|mitigation|verify|validation|replay|补丁|修复|验证|重放/.test(haystack);
-
-  if (hasSuccess && !hasFailure) {
-    return {
-      status: "verified",
-      title: "补丁验证通过",
-      description: "现有报告和日志证据表明，该补丁已阻断重放的攻击路径。",
-      score: 92,
-      evidence,
-    };
+  if (task?.is_demo) {
+    return { status: "archived", title: "历史补丁验证记录", score: 0, evidence,
+      description: "以下证据来自原项目归档，当前环境尚未重新执行补丁回放。" };
   }
-
-  if (hasSuccess && hasFailure) {
-    return {
-      status: "partial",
-      title: "补丁验证部分通过",
-      description: "分析中同时出现成功与失败信号，需要结合关联证据判断修复效果。",
-      score: 62,
-      evidence,
-    };
+  if (verification?.status === "verified") {
+    return { status: "verified", title: "补丁回放验证通过", score: 100, evidence,
+      description: "后端实际回放结果确认，补丁已通过本次验证。" };
   }
-
-  if (hasFailure) {
-    return {
-      status: "failed",
-      title: "补丁验证存在异常",
-      description: "现有证据包含失败或尚未解决的验证信号。",
-      score: 34,
-      evidence,
-    };
+  if (verification?.status === "failed") {
+    return { status: "failed", title: "补丁回放验证未通过", score: 0, evidence,
+      description: "后端实际回放返回失败，请查看关联证据与验证日志。" };
   }
-
-  if (hasPatchSignal) {
-    return {
-      status: "pending",
-      title: "补丁验证证据不完整",
-      description: "已发现补丁相关内容，但尚未提取到明确的通过或失败信号。",
-      score: 48,
-      evidence,
-    };
+  if (verification?.status === "skipped") {
+    return { status: "skipped", title: "本次任务未执行补丁回放", score: 0, evidence,
+      description: "本次分析跳过了补丁验证阶段，报告中的修复建议尚未经回放确认。" };
   }
-
-  return {
-    status: "pending",
-    title: "等待补丁验证",
-    description: "暂未提取到明确的补丁重放或验证信号。",
-    score: 18,
-    evidence,
-  };
+  return { status: "pending", title: task?.status === "running" ? "等待补丁验证" : "补丁尚未验证", score: 0, evidence,
+    description: "尚无实际回放结果。报告和日志中的成功描述不能代替补丁验证。" };
 }
 
 function statusColor(status: PatchVerificationSummary["status"]) {
   if (status === "verified") return "success";
-  if (status === "partial") return "active";
   if (status === "failed") return "exception";
   return "normal";
 }
 
 function tagColor(status: PatchVerificationSummary["status"]) {
   if (status === "verified") return "success";
-  if (status === "partial") return "warning";
   if (status === "failed") return "error";
   return "default";
 }
@@ -164,7 +132,7 @@ function tagColor(status: PatchVerificationSummary["status"]) {
 const PatchVerificationPanel: React.FC<PatchVerificationPanelProps> = ({ task, events }) => {
   const [open, setOpen] = useState(false);
   const summary = useMemo(() => buildSummary(task, events), [events, task]);
-  const Icon = summary.status === "failed" || summary.status === "partial" ? AlertTriangle : ShieldCheck;
+  const Icon = summary.status === "failed" ? AlertTriangle : ShieldCheck;
 
   return (
     <section className="product-summary-card patch-verification-card">
@@ -174,7 +142,7 @@ const PatchVerificationPanel: React.FC<PatchVerificationPanelProps> = ({ task, e
           <Typography.Text strong>补丁验证</Typography.Text>
         </Space>
         <Tag color={tagColor(summary.status)}>
-          {summary.status === "verified" ? "已通过" : summary.status === "partial" ? "部分通过" : summary.status === "failed" ? "异常" : "等待中"}
+          {summary.status === "verified" ? "已通过" : summary.status === "failed" ? "未通过" : summary.status === "skipped" ? "已跳过" : summary.status === "archived" ? "历史记录" : "未验证"}
         </Tag>
       </div>
 
@@ -185,7 +153,7 @@ const PatchVerificationPanel: React.FC<PatchVerificationPanelProps> = ({ task, e
             size={78}
             percent={summary.score}
             status={statusColor(summary.status)}
-            format={() => (summary.status === "verified" ? <CheckCircle2 size={22} /> : `${summary.score}%`)}
+            format={() => (summary.status === "verified" ? <CheckCircle2 size={22} /> : <ShieldCheck size={22} />)}
           />
         </div>
         <div className="patch-summary">

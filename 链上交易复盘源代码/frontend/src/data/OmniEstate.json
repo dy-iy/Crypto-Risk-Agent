@@ -1,0 +1,15 @@
+{
+    "name": "OmniEstate",
+    "cause": "Parameter verification",
+    "platform": "BNBChain",
+    "time": "2023/1/17",
+    "link": "https://blog.solidityscan.com/omni-estate-group-hack-analysis-missing-zero-duration-validation-285c1c54498",
+    "transaction_hash": [
+        "0x49bed801b9a9432728b1939951acaa8f2e874453d39c7d881a62c2c157aa7613",
+        "0xa916674fb8203fac6d78f5f9afc604be468a514aa61ea36c6d6ef26ecfbd0e97"
+    ],
+    "report": "The _Check_reward function lacks proper input validation for the durations parameter. When the invest function is called with an end_date value other than 3, 6, 12, or 24, the duration[msg.sender] is left at its default value of 0. In _Check_reward, since none of the conditional branches (durations == 3/6/12/24) are satisfied when durations is 0, the function returns the uninitialized global variable total_percent, which retains its previous value—often a large reward amount from prior calculations. This allows an attacker to bypass intended staking duration logic and claim disproportionately high rewards by passing an invalid end_date during investment.",
+    "root_cause": "_Check_reward",
+    "report_link": "https://web3sec.notion.site/insufficient-check-of-the-arguments-96129dae563248e69fbf349f8ad720cd",
+    "report_zh": "_Check_reward 函数对 durations 参数缺乏适当的输入验证。当使用 3、6、12、24 以外的 end_date 值调用 invest 函数时，duration[msg.sender] 保持其默认值 0。在 _Check_reward 中，当 durations 为 0 时，所有条件分支 (durations == 3/6/12/24) 均不满足，函数返回未初始化的全局变量 total_percent，该变量保留其先前值——通常是先前计算的大额奖励。这允许攻击者通过传入无效的 end_date 绕过预期的质押期限逻辑，并索取不成比例的高额奖励。"
+}

@@ -1,0 +1,20 @@
+{
+  "input": "hardcoded synthetic data only",
+  "elapsed_seconds": 8.5,
+  "checks": [
+    {
+      "name": "summary",
+      "passed": true,
+      "finish_reason": "stop"
+    },
+    {
+      "name": "thinking_tool_call",
+      "passed": true,
+      "reasoning_preserved": true
+    },
+    {
+      "name": "tool_continuation",
+      "passed": true
+    }
+  ]
+}

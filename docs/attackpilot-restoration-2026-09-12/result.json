@@ -1,0 +1,36 @@
+{
+  "passed": true,
+  "viewports": [
+    1440,
+    390
+  ],
+  "historicalTask": "0b53f3ab-ff2b-4eed-8703-c9347927c62c",
+  "errors": [],
+  "mutations": [
+    {
+      "path": "/api/attackpilot/tx-review",
+      "csrf": "1",
+      "body": "{\"tx_hash\":\"0xeb8c3bebed11e2e4fcd30cbfc2fb3c55c4ca166003c7f7d319e78eaab9747098\",\"tx_hashes\":[\"0xeb8c3bebed11e2e4fcd30cbfc2fb3c55c4ca166003c7f7d319e78eaab9747098\"],\"chain\":\"bnbchain\",\"modules\":[\"attack_detection\",\"fault_localization\",\"rag_retrieval\",\"patch_generation\",\"patch_verification\"]}"
+    },
+    {
+      "path": "/api/attackpilot/tx-detect",
+      "csrf": "1",
+      "body": "{\"tx_hash\":\"0xeb8c3bebed11e2e4fcd30cbfc2fb3c55c4ca166003c7f7d319e78eaab9747098\",\"tx_hashes\":[\"0xeb8c3bebed11e2e4fcd30cbfc2fb3c55c4ca166003c7f7d319e78eaab9747098\",\"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"chain\":\"bnbchain\",\"modules\":[\"attack_detection\",\"fault_localization\",\"rag_retrieval\",\"patch_generation\",\"patch_verification\"]}"
+    },
+    {
+      "path": "/api/attackpilot/assistant/chat",
+      "csrf": "1",
+      "body": "{\"scope\":\"task\",\"task_id\":\"0b53f3ab-ff2b-4eed-8703-c9347927c62c\",\"chain\":\"ethereum\",\"question\":\"这份报告有哪些关键证据？\",\"history\":[]}"
+    },
+    {
+      "path": "/api/attackpilot/rag/search",
+      "csrf": "1",
+      "body": "{\"query\":\"Oracle Manipulation 预言机操纵 协议相信了可以在同一笔交易内被临时推高或压低的价格。\",\"top_k\":3}"
+    },
+    {
+      "path": "/api/attackpilot/rag/search",
+      "csrf": "1",
+      "body": "{\"query\":\"Oracle Manipulation 预言机操纵 协议相信了可以在同一笔交易内被临时推高或压低的价格。\",\"top_k\":3}"
+    }
+  ]
+}

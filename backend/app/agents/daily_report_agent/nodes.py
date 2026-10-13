@@ -10,7 +10,7 @@ from app.agents.ranking_agent.graph import run_ranking_agent
 from app.llm import call_llm_json
 from app.services.auth_service import list_favorites
 from app.services.portfolio_service import DEFAULT_USER_ID
-from app.services.user_asset_service import list_user_assets
+from app.services.follow_service import follow_snapshot, NoFollowsError
 
 
 FORBIDDEN_ADVICE_TERMS = ["买入", "卖出", "做空", "梭哈"]
@@ -69,47 +69,11 @@ def _contains_asset_token(text: str, asset: str) -> bool:
     return bool(re.search(rf"(?<![A-Z0-9]){re.escape(asset)}(?![A-Z0-9])", text))
 
 
-def _exposure_weight(asset: dict[str, object]) -> float:
-    if asset.get("exposure_mode") == "custom" and asset.get("custom_exposure_pct") is not None:
-        try:
-            return max(0.0, min(1.0, float(asset.get("custom_exposure_pct") or 0)))
-        except (TypeError, ValueError):
-            return 0.0
-    if asset.get("is_holding"):
-        try:
-            market_value = float(asset.get("market_value") or 0)
-        except (TypeError, ValueError):
-            market_value = 0
-        if market_value > 0:
-            return 0.75
-        return 0.55
-    bucket = str(asset.get("exposure_bucket") or "none")
-    return {"high": 0.75, "medium": 0.45, "low": 0.25, "none": 0.12}.get(bucket, 0.12)
-
-
 def _asset_profile_item(item: object) -> dict[str, object]:
     data = item.model_dump() if hasattr(item, "model_dump") else dict(item or {})
     symbol = str(data.get("symbol") or "").upper()
-    return {
-        "symbol": symbol,
-        "base_asset": str(data.get("base_asset") or _base_asset(symbol)).upper(),
-        "is_watched": bool(data.get("is_watched", True)),
-        "is_holding": bool(data.get("is_holding", False)),
-        "exposure_mode": str(data.get("exposure_mode") or "bucket"),
-        "exposure_bucket": str(data.get("exposure_bucket") or "none"),
-        "custom_exposure_pct": data.get("custom_exposure_pct"),
-        "amount": float(data.get("amount") or 0),
-        "avg_buy_price": float(data.get("avg_buy_price") or 0),
-        "alert_threshold": int(data.get("alert_threshold") or 70),
-        "current_price": float(data.get("current_price") or 0),
-        "price_change_24h": float(data.get("price_change_24h") or 0),
-        "market_value": float(data.get("market_value") or 0),
-        "floating_pnl": float(data.get("floating_pnl") or 0),
-        "floating_pnl_rate": float(data.get("floating_pnl_rate") or 0),
-        "existing_risk_score": _clamp_score(data.get("risk_score")),
-        "existing_risk_level": str(data.get("risk_level") or "low"),
-        "ai_summary": str(data.get("ai_summary") or ""),
-    }
+    return {"symbol": symbol, "base_asset": str(data.get("base_asset") or _base_asset(symbol)).upper(),
+            "alert_threshold": int(data.get("alert_threshold", 70)), "is_watched": True}
 
 
 def _favorite_brief(item: object) -> dict[str, object]:
@@ -179,25 +143,11 @@ def _personal_news_score(item: dict[str, object], matched_assets: list[str], use
     base_score = _clamp_score(item.get("risk_score"))
     if not matched_assets:
         return 0
-    asset_weight = 0.12
-    for asset in user_assets:
-        base = str(asset.get("base_asset") or _base_asset(asset.get("symbol"))).upper()
-        if base in matched_assets:
-            asset_weight = max(asset_weight, _exposure_weight(asset))
-    return _clamp_score(base_score * (0.55 + relevance * 0.25 + asset_weight * 0.35))
+    return _clamp_score(base_score * (0.55 + relevance * 0.25))
 
 
-def _exposure_note(matched_assets: list[str], user_assets: list[dict[str, object]]) -> str:
-    notes = []
-    for asset in user_assets:
-        base = str(asset.get("base_asset") or _base_asset(asset.get("symbol"))).upper()
-        if base not in matched_assets:
-            continue
-        if asset.get("is_holding"):
-            notes.append(f"{base}为持仓资产")
-        else:
-            notes.append(f"{base}为关注资产")
-    return "，".join(notes)
+def _follow_note(matched_assets: list[str], user_assets: list[dict[str, object]]) -> str:
+    return "、".join(matched_assets) + "为关注币种" if matched_assets else ""
 
 
 def _key_news(
@@ -249,7 +199,7 @@ def _key_news(
                 "matched_assets": matched_assets,
                 "personal_relevance": float(item.get("_personal_relevance") or 0),
                 "matched_reason": str(item.get("_match_reason") or ""),
-                "exposure_note": _exposure_note(matched_assets, user_assets) if matched_assets else "",
+                "exposure_note": _follow_note(matched_assets, user_assets) if matched_assets else "",
             }
         )
     return output
@@ -341,11 +291,9 @@ def _merge_llm_risk_themes(llm_items: object, fallback_themes: list[dict[str, ob
     return merged
 
 
-def _asset_exposure_label(asset: dict[str, object]) -> str:
+def _asset_follow_label(asset: dict[str, object]) -> str:
     base = str(asset.get("base_asset") or _base_asset(asset.get("symbol"))).upper()
-    if asset.get("is_holding"):
-        return f"{base} 持仓资产"
-    return f"{base} 关注资产"
+    return f"{base} 关注币种"
 
 
 def _asset_related_items(asset: dict[str, object], key_news: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -365,8 +313,8 @@ def _fallback_asset_actions(asset: dict[str, object], related_items: list[dict[s
             f"对 {base} 设置价格波动、新闻连续命中和风险分阈值提醒。",
             "避免依据单条未证实消息做方向性操作，等待多源证据确认。",
         ]
-        if score >= int(asset.get("alert_threshold") or 70):
-            actions.insert(0, f"{base} 已达到或接近你的风险阈值，优先复核持仓暴露和流动性。")
+        if score >= int(asset.get("alert_threshold", 70)):
+            actions.insert(0, f"{base} 已达到或接近你的风险阈值，优先复核相关事件和流动性。")
         return actions
     return [
         f"今日新闻库暂未命中 {base} 的直接风险事件。",
@@ -403,18 +351,18 @@ def _asset_reports_from_profile(
                 "asset_symbol": symbol,
                 "asset_name": base,
                 "is_holding": bool(asset.get("is_holding")),
-                "exposure_label": _asset_exposure_label(asset),
+                "exposure_label": _asset_follow_label(asset),
                 "exposure_mode": str(asset.get("exposure_mode") or "bucket"),
                 "exposure_bucket": str(asset.get("exposure_bucket") or "none"),
                 "market_value": float(asset.get("market_value") or 0),
                 "price_change_24h": float(asset.get("price_change_24h") or 0),
-                "alert_threshold": int(asset.get("alert_threshold") or 70),
+                "alert_threshold": int(asset.get("alert_threshold", 70)),
                 "personal_risk_score": score,
                 "risk_level": _risk_level_from_score(score),
                 "summary": (
                     f"{base} 今日命中 {len(related_items)} 个相关风险事件，主要风险集中在 {'、'.join(risk_types[:3]) or '综合风险'}。"
                     if related_items
-                    else f"{base} 今日暂无直接命中事件，当前风险以持仓/关注监控为主。"
+                    else f"{base} 今日暂无直接命中事件，当前风险以关注监控为主。"
                 ),
                 "risk_types": risk_types,
                 "key_drivers": key_drivers,
@@ -530,7 +478,7 @@ def _personal_watch_coins(user_assets: list[dict[str, object]], key_news: list[d
                 "exposure_bucket": str(asset.get("exposure_bucket") or "none"),
                 "market_value": float(asset.get("market_value") or 0),
                 "price_change_24h": float(asset.get("price_change_24h") or 0),
-                "alert_threshold": int(asset.get("alert_threshold") or 70),
+                "alert_threshold": int(asset.get("alert_threshold", 70)),
             }
         )
 
@@ -550,7 +498,7 @@ def _fallback_actions(alert_level: str, red_count: int, high_count: int, watch_c
     if watch_coins:
         symbols = "、".join(str(item.get("symbol") or "") for item in watch_coins[:3] if item.get("symbol"))
         if symbols:
-            actions.append(f"重点复核 {symbols} 的相关新闻和持仓暴露。")
+            actions.append(f"重点复核 {symbols} 的相关新闻和事件进展。")
     return actions
 
 
@@ -558,10 +506,12 @@ def load_user_profile_node(state: DailyReportState) -> DailyReportState:
     user_id = str(state.get("user_id") or DEFAULT_USER_ID)
     errors = list(state.get("errors", []))
     try:
-        watchlist = [_asset_profile_item(item) for item in list_user_assets(user_id)]
+        snapshot = follow_snapshot(user_id)
+        watchlist = [_asset_profile_item(item) for item in snapshot["items"]]
     except Exception as exc:
-        watchlist = []
-        errors.append(f"load_user_watchlist_failed: {exc}")
+        raise RuntimeError("关注列表读取失败，请稍后重试") from exc
+    if not watchlist:
+        raise NoFollowsError("请先添加关注币种，再生成关注日报")
 
     try:
         favorite_news = [_favorite_brief(item) for item in list_favorites(user_id, "news")] if user_id != DEFAULT_USER_ID else []
@@ -569,14 +519,13 @@ def load_user_profile_node(state: DailyReportState) -> DailyReportState:
         favorite_news = []
         errors.append(f"load_user_favorites_failed: {exc}")
 
-    holding_assets = [item for item in watchlist if item.get("is_holding")]
     profile = {
         "user_id": user_id,
         "display_name": str(state.get("user_display_name") or ("Demo 用户" if user_id == DEFAULT_USER_ID else "当前用户")),
         "profile_source": "anonymous_demo" if user_id == DEFAULT_USER_ID else "authenticated",
         "assets": watchlist,
         "asset_count": len(watchlist),
-        "holding_count": len(holding_assets),
+        "follows_revision": snapshot["revision"],
         "favorite_news": favorite_news[:10],
         "favorite_news_count": len(favorite_news),
         "has_personal_assets": bool(watchlist),
@@ -641,19 +590,15 @@ def aggregate_daily_signals_node(state: DailyReportState) -> DailyReportState:
     risk_themes = _risk_themes_from_key_news(personal_news)
     watch_coins = _personal_watch_coins(user_assets, personal_news) if has_personal_assets else []
     affected_assets = sorted({asset for item in personal_news for asset in item.get("matched_assets", [])})
-    latest_time = max(
-        [str(item.get("published_at") or item.get("date") or "") for item in news_items if item.get("published_at") or item.get("date")],
-        default="",
-    )
     fallback_actions = (
         _fallback_actions(alert_level, personal_red_count, personal_high_count, watch_coins)
         if has_personal_assets
-        else ["先在我的风险资产中添加关注币种或持仓信息，再生成个人风险日报。"]
+        else ["先在我的关注中添加关注币种，再生成个人风险日报。"]
     )
 
     signals = {
         "range": state.get("range") or "24h",
-        "generated_at": latest_time or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "news_count": len(news_items),
         "user_profile": user_profile,
         "user_assets_count": len(user_assets),
@@ -685,15 +630,22 @@ def llm_daily_writer_node(state: DailyReportState) -> DailyReportState:
     signals = dict(state.get("signals") or {})
     if int(signals.get("user_assets_count") or 0) == 0:
         return {**state, "llm_draft": {"source": "rule_fallback"}}
+    excluded = {"is_holding", "holding_assets_count", "holding_count", "exposure_label", "exposure_mode", "exposure_bucket", "custom_exposure_pct", "amount", "avg_buy_price", "market_value", "floating_pnl", "floating_pnl_rate", "price_change_24h"}
+    def without_holdings(value):
+        if isinstance(value, dict):
+            return {key: without_holdings(item) for key, item in value.items() if key not in excluded}
+        if isinstance(value, list):
+            return [without_holdings(item) for item in value]
+        return value
     prompt = f"""
-你是 CryptoRisk 的加密货币金融风控日报 Agent。请基于已有新闻风险标注数据和用户关注/持仓资产，生成个性化风险日报。
+你是 CryptoRisk 的加密货币金融风控日报 Agent。请基于已有新闻风险标注数据和用户关注币种，生成个性化风险日报。
 
 要求：
 1. 只输出 JSON，不要 Markdown。
 2. 不得给出买入、卖出、做空、梭哈等交易方向建议。
 3. 必须围绕用户资产说清楚：哪些事件命中用户资产、为什么相关、风险强度、需要核验证据、接下来 24 小时盯什么。
-4. 用户关注/持仓了什么资产，日报里才允许出现什么资产；不得新增未关注资产。
-5. 如果用户没有关注资产，要提醒先添加关注资产，不要生成全市场资产列表。
+4. 用户关注了什么币种，日报里才允许出现什么资产；不得新增未关注币种。
+5. 如果用户没有关注币种，要提醒先添加关注币种，不要生成全市场资产列表。
 6. 输出字段：
 {{
   "headline": "一句话标题",
@@ -718,12 +670,12 @@ def llm_daily_writer_node(state: DailyReportState) -> DailyReportState:
   ],
   "focus_points": ["与用户资产直接相关的关注点"],
   "user_actions": ["用户处置建议"],
-  "impact_summary": "对用户关注资产/持仓组合的影响分析",
+  "impact_summary": "对用户关注币种的影响分析",
   "source": "llm"
 }}
 
 已有结构化信号：
-{json.dumps(signals, ensure_ascii=False)}
+{json.dumps(without_holdings(signals), ensure_ascii=False)}
 """
     llm_result = call_llm_json(prompt, temperature=0.1)
     if llm_result.get("_llm_error"):
@@ -751,13 +703,13 @@ def finalize_daily_report_node(state: DailyReportState) -> DailyReportState:
     top_type = str(signals.get("top_risk_type") or "综合风险")
     top_coin = str(signals.get("top_coin") or "")
     fallback_headline = (
-        "请先添加关注资产，以生成个人风险日报"
+        "请先添加关注币种，以生成个人风险日报"
         if user_assets_count == 0
         else f"你的 {top_coin} 等资产今日需关注 {top_type}"
         if key_news and top_coin
-        else f"你的关注资产今日需关注 {top_type}"
+        else f"你的关注币种今日需关注 {top_type}"
         if key_news
-        else "你的关注资产暂无直接高风险命中"
+        else "你的关注币种暂无直接高风险命中"
     )
 
     fallback_summary = (
@@ -766,7 +718,7 @@ def finalize_daily_report_node(state: DailyReportState) -> DailyReportState:
         f"影响资产 { '、'.join([str(asset) for asset in key_news[0].get('matched_assets', [])]) or top_coin or '待确认'}，"
         f"风险类型为 {key_news[0].get('risk_type')}。"
         if key_news
-        else "当前还没有关注资产。请先在我的风险资产中添加关注币种或持仓权重，系统会生成更准确的个人风险日报。"
+        else "当前还没有关注币种。请先在我的关注中添加关注币种，系统会生成更准确的个人风险日报。"
         if user_assets_count == 0
         else f"你当前关注 {user_assets_count} 个资产，本期新闻库未命中这些资产的直接高风险事件。建议继续关注公告、提现状态和链上大额转账变化。"
     )
@@ -783,7 +735,7 @@ def finalize_daily_report_node(state: DailyReportState) -> DailyReportState:
     if user_assets_count == 0:
         focus_points = []
     fallback_impact_summary = (
-        "当前没有关注资产。添加资产后，系统会只围绕你的关注/持仓资产聚合今日新闻并生成分项报告。"
+        "当前没有关注币种。添加资产后，系统会只围绕你的关注币种聚合今日新闻并生成分项报告。"
         if user_assets_count == 0
         else f"本期共生成 {len(asset_reports)} 个资产分项报告，命中 {signals.get('personal_news_count', len(key_news))} 条与用户资产相关的风险新闻。"
         if key_news
@@ -794,6 +746,8 @@ def finalize_daily_report_node(state: DailyReportState) -> DailyReportState:
     impact_summary = fallback_impact_summary if user_assets_count == 0 else str(draft.get("impact_summary") or fallback_impact_summary)
 
     report = {
+        "report_kind": "follows_v1",
+        "follows_revision": user_profile.get("follows_revision", ""),
         "date": state.get("date_filter") or "24h",
         "range": state.get("range") or "24h",
         "generated_at": signals.get("generated_at", ""),

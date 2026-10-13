@@ -1,0 +1,4317 @@
+{
+  "schema_version": "0.1.0",
+  "generated_by": "scripts/build_knowledge_case_index.py",
+  "source_root": "dataset/raw",
+  "total": 149,
+  "skipped": [],
+  "type_counts": {
+    "access_control": 48,
+    "accounting_drift": 38,
+    "business_logic": 69,
+    "flash_loan_amplifier": 30,
+    "oracle_manipulation": 35,
+    "precision_rounding": 30,
+    "reentrancy": 18,
+    "signature_replay": 3
+  },
+  "items": [
+    {
+      "case_id": "raw_adc",
+      "name": "ADC",
+      "dataset_file": "dataset/raw/ADC.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "incorrect-access-control",
+      "platform": "Ethereum",
+      "time": "2024-02-02 05:28:47 UTC",
+      "loss": "~20 eth",
+      "root_cause": "calcStepIncome",
+      "transaction_count": 4,
+      "transaction_hashes": [
+        "0xe83b7ff7c56329cedddf6e39c065495a552079f164183bf253694c02fd1e7b2e",
+        "0x26e263447afc1b5a818a77a10bd30d8070f8d660760b4d52e65939f0e74a68c5",
+        "0x5b17283268d401d1c8854af40f6bf9d2738a1d70b271318d55a7397f34c8ee3b",
+        "0xcf834aff4de9992f5da9c443600dad9c6277a8a00de5007842fece51564992db"
+      ],
+      "report_link": "https://web3sec.notion.site/ADC-1d8729274113800f9961d1c2d66e50d7?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "incorrect access"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_alchemix",
+      "name": "Alchemix",
+      "dataset_file": "dataset/raw/Alchemix.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Contract Vulnerability",
+      "platform": "Ethereum",
+      "time": "2021/6/16 12:15",
+      "loss": null,
+      "root_cause": "_plantOrRecallExcessFunds",
+      "transaction_count": 6,
+      "transaction_hashes": [
+        "0x3e86045bb9cde8f8cfcb5d943df531c7e68370c2d71cd631b1cee0950cf068f5",
+        "0xed3ea69b36024afb5389c3b940d46108a13fd31212992229d5c8257769cf8eeb",
+        "0x73df02bb2372d5a1f4278eb84d8222f90e12e4d0c9131c5831d0e62587bbe1bb",
+        "0x4fa64411ccd2982c43947a54b8e780ea6523da5c7e0c9545bf85697422b21577",
+        "0x3cc071f9f40294bb250fc7b9aa6b2d7e6ca5707ce4d6d222157d7a0feef618b3",
+        "0x38ecc8363836e43aca99d994bb9325a8f3770d7a1d1fffd62c82cf5230525836"
+      ],
+      "report_link": "https://forum.alchemix.fi/public/d/137-incident-report-06162021",
+      "matched_rules": {
+        "business_logic": [
+          "contract vulnerability"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_apecoin_ape",
+      "name": "ApeCoin (APE)",
+      "dataset_file": "dataset/raw/ApeCoin (APE).json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "Flashloan",
+      "platform": "Ethereum",
+      "time": "2022-03-17 12:13:14 UTC",
+      "loss": "$1.1 million",
+      "root_cause": "claimTokens + flashloan",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xeb8c3bebed11e2e4fcd30cbfc2fb3c55c4ca166003c7f7d319e78eaab9747098"
+      ],
+      "report_link": "https://www.freebuf.com/news/328093.html",
+      "matched_rules": {
+        "access_control": [
+          "owner"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan",
+          "flash loan"
+        ],
+        "business_logic": [
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_astrid_finance",
+      "name": "Astrid Finance",
+      "dataset_file": "dataset/raw/Astrid Finance.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Lack of input validation",
+      "platform": "Ethereum",
+      "time": "2023/10/28",
+      "loss": null,
+      "root_cause": "withdraw",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x8af9b5fb3e2e3df8659ffb2e0f0c1f4c90d5a80f4f6fccef143b823ce673fb60"
+      ],
+      "report_link": "https://web3sec.notion.site/ADC-1d8729274113800f9961d1c2d66e50d7?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "lack of input validation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_audius",
+      "name": "Audius",
+      "dataset_file": "dataset/raw/Audius.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Storage Collision & Malicious Proposal",
+      "platform": "Ethereum",
+      "time": "2022-07-23 23:12:03 UTC",
+      "loss": "704 ETH (~1.08M US$)",
+      "root_cause": "initialize",
+      "transaction_count": 3,
+      "transaction_hashes": [
+        "0xfefd829e246002a8fd061eede7501bccb6e244a9aacea0ebceaecef5d877a984",
+        "0x4227bca8ed4b8915c7eec0e14ad3748a88c4371d4176e716e8007249b9980dc9",
+        "0x3c09c6306b67737227edc24c663462d870e7c2bf39e9ab66877a980c900dd5d5"
+      ],
+      "report_link": "https://medium.com/coinmonks/audios-protocol-hack-analysis-c4d7b96756da",
+      "matched_rules": {
+        "access_control": [
+          "initialize",
+          "storage collision",
+          "malicious proposal"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_azukidao",
+      "name": "AzukiDAO",
+      "dataset_file": "dataset/raw/AzukiDAO.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "The validity of the signature in the contract was not correctly verified",
+      "platform": "Ethereum",
+      "time": "2023/7/3",
+      "loss": null,
+      "root_cause": "claim",
+      "transaction_count": 13,
+      "transaction_hashes": [
+        "0x6233c9315dd3b6a6fcc7d653f4dca6c263e684a76b4ad3d93595e3b8e8714d34",
+        "0xfd7a9e2b06dea5f40edcc50d7e03831ad2ce9eacbcc7e0ee21a931c769567372",
+        "0xba0e140e83bbf39cf9e2fdca8b8865a824b49fb1225eb739a1480b6e1b9d2fea",
+        "0x0d84c61680ab0c98b51a75c3044aa47f05ac6a8ac96f919e3ead310729397d0a",
+        "0x22571c1eece54e3e5ab0ba2c2d8ae4354307e26161c15a8dcd993b1260dc5c01",
+        "0x816d38ca4d35554eaf3f7c348501e971a0db09789b46d066e98c542a76618c23",
+        "0x6233c9315dd3b6a6fcc7d653f4dca6c263e684a76b4ad3d93595e3b8e8714d34",
+        "0xf296c90c9482e6feef266af6162fdf67bf21799bc4d82078861ed0f17b47ae97",
+        "0x57e4ac6ae7ede6322254ab50131229a6a016441273c001fe3b9cdd745e772e21",
+        "0xee36ac81f630ed464b123135ea8842f3a980a8085c60d30d183a1b48122bbb91",
+        "0xd8ce78e5e64453cf14c5a328cc0ea0f8cdc6a296916eecac72bfa5642f129503",
+        "0x5f027af5a96ce5de3b5f3447ccabbef61322cbd100700db94e972d38ed179a07",
+        "0x939427386b57ef006d8fc386f3f1bef490e95ee9976abfb9a5ee27b3aed28926"
+      ],
+      "report_link": "https://www.freebuf.com/articles/blockchain-articles/371312.html",
+      "matched_rules": {
+        "access_control": [
+          "signature"
+        ],
+        "business_logic": [
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_balancer",
+      "name": "Balancer",
+      "dataset_file": "dataset/raw/Balancer.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "precision_rounding",
+        "accounting_drift",
+        "business_logic"
+      ],
+      "raw_cause": "Rounding Error && Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2023/8/27",
+      "loss": null,
+      "root_cause": "onSwap",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x2a027c8b915c3737942f512fc5d26fd15752d0332353b3059de771a35a606c2d"
+      ],
+      "report_link": "https://slowmist.medium.com/review-and-recommendations-of-balancer-incident-d2b31b5bd863",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "precision_rounding": [
+          "rounding",
+          "rounding error"
+        ],
+        "accounting_drift": [
+          "exchange rate"
+        ],
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_barleyfinance",
+      "name": "BarleyFinance",
+      "dataset_file": "dataset/raw/BarleyFinance.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2024-01-28 17:48:35 UTC",
+      "loss": "~130K",
+      "root_cause": "bond",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x995e880635f4a7462a420a58527023f946710167ea4c6c093d7d193062a33b01"
+      ],
+      "report_link": "https://medium.com/neptune-mutual/analysis-of-the-barley-finance-exploit-d2df61b98c80",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy",
+          "callback"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bbt",
+      "name": "BBT",
+      "dataset_file": "dataset/raw/BBT.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "business logic flaw",
+      "platform": "Ethereum",
+      "time": "2024-03-12 08:31:59 UTC",
+      "loss": "~5.06 ETH",
+      "root_cause": "setRegistry",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x4019890fe5a5bd527cd3b9f7ee6d94e55b331709b703317860d028745e33a8ca"
+      ],
+      "report_link": "https://web3sec.notion.site/Lack-Of-Access-Control-Allows-For-Restriction-Bypass-1cd729274113806280cbeccd18150f5c?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "lack of access"
+        ],
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_beanstalk",
+      "name": "Beanstalk",
+      "dataset_file": "dataset/raw/Beanstalk.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "Malicious code logic",
+      "platform": "Ethereum",
+      "time": "2022/4/17 12:24",
+      "loss": null,
+      "root_cause": "emergencyCommit",
+      "transaction_count": 5,
+      "transaction_hashes": [
+        "0xd09b72275962b03dd96205f8077fdc08bec87c0ebd07e431aadc760f31f34b01",
+        "0x68cdec0ac76454c3b0f7af0b8a3895db00adf6daaf3b50a99716858c4fa54c6f",
+        "0x9575e478d7c542558ecca52b27072fa1f1ec70679106bdbd62f3bb4d6c87a80d",
+        "0x677660ce489935b94bf5ac32c494669a71ee76913ffabe623e82a7de8226b460",
+        "0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7"
+      ],
+      "report_link": "https://medium.com/coinmonks/beanstalk-exploit-a-simplified-post-mortem-analysis-92e6cdb17ace",
+      "matched_rules": {
+        "access_control": [
+          "malicious proposal"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ],
+        "business_logic": [
+          "malicious code logic"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bearn",
+      "name": "Bearn",
+      "dataset_file": "dataset/raw/Bearn.json",
+      "vulnerability_type_ids": [
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Flashloan",
+      "platform": "BNBChain",
+      "time": "2021/5/16 10:36",
+      "loss": null,
+      "root_cause": "withdraw",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x603b2bbe2a7d0877b22531735ff686a7caad866f6c0435c37b7b49e4bfd9a36c"
+      ],
+      "report_link": "https://www.vidma.io/blog/the-bearn-exploit-a-18-million-lesson-in-defi-smart-contract-vulnerabilities",
+      "matched_rules": {
+        "flash_loan_amplifier": [
+          "flashloan",
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bearndao",
+      "name": "BEARNDAO",
+      "dataset_file": "dataset/raw/BEARNDAO.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation"
+      ],
+      "raw_cause": "Sandwich attack",
+      "platform": "BNBChain",
+      "time": "2023/12/5",
+      "loss": null,
+      "root_cause": "convertDustToEarned",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x51913be3f31d5ddbfc77da789e5f9653ed6b219a52772309802226445a1edd5f"
+      ],
+      "report_link": "https://web3sec.notion.site/Business-Logic-Flaw-e9cc2c625479456784764f748ff4edce?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate",
+          "sandwich"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bedrock_defi",
+      "name": "Bedrock_DeFi",
+      "dataset_file": "dataset/raw/Bedrock_DeFi.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Swap ETH/BTC 1/1 in mint function",
+      "platform": "Ethereum",
+      "time": "2024-09-26 18:28:23 UTC",
+      "loss": "27.83925883 BTC (~$1.7M USD)",
+      "root_cause": "mint / _amounts",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x725f0d65340c859e0f64e72ca8260220c526c3e0ccde530004160809f6177940"
+      ],
+      "report_link": "https://lunaray.medium.com/bedrock-unibtc-hack-analysis-7808902e5a7c",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ],
+        "accounting_drift": [
+          "exchange rate"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bego",
+      "name": "BEGO",
+      "dataset_file": "dataset/raw/BEGO.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "signature_replay"
+      ],
+      "raw_cause": "Incorrect signature verification",
+      "platform": "BNBChain",
+      "time": "2022-10-19 16:34:35 UTC",
+      "loss": "12 BNB",
+      "root_cause": "mint",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x9f4ef3cc55b016ea6b867807a09f80d1b2e36f6cd6fccfaf0182f46060332c57"
+      ],
+      "report_link": "https://web3sec.notion.site/Insufficient-validation-5f0b5f9f1412498fb569f538c4e8ce88?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "signature"
+        ],
+        "signature_replay": [
+          "incorrect signature",
+          "signature verification"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bitpaidio",
+      "name": "Bitpaidio",
+      "dataset_file": "dataset/raw/Bitpaidio.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "BNBChain",
+      "time": "2023/5/13",
+      "loss": null,
+      "root_cause": "Lock_Token",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x1ae499ccf292a2ee5e550702b81a4a7f65cd03af2c604e2d401d52786f459ba6"
+      ],
+      "report_link": "https://web3sec.notion.site/Did-not-properly-update-the-lock-times-22603416025743a4b5c94a87302c47c8?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bno",
+      "name": "BNO",
+      "dataset_file": "dataset/raw/BNO.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "business_logic"
+      ],
+      "raw_cause": "Lack of inspection mechanism",
+      "platform": "BNBChain",
+      "time": "2023/7/18",
+      "loss": null,
+      "root_cause": "emergencyWithdraw",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x33fed54de490797b99b2fc7a159e43af57e9e6bdefc2c2d052dc814cfe0096b9"
+      ],
+      "report_link": "https://web3sec.notion.site/Business-Logic-Flow-de73c3842eca4ce7bc65c4b40e5c3646?pvs=23",
+      "matched_rules": {
+        "accounting_drift": [
+          "rewarddebt"
+        ],
+        "business_logic": [
+          "lack of inspection",
+          "emergencywithdraw",
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bra",
+      "name": "BRA",
+      "dataset_file": "dataset/raw/BRA.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "BNBChain",
+      "time": "2023/1/10",
+      "loss": null,
+      "root_cause": "_transfer",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0x6759db55a4edec4f6bedb5691fc42cf024be3a1a534ddcc7edd471ef205d4047",
+        "0x4e5b2efa90c62f2b62925ebd7c10c953dc73c710ef06695eac3f36fe0f6b9348"
+      ],
+      "report_link": "https://web3sec.notion.site/doubles-reward-the-tax-fee-to-the-pancake-pair-67248a5a986645b8a3fd4e2b2395da79?pvs=23",
+      "matched_rules": {
+        "accounting_drift": [
+          "reserve"
+        ],
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_brahtopg",
+      "name": "BrahTOPG",
+      "dataset_file": "dataset/raw/BrahTOPG.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "Arbitrary External Call Vulnerability",
+      "platform": "Ethereum",
+      "time": "2022-11-09 16:55:47 UTC",
+      "loss": "$89k",
+      "root_cause": "zapIn",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xeaef2831d4d6bca04e4e9035613be637ae3b0034977673c1c2f10903926f29c0"
+      ],
+      "report_link": "https://medium.com/neptune-mutual/decoding-brahma-brahtopg-smart-contract-vulnerability-7b7c364b79d8",
+      "matched_rules": {
+        "access_control": [
+          "arbitrary external call"
+        ],
+        "business_logic": [
+          "insufficient validation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_btc20",
+      "name": "BTC20",
+      "dataset_file": "dataset/raw/BTC20.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift"
+      ],
+      "raw_cause": "Price Manipulation",
+      "platform": "Ethereum",
+      "time": "2023-08-19 13:48:11 UTC",
+      "loss": "~$18ETH",
+      "root_cause": "fetchPrice",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xcdd93e37ba2991ce02d8ca07bf6563bf5cd5ae801cbbce3dd0babb22e30b2dbe"
+      ],
+      "report_link": "https://web3sec.notion.site/Price-Manipulation-380dff0f6e76499ab6c00ff5acd40677?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "price manipulation",
+          "manipulate"
+        ],
+        "accounting_drift": [
+          "reserve"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bunn",
+      "name": "BUNN",
+      "dataset_file": "dataset/raw/BUNN.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Reflection tokens",
+      "platform": "BNBChain",
+      "time": "2023-06-21 20:26:55 UTC",
+      "loss": "~52BNB",
+      "root_cause": "deliver",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x24a68d2a4bbb02f398d3601acfd87b09f543d935fc24862c314aaf64c295acdb"
+      ],
+      "report_link": "https://web3sec.notion.site/deliver-function-8dce738dd2f243ae8abe83e95eeee9d4?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_burner",
+      "name": "Burner",
+      "dataset_file": "dataset/raw/Burner.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "sandwich ack",
+      "platform": "Ethereum",
+      "time": "2024-05-21 09:08:47 UTC",
+      "loss": "1.7 eth",
+      "root_cause": "convertAndBurn",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x3bba4fb6de00dd38df3ad68e51c19fe575a95a296e0632028f101c5199b6f714"
+      ],
+      "report_link": "https://learnblockchain.cn/article/12010",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate",
+          "sandwich"
+        ],
+        "accounting_drift": [
+          "reserve",
+          "burn"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_burntbubba",
+      "name": "Burntbubba",
+      "dataset_file": "dataset/raw/Burntbubba.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift",
+        "business_logic"
+      ],
+      "raw_cause": "Price Manipulation",
+      "platform": "Ethereum",
+      "time": "2023-11-29 22:29:59 UTC",
+      "loss": "~$3K",
+      "root_cause": "emergencyWithdraw",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x2b6d0af0dc513a15e325703405739057f9de6ef3f99934b957653b8a3fade4c6"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "oracle_manipulation": [
+          "price manipulation"
+        ],
+        "accounting_drift": [
+          "burn"
+        ],
+        "business_logic": [
+          "emergencywithdraw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bybit",
+      "name": "Bybit",
+      "dataset_file": "dataset/raw/Bybit.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "Phishing attack",
+      "platform": "Ethereum",
+      "time": "2025-02-21 14:16:11 UTC",
+      "loss": "1.5B",
+      "root_cause": "Supply Chain Attack on Safe{Wallet} UI (JavaScript)",
+      "transaction_count": 7,
+      "transaction_hashes": [
+        "0xb61413c495fdad6114a7aa863a00b2e3c28945979a10885b12b30316ea9f072c",
+        "0xbcf316f5835362b7f1586215173cc8b294f5499c60c029a3de6318bf25ca7b20",
+        "0xa284a1bc4c7e0379c924c73fcea1067068635507254b03ebbbd3f4e222c1fae0",
+        "0x847b8403e8a4816a4de1e63db321705cdb6f998fb01ab58f653b863fda988647",
+        "0x25800d105db4f21908d646a7a3db849343737c5fba0bc5701f782bf0e75217c9",
+        "0x46deef0f52e3a983b67abf4714448a41dd7ffd6d32d32da69d62081c68ad7882",
+        "0x50a51f781567a003662b933fc1224a35d824ba695edce7687473800299c7d1ef"
+      ],
+      "report_link": "https://blocksec.com/blog/bybit-1-5-b-hack-in-depth-analysis-of-the-malicious-safe-wallet-upgrade-attack",
+      "matched_rules": {
+        "access_control": [
+          "signature",
+          "permission"
+        ],
+        "business_logic": [
+          "phishing"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bzx0215",
+      "name": "bZx(0215)",
+      "dataset_file": "dataset/raw/bZx(0215).json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "Arbitrage",
+      "platform": "Ethereum",
+      "time": "2020/2/15 1:38",
+      "loss": null,
+      "root_cause": "_borrowTokenAndUse + marginTradeFromDeposit",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xb5c8bd9430b6cc87a0e2fe110ece6bf527fa4f170a4bc8cd032f768fc5219838"
+      ],
+      "report_link": "https://learnblockchain.cn/article/622",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ],
+        "business_logic": [
+          "arbitrage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bzx0913",
+      "name": "bZx(0913)",
+      "dataset_file": "dataset/raw/bZx(0913).json",
+      "vulnerability_type_ids": [
+        "accounting_drift"
+      ],
+      "raw_cause": "Token Duplication Incident",
+      "platform": "Ethereum",
+      "time": "2020/09/13 9:10",
+      "loss": null,
+      "root_cause": "_internalTransferFrom",
+      "transaction_count": 9,
+      "transaction_hashes": [
+        "0x85dc2a433fd9eaadaf56fd8156c956da23fc17e5ef83955c7e2c4c37efa20bb5",
+        "0x51296b581dcabc5d260c6b5b6eec2a2b03e317e8e54661dd2ab697b84f9112e9",
+        "0xd8906a8ab71b5c772a07f301ccb7fa539cdce03a84d88e806c8de7bc5581a6cd",
+        "0x783330d73a462e0a32b9b46ff139c3d6d5ff7e191746dc0f6a0b8bcffb0bcbb8",
+        "0xbbfc69cb015b52f1e1ca8524a2452e80db4073983b73af796e0b01d147bf72d7",
+        "0x1b4fc6de962c97944bfc33462b334f4c418fba4d54f3edea0ae3dc9fa3b1faf6",
+        "0x1dcc24254a05a44f8bcedfb0673238c3ab4ab4e09555fee2370b327fb2410230",
+        "0x54e45ce9b037a6e353284533958147a607ff0569670d62add99d5f5f3b9e09e9",
+        "0x7b1d124f2978e974bdd6453b8e6c0235184b203c4264bfa316ddddf523bbb7eb"
+      ],
+      "report_link": "https://www.freebuf.com/articles/paper/249711.html",
+      "matched_rules": {
+        "accounting_drift": [
+          "token duplication"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_bzxprotocol",
+      "name": "bZxProtocol",
+      "dataset_file": "dataset/raw/bZxProtocol.json",
+      "vulnerability_type_ids": [
+        "accounting_drift"
+      ],
+      "raw_cause": "Inflation Attack",
+      "platform": "Ethereum",
+      "time": "2023-12-02 02:30:23 UTC",
+      "loss": "~$208k",
+      "root_cause": "borrow",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0x0fc5c0d41e5506fdb9434fab4815a4ff671afc834e47a533b3bed7182ece73b0",
+        "0xb072f2e88058c147d8ff643694b43a42e36525b7173ce1daf76e6c06170b0e77"
+      ],
+      "report_link": "https://web3sec.notion.site/Inflation-Attack-90b5a0937ec64641bac809884ee45a2c",
+      "matched_rules": {
+        "accounting_drift": [
+          "inflation",
+          "donation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_chaingefinance",
+      "name": "ChaingeFinance",
+      "dataset_file": "dataset/raw/ChaingeFinance.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary External Call ",
+      "platform": "BNBChain",
+      "time": "2024-04-15 12:33:59 UTC",
+      "loss": "~560K",
+      "root_cause": "swap",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x051276afa96f2a2bd2ac224339793d82f6076f76ffa8d1b9e6febd49a4ec11b2"
+      ],
+      "report_link": "https://autosaida.github.io/DeFiHackAnalysis/2024/240415_ChaingeFinance/",
+      "matched_rules": {
+        "access_control": [
+          "arbitrary external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_channelsfinance",
+      "name": "ChannelsFinance",
+      "dataset_file": "dataset/raw/ChannelsFinance.json",
+      "vulnerability_type_ids": [
+        "accounting_drift"
+      ],
+      "raw_cause": "CompoundV2 Inflation Attack",
+      "platform": "BNBChain",
+      "time": "2023-12-30 12:17:51 UTC",
+      "loss": "~320K",
+      "root_cause": "redeemUnderlying / redeemFresh",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x0237855c63eb85c5f437fba5267cc869a08c58a49501e3e5ebec9990bdd97565"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "accounting_drift": [
+          "inflation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_circle",
+      "name": "Circle",
+      "dataset_file": "dataset/raw/Circle.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift"
+      ],
+      "raw_cause": "Price Manipulation",
+      "platform": "Ethereum",
+      "time": "2022-08-16 20:20:02 UTC",
+      "loss": "~$151.6K",
+      "root_cause": "burn",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xf1818f62c635e5c80ef16b7857da812c74ce330ebed46682b4d173bffe84c666"
+      ],
+      "report_link": "https://web3sec.notion.site/Price-Manipulation-1ce72927411380f5a15ecd2ca5d1ca37?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "price manipulation",
+          "manipulate"
+        ],
+        "accounting_drift": [
+          "burn"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_civfund",
+      "name": "Civfund",
+      "dataset_file": "dataset/raw/Civfund.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "access_control"
+      ],
+      "raw_cause": "Lack of access control",
+      "platform": "Ethereum",
+      "time": "2023-07-08 02:40:59 UTC",
+      "loss": "~$165k",
+      "root_cause": "uniswapV3MintCallback",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xc42fc0e22a0f60cc299be80eb0c0ddce83c21c14a3dddd8430628011c3e20d6b"
+      ],
+      "report_link": "https://medium.com/civfund/civtrade-hack-analysis-9a2398a6bc2e",
+      "matched_rules": {
+        "reentrancy": [
+          "callback"
+        ],
+        "access_control": [
+          "access control",
+          "lack of access"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_compounduni",
+      "name": "CompoundUni",
+      "dataset_file": "dataset/raw/CompoundUni.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation"
+      ],
+      "raw_cause": "Oracle bad price",
+      "platform": "Ethereum",
+      "time": "2024-02-23 14:35:35 UTC",
+      "loss": "~439,537 USD",
+      "root_cause": "getUnderlyingPrice",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xaee0f8d1235584a3212f233b655f87b89f22f1d4890782447c4ef742b37af58d"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "oracle_manipulation": [
+          "oracle",
+          "bad price"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_conic_finance_02",
+      "name": "Conic Finance 02",
+      "dataset_file": "dataset/raw/Conic Finance 02.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "oracle_manipulation"
+      ],
+      "raw_cause": "Price Manipulation",
+      "platform": "Ethereum",
+      "time": "2023-07-21 19:01:35 UTC",
+      "loss": "~$934K",
+      "root_cause": "deposit / withdraw",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x37acd17a80a5f95728459bfea85cb2e1f64b4c75cf4a4c8dcb61964e26860882"
+      ],
+      "report_link": "https://www.freebuf.com/vuls/373401.html",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy"
+        ],
+        "oracle_manipulation": [
+          "oracle",
+          "price manipulation",
+          "manipulate"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_cover",
+      "name": "Cover Protocol",
+      "dataset_file": "dataset/raw/Cover.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "business_logic"
+      ],
+      "raw_cause": "Contract Vulnerability",
+      "platform": "Ethereum",
+      "time": "2020/12/28 8:08",
+      "loss": null,
+      "root_cause": "deposit + updatePool",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0xd721b0ef2886f14b75548b70d2d1fd82bea085ca24f5de29b833a64cfd8f7a50",
+        "0xadf27f5dd052482d46fdf69a5208a27cc7352522c7c19bbde5aee18f6ea4373b"
+      ],
+      "report_link": "https://www.aicoin.com/zh-Hans/article/239546",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ],
+        "business_logic": [
+          "contract vulnerability",
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_cowswap",
+      "name": "CowSwap",
+      "dataset_file": "dataset/raw/CowSwap.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary External Call Vulnerability",
+      "platform": "Ethereum",
+      "time": "2023-02-07 02:53:11 UTC",
+      "loss": "~$120k",
+      "root_cause": "envelope",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0x92f906bce94bab417cccc87ae046448d7fb8c2c0350b7ed911545577acb3bfc1",
+        "0x90b468608fbcc7faef46502b198471311baca3baab49242a4a85b73d4924379b"
+      ],
+      "report_link": "https://blog.solidityscan.com/cow-swap-hack-analysis-arbitrary-callable-swapguard-6a6ee3de346f",
+      "matched_rules": {
+        "access_control": [
+          "arbitrary external call",
+          "permission"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_creamfinance",
+      "name": "CreamFinance",
+      "dataset_file": "dataset/raw/CreamFinance.json",
+      "vulnerability_type_ids": [
+        "reentrancy"
+      ],
+      "raw_cause": "Reentrancy attack",
+      "platform": "Ethereum",
+      "time": "2021/8/30 04:03",
+      "loss": null,
+      "root_cause": "doTransferOut",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xa9a1b8ea288eb9ad315088f17f7c7386b9989c95b4d13c81b69d5ddad7ffe61e"
+      ],
+      "report_link": "https://rekt.news/cream-rekt",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_curveburner",
+      "name": "CurveBurner",
+      "dataset_file": "dataset/raw/CurveBurner.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "oracle_manipulation",
+        "accounting_drift"
+      ],
+      "raw_cause": "Lack Slippage Protection",
+      "platform": "Ethereum",
+      "time": "2023-08-01 23:49:47 UTC",
+      "loss": "~$36K",
+      "root_cause": "remove_liquidity",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xd493c73397952049644c531309df3dd4134bf3db1e64eb6f0b68b016ee0bffde"
+      ],
+      "report_link": "https://learnblockchain.cn/article/13866",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy",
+          "reentrant"
+        ],
+        "oracle_manipulation": [
+          "slippage"
+        ],
+        "accounting_drift": [
+          "burn"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_dao_soulmate",
+      "name": "DAO_SoulMate",
+      "dataset_file": "dataset/raw/DAO_SoulMate.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "access_control"
+      ],
+      "raw_cause": "Incorrect Access Control",
+      "platform": "Ethereum",
+      "time": "2024-01-22 17:14:35 UTC",
+      "loss": "~319K",
+      "root_cause": "redeem",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x1ea0a2e88efceccb2dd93e6e5cb89e5421666caeefb1e6fc41b68168373da342"
+      ],
+      "report_link": "https://web3sec.notion.site/Lack-of-proper-access-control-3fb0448d789147219e6b1c6b31a5924c?pvs=23",
+      "matched_rules": {
+        "accounting_drift": [
+          "burn"
+        ],
+        "access_control": [
+          "access control",
+          "incorrect access"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_dappsocial",
+      "name": "DAppSocial",
+      "dataset_file": "dataset/raw/DAppSocial.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2023-09-02 12:58:59 UTC",
+      "loss": "~$16K",
+      "root_cause": "lockTokens",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xbd72bccec6dd824f8cac5d9a3a2364794c9272d7f7348d074b580e3c6e44312e"
+      ],
+      "report_link": "https://blog.solidityscan.com/dappsocial-hack-analysis-3b8bf243a850",
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw",
+          "flow"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_depusdt",
+      "name": "DEPUSDT",
+      "dataset_file": "dataset/raw/DEPUSDT.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary external call",
+      "platform": "Ethereum",
+      "time": "2023/6/15",
+      "loss": null,
+      "root_cause": "approveToken",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xf0a13b445674094c455de9e947a25bade75cac9f5176695fca418898ea25742f"
+      ],
+      "report_link": "https://blog.solidityscan.com/depusdt-and-levusdc-hack-analysis-d27032d8f2cd",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "arbitrary external call",
+          "permission"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_depusdt_levusdc",
+      "name": "DEPUSDT_LEVUSDC",
+      "dataset_file": "dataset/raw/DEPUSDT_LEVUSDC.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Incorrect access control",
+      "platform": "Ethereum",
+      "time": "2023-06-15 08:42:23 UTC",
+      "loss": "~$105k",
+      "root_cause": "approveToken",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x800a5b3178f680feebb81af69bd3dff791b886d4ce31615e601f2bb1f543bb2e"
+      ],
+      "report_link": "https://blog.solidityscan.com/depusdt-and-levusdc-hack-analysis-d27032d8f2cd",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "incorrect access",
+          "permission"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_dexible",
+      "name": "Dexible",
+      "dataset_file": "dataset/raw/Dexible.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary external call",
+      "platform": "Ethereum",
+      "time": "2023/2/17",
+      "loss": null,
+      "root_cause": "selfSwap + fill",
+      "transaction_count": 6,
+      "transaction_hashes": [
+        "0x138daa4cbeaa3db42eefcec26e234fc2c89a4aa17d6b1870fc460b2856fd11a6",
+        "0x3bfba5c0694d7c9737074d45ca6d03ff582d534d445691f78b767c60a3c25419",
+        "0x0b4e1f88b48b00007e9572d4b2168c9ecafb16e3f1e2b8a991acf1cec2cb2b68",
+        "0x7ad2395dccee9e0fd86e53890c1db347de91796bd68b1999dc1f64600917c154",
+        "0x1ac525f927d88a1cf81db6c3bfc8a545e138577463b4dcdc0b09665e128a4495",
+        "0x2fbaa71086e027c1cfc9f4a1c5ea88f281138c52269eac1607f9f25ad2b90864"
+      ],
+      "report_link": "https://blockapex.io/dexible-hack-analysis/",
+      "matched_rules": {
+        "access_control": [
+          "arbitrary external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_dfxfinance",
+      "name": "DFXFinance",
+      "dataset_file": "dataset/raw/DFXFinance.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2022-11-10 19:27:59 UTC",
+      "loss": "$4M",
+      "root_cause": "flash",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x6bfd9e286e37061ed279e4f139fbc03c8bd707a2cdd15f7260549052cbba79b7"
+      ],
+      "report_link": "https://learnblockchain.cn/article/7562?column_id=93",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy",
+          "reentrant",
+          "callback"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_dodo",
+      "name": "DODO",
+      "dataset_file": "dataset/raw/DODO.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift",
+        "access_control",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Init function unlimited",
+      "platform": "Ethereum",
+      "time": "2021/3/8 20:57",
+      "loss": null,
+      "root_cause": "init",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x0b062361e16a2ea0942cc1b4462b6584208c8c864609ff73aaa640aaa2d92428"
+      ],
+      "report_link": "https://rekt.news/zh/au-dodo-rekt",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "accounting_drift": [
+          "reserve"
+        ],
+        "access_control": [
+          "initialize"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_earningfram",
+      "name": "EarningFram",
+      "dataset_file": "dataset/raw/EarningFram.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "accounting_drift"
+      ],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2023/8/9",
+      "loss": null,
+      "root_cause": "withdraw",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x6e6e556a5685980317cb2afdb628ed4a845b3cbd1c98bdaffd0561cb2c4790fa"
+      ],
+      "report_link": "https://blog.solidityscan.com/earningfarm-hack-analysis-f5eba2a1e080",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy",
+          "callback",
+          "fallback"
+        ],
+        "accounting_drift": [
+          "share",
+          "burn"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_eflevervault",
+      "name": "EFLeverVault",
+      "dataset_file": "dataset/raw/EFLeverVault.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "precision_rounding",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "Verify flashLoan Callback",
+      "platform": "Ethereum",
+      "time": "2022-10-14 12:27:11 UTC",
+      "loss": "750 ETH",
+      "root_cause": "receiveFlashLoan",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x1f1aba5bef04b7026ae3cb1cb77987071a8aff9592e785dd99860566ccad83d1"
+      ],
+      "report_link": "https://web3sec.notion.site/Insufficient-validation-3c2ccfcd2a624f8fba67b88e69255ec3?pvs=23",
+      "matched_rules": {
+        "reentrancy": [
+          "callback"
+        ],
+        "precision_rounding": [
+          "calculation"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan",
+          "flash loan"
+        ],
+        "business_logic": [
+          "insufficient validation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_efvault",
+      "name": "EFVault",
+      "dataset_file": "dataset/raw/EFVault.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift",
+        "access_control"
+      ],
+      "raw_cause": "Storage Collision",
+      "platform": "Ethereum",
+      "time": "2023-02-24 05:50:11 UTC",
+      "loss": "~$5.1M",
+      "root_cause": "redeem (assetsPerShare)",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x1fe5a53405d00ce2f3e15b214c7486c69cbc5bf165cf9596e86f797f62e81914"
+      ],
+      "report_link": "https://medium.com/cryptodevopsacademy/efvault-hacking-a-post-mortem-of-a-solidity-attack-9ce20e9896c3",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation",
+          "decimal"
+        ],
+        "accounting_drift": [
+          "share"
+        ],
+        "access_control": [
+          "storage collision"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_ehive",
+      "name": "EHIVE",
+      "dataset_file": "dataset/raw/EHIVE.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2023-07-14 08:24:59 UTC",
+      "loss": "~$15K",
+      "root_cause": "stake",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xd9156f507c701a09d3312e1987383c7c882df50b3127e1adfd74d74052642114"
+      ],
+      "report_link": "https://web3sec.notion.site/Insufficient-Validation-Between-Stake-and-Unstake-functions-d7639d8579d9444eae7800f68dcf2280?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_elasticswap",
+      "name": "ElasticSwap",
+      "dataset_file": "dataset/raw/ElasticSwap.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "precision_rounding",
+        "accounting_drift",
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2022-12-13 02:32:47 UTC",
+      "loss": "$845k",
+      "root_cause": "addLiquidity",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xb36486f032a450782d5d2fac118ea90a6d3b08cac3409d949c59b43bcd6dbb8f"
+      ],
+      "report_link": "https://hit0on.github.io/2023/01/04/ElasticSwap%E6%94%BB%E5%87%BB%E4%BA%8B%E4%BB%B6%E5%88%86%E6%9E%90%E4%B8%8E%E5%A4%8D%E7%8E%B0/",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "precision_rounding": [
+          "calculation"
+        ],
+        "accounting_drift": [
+          "reserve"
+        ],
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_elevenfinance",
+      "name": "Eleven Finance",
+      "dataset_file": "dataset/raw/ElevenFinance.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "business_logic"
+      ],
+      "raw_cause": "Logic bug",
+      "platform": "BNBChain",
+      "time": "2021/6/22 22:58",
+      "loss": null,
+      "root_cause": "emergencyBurn",
+      "transaction_count": 3,
+      "transaction_hashes": [
+        "0x6450d8f4db09972853e948bee44f2cb54b9df786dace774106cd28820e906789",
+        "0xeaaa8f4d33b1035a790f0d7c4eb6e38db7d6d3b580e0bbc9ba39a9d6b80dd250",
+        "0x153eeae811a9acedad4dc76492316d5503a02ad8a324563a50b7118b4f574469"
+      ],
+      "report_link": "https://elevenfinance.medium.com/eleven-finance-nrv-vault-exploit-and-loss-of-funds-a-post-mortem-437a79ded743",
+      "matched_rules": {
+        "accounting_drift": [
+          "share",
+          "burn"
+        ],
+        "business_logic": [
+          "logic bug"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_euler_finance",
+      "name": "Euler Finance",
+      "dataset_file": "dataset/raw/Euler Finance.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Flashloan",
+      "platform": "Ethereum",
+      "time": "2023/3/13",
+      "loss": null,
+      "root_cause": "donateToReserves",
+      "transaction_count": 6,
+      "transaction_hashes": [
+        "0xc310a0affe2169d1f6feec1c63dbc7f7c62a887fa48795d327d4d2da2d6b111d",
+        "0x71a908be0bef6174bccc3d493becdfd28395d78898e355d451cb52f7bac38617",
+        "0x62bd3d31a7b75c098ccf28bc4d4af8c4a191b4b9e451fab4232258079e8b18c4",
+        "0x465a6780145f1efe3ab52f94c006065575712d2003d83d85481f3d110ed131d9",
+        "0x3097830e9921e4063d334acb82f6a79374f76f0b1a8f857e89b89bc58df1f311",
+        "0x47ac3527d02e6b9631c77fad1cdee7bfa77a8a7bfd4880dccbda5146ace4088f"
+      ],
+      "report_link": "https://medium.com/@numencyberlabs/a-detailed-analysis-of-euler-finances-196-million-flash-loan-attack-81cdef370024",
+      "matched_rules": {
+        "accounting_drift": [
+          "reserve"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_fdp",
+      "name": "FDP",
+      "dataset_file": "dataset/raw/FDP.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Reflection token",
+      "platform": "BNBChain",
+      "time": "2023-02-06 11:11:21 UTC",
+      "loss": "~16 WBNB",
+      "root_cause": "deliver",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x09925028ce5d6a54801d04ff8f39e79af6c24289e84b301ddcdb6adfa51e901b"
+      ],
+      "report_link": "https://web3sec.notion.site/Price-Manipulation-of-deflationary-tokens-via-flashloan-78ba44b7311343b2a0528eb5e1598fa0?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_fegtoken",
+      "name": "FEGtoken",
+      "dataset_file": "dataset/raw/FEGtoken.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "No Parameter Validate",
+      "platform": "BNBChain",
+      "time": "2022/5/15 20:22",
+      "loss": null,
+      "root_cause": "swapToSwap",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x77cf448ceaf8f66e06d1537ef83218725670d3a509583ea0d161533fda56c063"
+      ],
+      "report_link": "https://blocksec.com/zh/blog/the-analysis-of-fegtoken-security-incident-devils-in-the-details",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_ffist",
+      "name": "FFIST",
+      "dataset_file": "dataset/raw/FFIST.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "BNBChain",
+      "time": "2023/7/20",
+      "loss": null,
+      "root_cause": "_airdrop",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x199c4b88cab6b4b495b9d91af98e746811dd8f82f43117c48205e6332db9f0e0"
+      ],
+      "report_link": "https://blog.solidityscan.com/ffist-hack-analysis-9cb695c0fad9",
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_forcedao",
+      "name": "Force DAO",
+      "dataset_file": "dataset/raw/ForceDAO.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Missing return value",
+      "platform": "Ethereum",
+      "time": "2021/4/4 06:55",
+      "loss": null,
+      "root_cause": "deposit",
+      "transaction_count": 10,
+      "transaction_hashes": [
+        "0x8da606ecfe18034c6de8317d524643dcde15121bc6309c6faccbd44f2d35f8f3",
+        "0x9f34b18984f2e0ee5bcd9f279ddee2a1952fc9f30117e5f8fd05855b3e99d2d1",
+        "0x047d2f5ca117de92a65de25d04e00db9bc0f1a899ba61140550afc6618d282ac",
+        "0x1eeaac386e872b0965c355c16637ed252ad08ebb940f2e617df141f6b1ec6721",
+        "0xb205c9c811f1c114cf6ca1fa3854ca0a6df90cc16b9f5aac78d46e1a645c0dc9",
+        "0xc0656559ee4618982ec7a752c448239f8ec94a0d37dd42297cedc9ad8efe6afd",
+        "0xef3e8afd09e00d6a8457894653e261d3d00613b7fc9790405e9de38d6b39a8f5",
+        "0xbdf1e75b9e21932d298f9a8d784c332ad630687fa1434dbcada1ca9d20978245",
+        "0x7df2fe63dfb43676a13146060d36ded98779092e0f7c9fd46caf18b791d4b9fd",
+        "0xe7be5bf25b0ea9fad2fd51021f4a51e5099cf4c91c2ffef94547072fe25ca8d1"
+      ],
+      "report_link": "https://zhuanlan.zhihu.com/p/362592672",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_formationfi",
+      "name": "Formation.Fi",
+      "dataset_file": "dataset/raw/FormationFi.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "Flashloan",
+      "platform": "Ethereum",
+      "time": "2021/11/20 17:10",
+      "loss": null,
+      "root_cause": "swapIn + withdraw",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xa992b28ecf2eed778d20d5200946ea341b950be0c3d78b1f2237a4d8d795de95"
+      ],
+      "report_link": "https://zhuanlan.zhihu.com/p/436652327",
+      "matched_rules": {
+        "precision_rounding": [
+          "precision",
+          "calculation",
+          "decimal"
+        ],
+        "accounting_drift": [
+          "burn"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan",
+          "flash loan"
+        ],
+        "business_logic": [
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_fortressprotocol",
+      "name": "FortressProtocol",
+      "dataset_file": "dataset/raw/FortressProtocol.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "business_logic"
+      ],
+      "raw_cause": "Lack of validation",
+      "platform": "BNBChain",
+      "time": "2022/5/8 20:34",
+      "loss": null,
+      "root_cause": "submit",
+      "transaction_count": 5,
+      "transaction_hashes": [
+        "0x18dc1cafb1ca20989168f6b8a087f3cfe3356d9a1edd8f9d34b3809985203501",
+        "0x83a4f8f52b8f9e6ff1dd76546a772475824d9aa5b953808dbc34d1f39250f29d",
+        "0xc368afb2afc499e7ebb575ba3e717497385ef962b1f1922561bcb13f85336252",
+        "0x647c6e89cd1239381dd49a43ca2f29a9fdeb6401d4e268aff1c18b86a7e932a0",
+        "0x13d19809b19ac512da6d110764caee75e2157ea62cb70937c8d9471afcb061bf"
+      ],
+      "report_link": "https://learnblockchain.cn/article/4062",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "oracle",
+          "manipulate"
+        ],
+        "business_logic": [
+          "arbitrage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_game",
+      "name": "Game",
+      "dataset_file": "dataset/raw/Game.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "business_logic"
+      ],
+      "raw_cause": "Reentrancy && Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2024-02-12 19:11:47 UTC",
+      "loss": "~20 ETH",
+      "root_cause": "makeBid",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x0eb8f8d148508e752d9643ccf49ac4cb0c21cbad346b5bbcf2d06974d31bd5c4"
+      ],
+      "report_link": "https://web3sec.notion.site/Logic-Error-8f37e12a2116447997765f060b25fde3?pvs=23",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy"
+        ],
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_gfox",
+      "name": "GFOX",
+      "dataset_file": "dataset/raw/GFOX.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "lack of access control",
+      "platform": "Ethereum",
+      "time": "2024-05-10 00:00:35 UTC",
+      "loss": "330K USD",
+      "root_cause": "setMerkleRoot",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x12fe79f1de8aed0ba947cec4dce5d33368d649903cb45a5d3e915cc459e751fc"
+      ],
+      "report_link": "https://medium.com/neptune-mutual/how-was-galaxy-fox-token-exploited-c0860520cdc2",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "lack of access"
+        ],
+        "business_logic": [
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_goodcompound",
+      "name": "GoodCompound",
+      "dataset_file": "dataset/raw/GoodCompound.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "business_logic"
+      ],
+      "raw_cause": "Price Manipulation",
+      "platform": "Ethereum",
+      "time": "2023-12-11 00:59:11 UTC",
+      "loss": "~$13K (~250 COMP Token)",
+      "root_cause": "claimComp",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x1106418384414ed56cd7cbb9fedc66a02d39b663d580abc618f2d387348354ab"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "oracle_manipulation": [
+          "price manipulation"
+        ],
+        "business_logic": [
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_heavensgate",
+      "name": "HeavensGate",
+      "dataset_file": "dataset/raw/HeavensGate.json",
+      "vulnerability_type_ids": [
+        "precision_rounding"
+      ],
+      "raw_cause": "Rebasing logic issue",
+      "platform": "Ethereum",
+      "time": "2023-09-05 15:33:47 UTC",
+      "loss": "~$8ETH",
+      "root_cause": "stake+unstake",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x8e1b0ab098c4cc5f632e00b0842b5f825bbd15ded796d4a59880bb724f6c5372"
+      ],
+      "report_link": "https://web3sec.notion.site/Bad-Staking-Unstaking-Logic-1c533aa639864bb3a8561246facef432?pvs=23",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_hedgeyfinance",
+      "name": "HedgeyFinance",
+      "dataset_file": "dataset/raw/HedgeyFinance.json",
+      "vulnerability_type_ids": [
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2024-04-19 07:06:47 UTC",
+      "loss": "48M USD",
+      "root_cause": "createLockedCampaign + cancelCampaign",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x2606d459a50ca4920722a111745c2eeced1d8a01ff25ee762e22d5d4b1595739"
+      ],
+      "report_link": "https://learnblockchain.cn/article/10865",
+      "matched_rules": {
+        "flash_loan_amplifier": [
+          "flash loan"
+        ],
+        "business_logic": [
+          "logic flaw",
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_hegic",
+      "name": "Hegic",
+      "dataset_file": "dataset/raw/Hegic.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation"
+      ],
+      "raw_cause": "Clerical error",
+      "platform": "Ethereum",
+      "time": "2020/4/25 05:09",
+      "loss": null,
+      "root_cause": "getSlippageFee",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0x3ee220a210148e53f2bb8d33edda2be128c278218920764064fac218ff88d859",
+        "0x2355e889be00edc00da421ba10b447aa2c3a539bf23ad34935b477889401ffd2"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "oracle_manipulation": [
+          "slippage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_hopelend",
+      "name": "HopeLend",
+      "dataset_file": "dataset/raw/HopeLend.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift"
+      ],
+      "raw_cause": "Precision loss",
+      "platform": "Ethereum",
+      "time": "2023/10/18",
+      "loss": null,
+      "root_cause": "_burnScaled + raydiv",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x1a7ee0a7efc70ed7429edef069a1dd001fbff378748d91f17ab1876dc6d10392"
+      ],
+      "report_link": "https://www.freebuf.com/articles/blockchain-articles/384594.html",
+      "matched_rules": {
+        "precision_rounding": [
+          "precision"
+        ],
+        "accounting_drift": [
+          "burn"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_hoppyfrogerc",
+      "name": "HoppyFrogERC",
+      "dataset_file": "dataset/raw/HoppyFrogERC.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "business logic flaw",
+      "platform": "Ethereum",
+      "time": "2024-04-02 21:21:11 UTC",
+      "loss": "~0.3 ETH",
+      "root_cause": "_transfer",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x6fb7f8e9eb09d6ae17dbe82b2b42f46f64fb9c3197438b68ecf03e832d5fc791"
+      ],
+      "report_link": "https://web3sec.notion.site/Trigger-Auto-Trade-To-Arbitrage-1cd7292741138088be5df08db0177e57?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "slippage"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan"
+        ],
+        "business_logic": [
+          "business logic",
+          "logic flaw",
+          "arbitrage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_indexedfinance",
+      "name": "Indexed Finance",
+      "dataset_file": "dataset/raw/IndexedFinance.json",
+      "vulnerability_type_ids": [
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "FlashLoan",
+      "platform": "Ethereum",
+      "time": "2021/10/14 18:37",
+      "loss": null,
+      "root_cause": "updateMinimumBalance",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0x44aad3b853866468161735496a5d9cc961ce5aa872924c5d78673076b1cd95aa",
+        "0xbde4521c5ac08d0033019993b0e7e1d29b1457e80e7743d318a3c27649ca4417"
+      ],
+      "report_link": "https://foresightnews.pro/article/detail/15580",
+      "matched_rules": {
+        "flash_loan_amplifier": [
+          "flashloan"
+        ],
+        "business_logic": [
+          "arbitrage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_inversefinance",
+      "name": "InverseFinance",
+      "dataset_file": "dataset/raw/InverseFinance.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation"
+      ],
+      "raw_cause": "function usage error",
+      "platform": "Ethereum",
+      "time": "2022/6/16 08:47",
+      "loss": null,
+      "root_cause": "latestAnswer",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x958236266991bc3fe3b77feaacea120f172c0708ad01c7a715b255f218f9313c"
+      ],
+      "report_link": "https://rekt.news/zh/inverse-rekt2",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "oracle"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_jay",
+      "name": "JAY",
+      "dataset_file": "dataset/raw/JAY.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "oracle_manipulation",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2022/12/29 05:02",
+      "loss": null,
+      "root_cause": "buyJay",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xd4fafa1261f6e4f9c8543228a67caf9d02811e4ad3058a2714323964a8db61f6"
+      ],
+      "report_link": "https://web3sec.notion.site/Reenter-by-pass-fake-token-5dc4fdc2f76e4cdd899ad61de195677b?pvs=23",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy"
+        ],
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_jokinthebox",
+      "name": "JokInTheBox",
+      "dataset_file": "dataset/raw/JokInTheBox.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "business logic flaw",
+      "platform": "Ethereum",
+      "time": "2024-06-11 00:12:47 UTC",
+      "loss": "~9.2 ETH",
+      "root_cause": "unstake",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xe8277ef6ba8611bd12dc5a6e7ca4b984423bc0b3828159f83b466fdcf4fe054f"
+      ],
+      "report_link": "https://www.freebuf.com/news/404550.html",
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_juice",
+      "name": "Juice",
+      "dataset_file": "dataset/raw/Juice.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2024-03-09 06:06:59 UTC",
+      "loss": "~54 ETH",
+      "root_cause": "harvest",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xc9b2cbc1437bbcd8c328b6d7cdbdae33d7d2a9ef07eca18b4922aac0430991e7"
+      ],
+      "report_link": "https://olympixai.medium.com/juicebot-app-hack-analysis-1303e99774fe",
+      "matched_rules": {
+        "access_control": [
+          "access control"
+        ],
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_kashi",
+      "name": "Kashi",
+      "dataset_file": "dataset/raw/Kashi.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift",
+        "business_logic"
+      ],
+      "raw_cause": "Price-caching Design Defect",
+      "platform": "Ethereum",
+      "time": "2022-11-08 22:27:11 UTC",
+      "loss": "$110k",
+      "root_cause": "_borrow",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x3d163bfbec5686d428a6d43e45e2626a220cc4fcfac7620c620b82c1f2537c78"
+      ],
+      "report_link": "https://eigenphi.substack.com/p/casting-a-magic-spell-on-abracadabra",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "oracle"
+        ],
+        "accounting_drift": [
+          "exchange rate"
+        ],
+        "business_logic": [
+          "arbitrage",
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_kyberswap",
+      "name": "KyberSwap",
+      "dataset_file": "dataset/raw/KyberSwap.json",
+      "vulnerability_type_ids": [
+        "precision_rounding"
+      ],
+      "raw_cause": "precision loss",
+      "platform": "Ethereum",
+      "time": "2023-11-22 22:55:11 UTC",
+      "loss": "~$48M",
+      "root_cause": "estimateIncrementalLiquidity",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x485e08dc2b6a4b3aeadcb89c3d18a37666dc7d9424961a2091d6b3696792f0f3"
+      ],
+      "report_link": "https://blocksec.com/blog/kyberswap-incident-masterful-exploitation-of-rounding-errors-with-exceedingly-subtle-calculations",
+      "matched_rules": {
+        "precision_rounding": [
+          "precision",
+          "rounding",
+          "calculation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_landnft",
+      "name": "landNFT",
+      "dataset_file": "dataset/raw/landNFT.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "external permission",
+      "platform": "BNBChain",
+      "time": "2023/5/14",
+      "loss": null,
+      "root_cause": "mint",
+      "transaction_count": 5,
+      "transaction_hashes": [
+        "0xe4db1550e3aa78a05e93bfd8fbe21b6eba5cce50dc06688949ab479ebed18048",
+        "0x8de1921ae538264917f99f8ebd567890061d39c92a8fe58f4abd108d2373a265",
+        "0x1df92a1f4e1ebfe2416b68ad3e8f29da779b8c7239a44281f99d933eb4ddc763",
+        "0x10943277a48ae315f7dc39ee4ba32ab9d7a681f36a409abc6315ba5d4902749b",
+        "0x48878f4751f05e4366eb6c6d52a7a637f39d70a4f28cdb82b042118d9e5c81fb"
+      ],
+      "report_link": "https://blog.solidityscan.com/land-hack-analysis-missing-access-control-66fb9555a3e3",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "permission"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_libertivault",
+      "name": "LibertiVault",
+      "dataset_file": "dataset/raw/LibertiVault.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "precision_rounding",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2023/7/11",
+      "loss": null,
+      "root_cause": "deposit",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xcb0ad9da33ecabf75df0a24aabf8a4517e4a7c5b1b2f11fee3b6a1ad9299a282"
+      ],
+      "report_link": "https://medium.com/coinmonks/libertivault-hack-analysis-df63fba22c9b",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy"
+        ],
+        "precision_rounding": [
+          "calculation"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_lifi",
+      "name": "Li.Fi",
+      "dataset_file": "dataset/raw/LiFi.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "swap() function can be called arbitrarily",
+      "platform": "Ethereum",
+      "time": "2022/3/20 02:51",
+      "loss": null,
+      "root_cause": "swapAndStartBridgeTokensViaCBridge",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x4b4143cbe7f5475029cf23d6dcbb56856366d91794426f2e33819b9b1aac4e96"
+      ],
+      "report_link": "https://blocksec.com/zh/blog/li-fi-attack-a-cross-chain-bridge-vulnerability-no-it-s-due-to-unchecked-external-call",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "slippage"
+        ],
+        "access_control": [
+          "unverified external call"
+        ],
+        "business_logic": [
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_local_trade_lct",
+      "name": "Local Trade LCT",
+      "dataset_file": "dataset/raw/Local Trade LCT.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Improper Access Control of Close-source contract",
+      "platform": "BNBChain",
+      "time": "2023-05-23 11:54:39 UTC",
+      "loss": "~384 BNB",
+      "root_cause": "0xb5863c10",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xbea605b238c85aabe5edc636219155d8c4879d6b05c48091cf1f7286bd4702ba"
+      ],
+      "report_link": "https://blog.solidityscan.com/local-traders-hack-analysis-missing-access-control-4a863ea22184",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "owner",
+          "permission"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_lpmine",
+      "name": "LPMine",
+      "dataset_file": "dataset/raw/LPMine.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "business_logic"
+      ],
+      "raw_cause": "Incorrect reward calculation ",
+      "platform": "BNBChain",
+      "time": "2025-01-08 12:43:50 UTC",
+      "loss": "~24k USDT",
+      "root_cause": "extractReward",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x00c5a772a58b117f142b2cbc8721b80d145ef7a910043ad08439863d0e78e300"
+      ],
+      "report_link": "https://web3sec.notion.site/Business-Logic-Flow-1c972927411380c1aaead9b23e746a51?pvs=23",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ],
+        "business_logic": [
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_maestrorouter2",
+      "name": "MaestroRouter2",
+      "dataset_file": "dataset/raw/MaestroRouter2.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary External Call",
+      "platform": "Ethereum",
+      "time": "2023-10-24 23:30:59 UTC",
+      "loss": "~$280ETH",
+      "root_cause": "0x9239127f",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x4f4d6909a442b4d86f79a9044dcada6a128ddd9f62c26f410134a72d2fc31389"
+      ],
+      "report_link": "https://blog.solidityscan.com/maestro-router-2-hack-analysis-63daf239a050",
+      "matched_rules": {
+        "access_control": [
+          "arbitrary external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_mahalend",
+      "name": "MahaLend",
+      "dataset_file": "dataset/raw/MahaLend.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "precision_rounding",
+        "accounting_drift"
+      ],
+      "raw_cause": "Donate Inflation ExchangeRate & Rounding Error",
+      "platform": "Ethereum",
+      "time": "2023-11-10 22:43:59 UTC",
+      "loss": "~$20 K",
+      "root_cause": "rayDiv",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x2881e839d4d562fad5356183e4f6a9d427ba6f475614ce8ef64dbfe557a4a2cc"
+      ],
+      "report_link": "https://web3sec.notion.site/Precision-Loss-in-RayDiv-21200ba2e5bd46f9a117ac31dac03a0e?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "precision_rounding": [
+          "precision",
+          "rounding",
+          "rounding error"
+        ],
+        "accounting_drift": [
+          "inflation",
+          "exchangerate"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_mcc",
+      "name": "MCC",
+      "dataset_file": "dataset/raw/MCC.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Reflection token",
+      "platform": "Ethereum",
+      "time": "2023-05-09 07:35:35 UTC",
+      "loss": "~$10 ETH",
+      "root_cause": "deliver",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xf72f1d10fc6923f87279ce6c0aef46e372c6652a696f280b0465a301a92f2e26"
+      ],
+      "report_link": "https://web3sec.notion.site/Flash-Loan-1ce72927411380df9fe2f9c330b2e97a?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_melo",
+      "name": "Melo",
+      "dataset_file": "dataset/raw/Melo.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary external call",
+      "platform": "BNBChain",
+      "time": "2023/5/6",
+      "loss": null,
+      "root_cause": "mint",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x3f1973fe56de5ecd59a815d3b14741cf48385903b0ccfe248f7f10c2765061f7"
+      ],
+      "report_link": "https://web3sec.notion.site/Public-mint-c26e99d8419a4fca930183100b0a32f6?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "arbitrary external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_merlinlab",
+      "name": "MerlinLab",
+      "dataset_file": "dataset/raw/MerlinLab.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "business_logic"
+      ],
+      "raw_cause": "Contract Vulnerability",
+      "platform": "BNBChain",
+      "time": "2021/6/29 07:08",
+      "loss": null,
+      "root_cause": "amountMerlinToMint",
+      "transaction_count": 25,
+      "transaction_hashes": [
+        "0x1ba1fd3ba2605314eee424abef0e42667a3bac739359b0a27d7c7f87b09f6798",
+        "0x4dcf37a6d5ed7786fc7f103258a245ba8dcd813b57a5bc516eda68f56c26fec8",
+        "0x0fed4bde0e389434925f6aa2072c5b862bc0878908c39e4c165c86872584a609",
+        "0x3be6c0ab07d7fa03bca44b0d0aa4093e67dca2747278cf2951740f2cd8db5a0f",
+        "0x163314b66bacee77c6e13a5063c37ad1201fa14f93a57fdb1099085b462b151a",
+        "0xba2e4151b0a032075455b7c35f6f16afe8dc054fcc513abf5fadaf2c82eb8485",
+        "0x09fdb6b036175c762809fc9e157f9ff27b203f24885b0516cb958ebfb6bf7295",
+        "0xf527bb753045700435a2d233e5fa007e5c41c09b534f22e70f90d0fb1e0d89ba",
+        "0xcf2fa2aad34b0368c903446821aae24626b0a5f15c74b23242083711f6034da2",
+        "0xc9bc30c2e8f6dcd769e05ae0f0413436b652e3976f144eb662adfb5ebc68fced",
+        "0xc653926bc4ee7a1e661aafe5aa677e444b82a3938908ba236952ab3eb78d9a06",
+        "0x0451b4d0c777a82c5510505c7b849c301cc462dee8d39ae7576d6acc5bdcaf36",
+        "0x27577113330c7a24bfbe3b1d12a7e39ed13ae652a639cebaaf187c140d3fc1bb",
+        "0x4ccf7e11f1e542f4a9b58ef528d557aec9691f4c1ee86940a82c6be90fbd3d8f",
+        "0x37ea9fb064ebcdcb191c3002ea067a3b9ad6d51d3dc9f423ceb3aec069542ff1",
+        "0x31fdf621f60684579de00f30b33fa051c19f1fd45d891c817e2a3888a9b75726",
+        "0xb0be09a44e4afd2e84c391dd3759e76462524cc323181f8d0b9563f16e0e5961",
+        "0x3dd26b84dd8f302232aa85ecfbf6a95a30c707557ec2902fa8206e6f4fba64b3",
+        "0xa93ed3833ea5c16655ea07a42a40c2866e26add45e27563a64e12c4dcab0b32f",
+        "0x903ae34f48d4e00da8d7ca5dfad26f8f37e80cde2156907580cf551a63317f76",
+        "0x8e70209ceef833e964c36d5c947b0adfbc60d8845f3ffc03588544408132ee15",
+        "0x3f30562e347f31be2eb3ce27455606025ecc748b91b95bc5abe8291c6061efdc",
+        "0x09cea6d81cadc548aa4727e295511b3b429bf1b439a6a1c603d9454461920242",
+        "0xf48f28a24571ffded2a0e06cbf30acfb4db085a4a2c8dc659d2dbf16344ae1de",
+        "0x9d0f75824f85f108063f6d138aabadc5146d2e5cada3e7928568d6b2519f5068"
+      ],
+      "report_link": "https://zhuanlan.zhihu.com/p/385606097",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation",
+          "1000"
+        ],
+        "business_logic": [
+          "contract vulnerability"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_metalend",
+      "name": "MetaLend",
+      "dataset_file": "dataset/raw/MetaLend.json",
+      "vulnerability_type_ids": [
+        "accounting_drift"
+      ],
+      "raw_cause": "CompoundV2 Inflation Attack",
+      "platform": "Ethereum",
+      "time": "2023-11-25 12:36:59 UTC",
+      "loss": "~$4K",
+      "root_cause": "redeem + redeemUnderlying",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x4c684fb2618c29743531dec9253ede1b757bda0b323dc2f305e3b50ab1773da7"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "accounting_drift": [
+          "inflation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_mevbota47b",
+      "name": "MEVBOTa47b",
+      "dataset_file": "dataset/raw/MEVBOTa47b.json",
+      "vulnerability_type_ids": [
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "MEVBOT a47b",
+      "platform": "Ethereum",
+      "time": "2022-10-13 19:39:35 UTC",
+      "loss": "~187.75 WETH",
+      "root_cause": "receiveFlashLoan",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x35ecf595864400696853c53edf3e3d60096639b6071cadea6076c9c6ceb921c1"
+      ],
+      "report_link": "https://web3sec.notion.site/Insufficient-validation-f147fa78e1b74317bfb128adae0b13ae?pvs=23",
+      "matched_rules": {
+        "flash_loan_amplifier": [
+          "flashloan"
+        ],
+        "business_logic": [
+          "insufficient validation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_mimspell",
+      "name": "MIMSpell",
+      "dataset_file": "dataset/raw/MIMSpell.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift"
+      ],
+      "raw_cause": "Precission Loss",
+      "platform": "Ethereum",
+      "time": "2024-01-30 10:14:35 UTC",
+      "loss": "~6,5M",
+      "root_cause": "repay",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x26a83db7e28838dd9fee6fb7314ae58dcc6aee9a20bf224c386ff5e80f7e4cf2"
+      ],
+      "report_link": "https://blog.solidityscan.com/mimspell-hack-analysis-05ffcde475f6",
+      "matched_rules": {
+        "precision_rounding": [
+          "precision",
+          "rounding"
+        ],
+        "accounting_drift": [
+          "inflation",
+          "share"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_morphoblue",
+      "name": "MorphoBlue",
+      "dataset_file": "dataset/raw/MorphoBlue.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "precision_rounding"
+      ],
+      "raw_cause": "Overpriced Asset in Oracle",
+      "platform": "Ethereum",
+      "time": "2024-10-13 10:27:35 UTC",
+      "loss": "$230,000",
+      "root_cause": "borrow / price",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x256979ae169abb7fbbbbc14188742f4b9debf48b48ad5b5207cadcc99ccb493b"
+      ],
+      "report_link": "https://blog.solidityscan.com/morphoblue-hack-analysis-638b685f8bf2",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "oracle"
+        ],
+        "precision_rounding": [
+          "decimal"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_mosca",
+      "name": "Mosca",
+      "dataset_file": "dataset/raw/Mosca.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "business_logic"
+      ],
+      "raw_cause": "Logic Flaw",
+      "platform": "BNBChain",
+      "time": "2025-01-06 05:22:49 UTC",
+      "loss": "19K",
+      "root_cause": "join + exitProgram",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x4e5bb7e3f552f5ee6ee97db9a9fcf07287aae9a1974e24999690855741121aff"
+      ],
+      "report_link": "https://blog.solidityscan.com/mosca-hack-analysis-85485d0e6bb2",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ],
+        "business_logic": [
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_nbanft",
+      "name": "NBA NFT",
+      "dataset_file": "dataset/raw/NBANFT.json",
+      "vulnerability_type_ids": [
+        "precision_rounding"
+      ],
+      "raw_cause": "Lack of require",
+      "platform": "Ethereum",
+      "time": "2022/4/20 17:12",
+      "loss": null,
+      "root_cause": "verify",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x2e2d9f262dcaa4a6ccdb047092f837b0f65ae533b34332428674d3f36308ff83"
+      ],
+      "report_link": "https://news.owlting.com/articles/85394",
+      "matched_rules": {
+        "precision_rounding": [
+          "decimal"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_nmbplatform",
+      "name": "Nmbplatform",
+      "dataset_file": "dataset/raw/Nmbplatform.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "precision_rounding",
+        "signature_replay",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "FlashLoan",
+      "platform": "BNBChain",
+      "time": "2022/12/14 03:40",
+      "loss": null,
+      "root_cause": "getReward",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x42f56d3e86fb47e1edffa59222b33b73e7407d4b5bb05e23b83cb1771790f6c1"
+      ],
+      "report_link": "https://web3sec.notion.site/Staking-reward-is-based-on-spot-price-626996b6df1a41599e9d1443fb1617ff",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "precision_rounding": [
+          "calculation"
+        ],
+        "signature_replay": [
+          "nonce"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_num",
+      "name": "NUM",
+      "dataset_file": "dataset/raw/NUM.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "access_control",
+        "signature_replay"
+      ],
+      "raw_cause": "Protocol Token incompatible",
+      "platform": "Ethereum",
+      "time": "2022-11-23 03:19:11 UTC",
+      "loss": "$13k",
+      "root_cause": "anySwapOutUnderlyingWithPermit",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x8a8145ab28b5d2a2e61d74c02c12350731f479b3175893de2014124f998bff32"
+      ],
+      "report_link": "https://web3sec.notion.site/NUM-token-incompatible-with-the-Multichain-Router-5e3bc9b894c748e5a0ae71ba5c71fdcb",
+      "matched_rules": {
+        "reentrancy": [
+          "fallback"
+        ],
+        "access_control": [
+          "signature"
+        ],
+        "signature_replay": [
+          "permit"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_olympusdao",
+      "name": "OlympusDAO",
+      "dataset_file": "dataset/raw/OlympusDAO.json",
+      "vulnerability_type_ids": [
+        "accounting_drift"
+      ],
+      "raw_cause": "No input validation",
+      "platform": "Ethereum",
+      "time": "2022-10-21 05:22:47 UTC",
+      "loss": "~$292K (30500 OHM)",
+      "root_cause": "redeem",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x3ed75df83d907412af874b7998d911fdf990704da87c2b1a8cf95ca5d21504cf"
+      ],
+      "report_link": "https://web3sec.notion.site/Insufficient-validation-1a43e574762943e9b51df7deea9a9caf",
+      "matched_rules": {
+        "accounting_drift": [
+          "burn"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_omniestate",
+      "name": "OmniEstate",
+      "dataset_file": "dataset/raw/OmniEstate.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "Parameter verification",
+      "platform": "BNBChain",
+      "time": "2023/1/17",
+      "loss": null,
+      "root_cause": "_Check_reward",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0x49bed801b9a9432728b1939951acaa8f2e874453d39c7d881a62c2c157aa7613",
+        "0xa916674fb8203fac6d78f5f9afc604be468a514aa61ea36c6d6ef26ecfbd0e97"
+      ],
+      "report_link": "https://web3sec.notion.site/insufficient-check-of-the-arguments-96129dae563248e69fbf349f8ad720cd",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ],
+        "access_control": [
+          "initialize"
+        ],
+        "business_logic": [
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_ompx_contract",
+      "name": "OMPx Contract",
+      "dataset_file": "dataset/raw/OMPx Contract.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "precision_rounding",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "FlashLoan",
+      "platform": "Ethereum",
+      "time": "2024-08-06 09:58:11 UTC",
+      "loss": "4.37 ETH (~11527 USD)",
+      "root_cause": "purchase + buyBack",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xd927843e30c6b2bf43103d83bca6abead648eac3cad0d05b1b0eb84cd87de9b6"
+      ],
+      "report_link": "https://web3sec.notion.site/Logic-Flaw-1a172927411380e19b53f1fd8d9e336f",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "precision_rounding": [
+          "calculation"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan",
+          "flash loan"
+        ],
+        "business_logic": [
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_onyxprotocol",
+      "name": "OnyxProtocol",
+      "dataset_file": "dataset/raw/OnyxProtocol.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift",
+        "access_control"
+      ],
+      "raw_cause": "Precision loss",
+      "platform": "Ethereum",
+      "time": "2023/11/1",
+      "loss": null,
+      "root_cause": "redeemUnderlying",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xf7c21600452939a81b599017ee24ee0dfd92aaaccd0a55d02819a7658a6ef635"
+      ],
+      "report_link": "https://web3sec.notion.site/CompoundV2-Fork-Precision-Loss-fa5ea1b0967c4d3cbf60b11bf9270f46",
+      "matched_rules": {
+        "precision_rounding": [
+          "precision",
+          "rounding",
+          "rounding error",
+          "calculation"
+        ],
+        "accounting_drift": [
+          "exchange rate",
+          "share"
+        ],
+        "access_control": [
+          "initialize"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_orion_protocol",
+      "name": "Orion Protocol",
+      "dataset_file": "dataset/raw/Orion Protocol.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2023/2/2",
+      "loss": null,
+      "root_cause": "doswapThroughOrionPool",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xa6f63fcb6bec8818864d96a5b1bb19e8bd85ee37b2cc916412e720988440b2aa"
+      ],
+      "report_link": "https://web3sec.notion.site/Reentrancy-in-the-doSwapThroughOrionPool-function-0102b3104d52439a93de79ea722d55c0",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy",
+          "callback"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_pancakehunny",
+      "name": "PancakeHunny",
+      "dataset_file": "dataset/raw/PancakeHunny.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift"
+      ],
+      "raw_cause": "uncorrected use balanceOf to calculate profit",
+      "platform": "BNBChain",
+      "time": "2021/6/3 2:24",
+      "loss": null,
+      "root_cause": "mintFor",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x765de8357994a206bb90af57dcf427f48a2021f2f28ca81f2c00bc3b9842be8e"
+      ],
+      "report_link": "https://web3sec.notion.site/Incorrect-profit-calculation-via-balanceOf-13bc12c60a24491086b5334242eb47dd",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ],
+        "accounting_drift": [
+          "share"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_pandora",
+      "name": "Pandora",
+      "dataset_file": "dataset/raw/Pandora.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "interger underflow",
+      "platform": "Ethereum",
+      "time": "2024-02-08 16:17:35 UTC",
+      "loss": "~17K USD",
+      "root_cause": "transferFrom / _transfer",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x7c5a909b45014e35ddb89697f6be38d08eff30e7c3d3d553033a6efc3b444fdd"
+      ],
+      "report_link": "https://web3sec.notion.site/Integer-Overflow-1fe4daa88adc48cd8c7e7ce4c0fbad2f",
+      "matched_rules": {
+        "business_logic": [
+          "flow"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_paraswap",
+      "name": "Paraswap",
+      "dataset_file": "dataset/raw/Paraswap.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "access_control"
+      ],
+      "raw_cause": "Incorrect Access Control",
+      "platform": "Ethereum",
+      "time": "2024-03-19 18:25:35 UTC",
+      "loss": "~24K",
+      "root_cause": "uniswapV3SwapCallback",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x35a73969f582872c25c96c48d8bb31c23eab8a49c19282c67509b96186734e60"
+      ],
+      "report_link": "https://medium.com/neptune-mutual/analysis-of-the-paraswap-exploit-1f97c604b4fe",
+      "matched_rules": {
+        "reentrancy": [
+          "callback"
+        ],
+        "access_control": [
+          "access control",
+          "incorrect access"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_particletrade",
+      "name": "ParticleTrade",
+      "dataset_file": "dataset/raw/ParticleTrade.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "lack of validation data",
+      "platform": "Ethereum",
+      "time": "2024-02-15 06:08:47 UTC",
+      "loss": "~50k",
+      "root_cause": "onERC721Received",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xd9b3e229acc755881890394cc76fde0d7b83b1abd4d046b0f69c1fd9fd495ff6"
+      ],
+      "report_link": "https://web3sec.notion.site/Unchecked-User-input-cf59477eac30426ba514b1ef3cc0e723",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_pawnfi",
+      "name": "PawnFi",
+      "dataset_file": "dataset/raw/PawnFi.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2023/6/17",
+      "loss": null,
+      "root_cause": "depositAndBorrowApeAndStake",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xe855cc3bad87933bf742fd474bd0ae0ec58d45e9c1a0643b9700dafe8faf0864"
+      ],
+      "report_link": "https://blog.solidityscan.com/pawnfi-hack-analysis-38ac9160cbb4",
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_peapodsfinance",
+      "name": "PeapodsFinance",
+      "dataset_file": "dataset/raw/PeapodsFinance.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2024-01-29 04:14:35 UTC",
+      "loss": "~1K $DAI",
+      "root_cause": "flash",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x95c1604789c93f41940a7fd9eca11276975a9a65d250b89a247736287dbd2b7e"
+      ],
+      "report_link": "https://web3sec.notion.site/Insufficient-validation-1d8729274113808ba18ae11fae1d8ba2",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_phil",
+      "name": "PHIL",
+      "dataset_file": "dataset/raw/PHIL.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "BNBChain",
+      "time": "2023-12-14 11:04:10 UTC",
+      "loss": "~$2 $BNB",
+      "root_cause": "simpleToken",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x20ecd8310a2cc7f7774aa5a045c8a99ad84a8451d6650f24e0911e9f4355b13a"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_poolz",
+      "name": "Poolz",
+      "dataset_file": "dataset/raw/Poolz.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Overflow",
+      "platform": "BNBChain",
+      "time": "2023/3/15",
+      "loss": null,
+      "root_cause": "CreateMassPools",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x39718b03ae346dfe0210b1057cf9f0c378d9ab943512264f06249ae14030c5d5"
+      ],
+      "report_link": "https://web3sec.notion.site/CreateMassPools-748f37f2cab04769a883235b8c123d23",
+      "matched_rules": {
+        "business_logic": [
+          "flow"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_popsiclefinance",
+      "name": "Popsicle Finance",
+      "dataset_file": "dataset/raw/PopsicleFinance.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "double-claiming attack",
+      "platform": "Ethereum",
+      "time": "2021/8/3 22:53",
+      "loss": null,
+      "root_cause": "collectFees",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xcd7dae143a4c0223349c16237ce4cd7696b1638d116a72755231ede872ab70fc"
+      ],
+      "report_link": "https://www.freebuf.com/articles/blockchain-articles/283904.html",
+      "matched_rules": {
+        "access_control": [
+          "owner"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ],
+        "business_logic": [
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_punkprotocol",
+      "name": "Punk Protocol",
+      "dataset_file": "dataset/raw/PunkProtocol.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "incorrect function modifier",
+      "platform": "Ethereum",
+      "time": "2021/8/10 06:54",
+      "loss": null,
+      "root_cause": "initialize",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0xa76cd31bcd48869621e7f2698ac8754699026acd0655a6d33280224dabed4cfa",
+        "0x597d11c05563611cb4ad4ed4c57ca53bbe3b7d3fefc37d1ef0724ad58904742b"
+      ],
+      "report_link": "http://www.xmetaera.com/c/20240813/61543.html",
+      "matched_rules": {
+        "access_control": [
+          "initialize",
+          "permission"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_qubitfinance",
+      "name": "Qubit Finance",
+      "dataset_file": "dataset/raw/QubitFinance.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Logic bug",
+      "platform": "Ethereum",
+      "time": "2022/1/27 21:34",
+      "loss": null,
+      "root_cause": "deposit + safeTransferFrom",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xac7292e7d0ec8ebe1c94203d190874b2aab30592327b6cc875d00f18de6f3133"
+      ],
+      "report_link": "https://web3sec.notion.site/Insufficient-validation-6ae40b36b37849b08e6e2bebdc87f1fb",
+      "matched_rules": {
+        "business_logic": [
+          "logic bug"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_raft_fi",
+      "name": "Raft_fi",
+      "dataset_file": "dataset/raw/Raft_fi.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift"
+      ],
+      "raw_cause": "Donate Inflation ExchangeRate & Rounding Error",
+      "platform": "Ethereum",
+      "time": "2023-11-10 18:59:23 UTC",
+      "loss": "~$3.2 M",
+      "root_cause": "managePosition",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xfeedbf51b4e2338e38171f6e19501327294ab1907ab44cfd2d7e7336c975ace7"
+      ],
+      "report_link": "https://www.freebuf.com/articles/blockchain-articles/383686.html",
+      "matched_rules": {
+        "precision_rounding": [
+          "precision",
+          "rounding",
+          "rounding error",
+          "calculation"
+        ],
+        "accounting_drift": [
+          "inflation",
+          "exchangerate",
+          "share"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_revertfinance",
+      "name": "RevertFinance",
+      "dataset_file": "dataset/raw/RevertFinance.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary External Call Vulnerability",
+      "platform": "Ethereum",
+      "time": "2023-02-18 05:16:23 UTC",
+      "loss": "~$30k",
+      "root_cause": "swap",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xdaccbc437cb07427394704fbcc8366589ffccf974ec6524f3483844b043f31d5"
+      ],
+      "report_link": "https://web3sec.notion.site/Arbitrary-External-Call-Vulnerability-2cc8559005984ec2b917b975b32c9f67",
+      "matched_rules": {
+        "access_control": [
+          "arbitrary external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_revestfinance",
+      "name": "Revest Finance",
+      "dataset_file": "dataset/raw/RevestFinance.json",
+      "vulnerability_type_ids": [
+        "reentrancy"
+      ],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2022/3/27 1:41",
+      "loss": null,
+      "root_cause": "depositAdditionalToFNFT + mint",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xe0b0c2672b760bef4e2851e91c69c8c0ad135c6987bbf1f43f5846d89e691428"
+      ],
+      "report_link": "https://www.freebuf.com/articles/blockchain-articles/326466.html",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy",
+          "reentrant"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_rikkeifinance",
+      "name": "Rikkei Finance",
+      "dataset_file": "dataset/raw/RikkeiFinance.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "access_control"
+      ],
+      "raw_cause": "Access Control",
+      "platform": "BNBChain",
+      "time": "2022/4/15 03:18",
+      "loss": null,
+      "root_cause": "setOracleData",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x93a9b022df260f1953420cd3e18789e7d1e095459e36fe2eb534918ed1687492"
+      ],
+      "report_link": "https://web3sec.notion.site/Incorrect-access-control-a46226e2ada841299d2c661cef49f496",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "oracle",
+          "manipulate"
+        ],
+        "access_control": [
+          "access control"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_saddlefinance",
+      "name": "SaddleFinance",
+      "dataset_file": "dataset/raw/SaddleFinance.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Arbitrage attack",
+      "platform": "Ethereum",
+      "time": "2022/4/30 7:40",
+      "loss": null,
+      "root_cause": "swap",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0x2b023d65485c4bb68d781960c2196588d03b871dc9eb1c054f596b7ca6f7da56",
+        "0xe7e0474793aad11875c131ebd7582c8b73499dd3c5a473b59e6762d4e373d7b8"
+      ],
+      "report_link": "https://medium.com/immunefi/hack-analysis-saddle-finance-april-2022-f2bcb119f38",
+      "matched_rules": {
+        "business_logic": [
+          "arbitrage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_safemoon",
+      "name": "SafeMoon",
+      "dataset_file": "dataset/raw/SafeMoon.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift",
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary external call",
+      "platform": "BNBChain",
+      "time": "2023/3/28",
+      "loss": null,
+      "root_cause": "mint + burn",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x48e52a12cb297354a2a1c54cbc897cf3772328e7e71f51c9889bb8c5e533a934"
+      ],
+      "report_link": "https://web3sec.notion.site/Public-burn-fa3c3cffd3254c0181ae3f9cd640890b",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "accounting_drift": [
+          "burn"
+        ],
+        "access_control": [
+          "access control",
+          "arbitrary external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_sashimiswap",
+      "name": "SashimiSwap",
+      "dataset_file": "dataset/raw/SashimiSwap.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Logic Error",
+      "platform": "Ethereum",
+      "time": "2021/12/30 9:06",
+      "loss": null,
+      "root_cause": "swapExactTokensForETHSupportingFeeOnTransferTokens",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xd6a816cc291b24267c03c23c730a84a2699f32a7cf714c8cbe3e47321c76b08f"
+      ],
+      "report_link": "https://www.freebuf.com/articles/blockchain-articles/323849.html",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_seneca",
+      "name": "Seneca",
+      "dataset_file": "dataset/raw/Seneca.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary External Call Vulnerability",
+      "platform": "Ethereum",
+      "time": "2024-02-28 12:09:59 UTC",
+      "loss": "~6M",
+      "root_cause": "performOperations",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x23fcf9d4517f7cc39815b09b0a80c023ab2c8196c826c93b4100f2e26b701286"
+      ],
+      "report_link": "https://web3sec.notion.site/Arbitrary-call-d8cdf083f3114ded8c848c110d10a4c3",
+      "matched_rules": {
+        "access_control": [
+          "arbitrary external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_sheep",
+      "name": "Sheep",
+      "dataset_file": "dataset/raw/Sheep.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Reflection token",
+      "platform": "BNBChain",
+      "time": "2023/2/10",
+      "loss": null,
+      "root_cause": "_burn + balanceOf",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x61293c6dd5211a98f1a26c9f6821146e12fb5e20c850ad3ed2528195c8d4c98e"
+      ],
+      "report_link": "https://web3sec.notion.site/Price-Manipulation-of-deflationary-tokens-via-flashloan-c139bc9bb4de44d19f48d7791baabb53?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "accounting_drift": [
+          "inflation",
+          "burn"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_shoco",
+      "name": "SHOCO",
+      "dataset_file": "dataset/raw/SHOCO.json",
+      "vulnerability_type_ids": [
+        "accounting_drift"
+      ],
+      "raw_cause": "Reflection token",
+      "platform": "Ethereum",
+      "time": "2023-01-19 12:54:11 UTC",
+      "loss": "~4ETH",
+      "root_cause": "deliver",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x2e832f044b4a0a0b8d38166fe4d781ab330b05b9efa9e72a7a0895f1b984084b"
+      ],
+      "report_link": "https://learnblockchain.cn/article/11982",
+      "matched_rules": {
+        "accounting_drift": [
+          "reserve",
+          "burn"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_soda",
+      "name": "Soda",
+      "dataset_file": "dataset/raw/Soda.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Wrong variable",
+      "platform": "Ethereum",
+      "time": "2020/9/20 12:06",
+      "loss": null,
+      "root_cause": "collectDebt",
+      "transaction_count": 11,
+      "transaction_hashes": [
+        "0x79d70f5abc3ca1b212823d12e2eae3f5217e2ce43b5d1f3c374ea8697c0e608d",
+        "0xa0e2e302ad937238da062e5b62b1e1e97420e5dff3dab19eb5555a952d714934",
+        "0xcc472cb107ad17b8edbbde06b55d33bf92aaa6176997df02dca116cfdc784493",
+        "0xcfc7c7a14c66fce063afa263a7f77d6a00253f00fc4b557c667d775aab7f0551",
+        "0x9b5310f845a612835c80e0d8b782be3c01932a8256b76ab0d7f1bf2c15666f5e",
+        "0xac4418b6a0ef422d3635298c4e6a88430c6b24b7a591ba35cdcf796c389f3aa2",
+        "0x07e5568b71f1f4d9234d5925473c598865c5ee1800348c1c4b044c6f0223f308",
+        "0x5767b29a60d64ce56182d1f8bc212b766e1c21a3ed52d1ad678dbc6d3e43401a",
+        "0x19c04bc04ee8117abfdf0c9301787b12b27f3c5c13308b4f66711a8f0ecacc62",
+        "0x48d22ea24c1ae707b8b17ca2a3ea81a1aee64a075d93e5bff81a7370e2cacea7",
+        "0x6c23497b945b5e614cc3caa2df07c921fe13e189a8b061678f397063047294b9"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_sorstaking",
+      "name": "SorStaking",
+      "dataset_file": "dataset/raw/SorStaking.json",
+      "vulnerability_type_ids": [
+        "precision_rounding"
+      ],
+      "raw_cause": "Incorrect reward calculation",
+      "platform": "Ethereum",
+      "time": "2025-01-04 11:59:23 UTC",
+      "loss": "$43K",
+      "root_cause": "withdraw + getPendingRewards",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x6439d63cc57fb68a32ea8ffd8f02496e8abad67292be94904c0b47a4d14ce90d"
+      ],
+      "report_link": "https://main.learnblockchain.cn/index.php/article/10563",
+      "matched_rules": {
+        "precision_rounding": [
+          "calculation"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_spacegodzilla",
+      "name": "SpaceGodzilla",
+      "dataset_file": "dataset/raw/SpaceGodzilla.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "access_control"
+      ],
+      "raw_cause": "Access Control",
+      "platform": "BNBChain",
+      "time": "2022/7/13 12:16",
+      "loss": null,
+      "root_cause": "swapAndLiquifyStepv1",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x7f183df11f1a0225b5eb5bb2296b5dc51c0f3570e8cc15f0754de8e6f8b4cca4"
+      ],
+      "report_link": "https://web3sec.notion.site/Incorrect-access-control-25b8a47d86024ad6819c9a959cdc91bb?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "access_control": [
+          "access control"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_spectra_finance",
+      "name": "Spectra_finance",
+      "dataset_file": "dataset/raw/Spectra_finance.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Incorrect input validation",
+      "platform": "Ethereum",
+      "time": "2024-07-23 14:53:59 UTC",
+      "loss": "~73K USD",
+      "root_cause": "execute + _dispatch",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x491cf8b2a5753fdbf3096b42e0a16bc109b957dc112d6537b1ed306e483d0744"
+      ],
+      "report_link": "https://lunaray.medium.com/spectra-protocol-hack-analysis-06b877498757",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_sushiswap",
+      "name": "SushiSwap",
+      "dataset_file": "dataset/raw/SushiSwap.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation"
+      ],
+      "raw_cause": "Manipulate",
+      "platform": "Ethereum",
+      "time": "2021/1/25 20:07",
+      "loss": null,
+      "root_cause": "bridgeFor",
+      "transaction_count": 3,
+      "transaction_hashes": [
+        "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f",
+        "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f",
+        "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9"
+      ],
+      "report_link": "https://www.freebuf.com/articles/others-articles/262212.html",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate",
+          "slippage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_swarmmarkets",
+      "name": "SwarmMarkets",
+      "dataset_file": "dataset/raw/SwarmMarkets.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "lack of validation",
+      "platform": "Ethereum",
+      "time": "2024-02-22 23:34:23 UTC",
+      "loss": "~7k $DAI",
+      "root_cause": "mint",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xc0be8c3792a5b1ba7d653dc681ff611a5b79a75fe51c359cf1aac633e9441574"
+      ],
+      "report_link": "https://web3sec.notion.site/Insufficient-validation-1c77292741138059a2f7cfb8375c977d?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "access control"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_templedao",
+      "name": "Templedao",
+      "dataset_file": "dataset/raw/Templedao.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "access_control"
+      ],
+      "raw_cause": "Insufficient access control",
+      "platform": "Ethereum",
+      "time": "2022-10-11 13:08:35 UTC",
+      "loss": "$2.3 million",
+      "root_cause": "migrateStake",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x8c3f442fc6d640a6ff3ea0b12be64f1d4609ea94edd2966f42c01cd9bdcf04b5"
+      ],
+      "report_link": "https://web3sec.notion.site/Incorrect-access-control-f5e0efb872754102b82731745b102ba3?pvs=23",
+      "matched_rules": {
+        "accounting_drift": [
+          "inflation"
+        ],
+        "access_control": [
+          "access control"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_thena",
+      "name": "Thena",
+      "dataset_file": "dataset/raw/Thena.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Yield Protocol Flaw",
+      "platform": "BNBChain",
+      "time": "2023-03-27 17:35:56 UTC",
+      "loss": "$10k",
+      "root_cause": "unstake",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xdf6252854362c3e96fd086d9c3a5397c303d265649aee0b023176bb49cf00d4b"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_thenftv2",
+      "name": "TheNFTV2",
+      "dataset_file": "dataset/raw/TheNFTV2.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "logic flaw",
+      "platform": "Ethereum",
+      "time": "2023-11-25 08:17:23 UTC",
+      "loss": "~$19K",
+      "root_cause": "burn + transferFrom",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xd5b4d68432cbbd912130bbb5b93399031ddbb400d8f723c78050574de7533106"
+      ],
+      "report_link": "https://web3sec.notion.site/Logic-Flaw-e978fee700a14ba7ab1201ffcc131ba1?pvs=23",
+      "matched_rules": {
+        "accounting_drift": [
+          "burn"
+        ],
+        "access_control": [
+          "owner"
+        ],
+        "business_logic": [
+          "logic flaw",
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_tinu",
+      "name": "TINU",
+      "dataset_file": "dataset/raw/TINU.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "business_logic"
+      ],
+      "raw_cause": "Reflection token",
+      "platform": "Ethereum",
+      "time": "2023-01-26 07:10:47 UTC",
+      "loss": "22 ETH",
+      "root_cause": "deliver",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x6200bf5c43c214caa1177c3676293442059b4f39eb5dbae6cfd4e6ad16305668"
+      ],
+      "report_link": "https://autosaida.github.io/DeFiHackAnalysis/2023/230126_TINU/",
+      "matched_rules": {
+        "accounting_drift": [
+          "reserve"
+        ],
+        "business_logic": [
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_trustpad",
+      "name": "TrustPad",
+      "dataset_file": "dataset/raw/TrustPad.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "business logic vulnerability",
+      "platform": "BNBChain",
+      "time": "2023/11/6",
+      "loss": null,
+      "root_cause": "receiveUpPool",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x191a34e6c0780c3d1ab5c9bc04948e231d742b7d88e0e4f85568d57fcdc03182"
+      ],
+      "report_link": "https://web3sec.notion.site/Access-control-ba5a4a25fa304d918337190d4cb485d9?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "access_control": [
+          "access control"
+        ],
+        "business_logic": [
+          "business logic",
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_uerii_token",
+      "name": "Uerii Token",
+      "dataset_file": "dataset/raw/Uerii Token.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Access Control",
+      "platform": "Ethereum",
+      "time": "2022-10-17 12:31:11 UTC",
+      "loss": "$2.4 k",
+      "root_cause": "mint",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xf4a3d0e01bbca6c114954d4a49503fc94dfdbc864bded5530b51a207640d86b5"
+      ],
+      "report_link": "https://web3sec.notion.site/Incorrect-access-control-b96a3407da09492f92033c7e5b1286eb?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "incorrect access"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_ufdao",
+      "name": "UFDao",
+      "dataset_file": "dataset/raw/UFDao.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Incorrect parameter setting",
+      "platform": "BNBChain",
+      "time": "2023/1/11",
+      "loss": null,
+      "root_cause": "buyPublicOffer",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x933d19d7d822e84e34ca47ac733226367fbee0d9c0c89d88d431c4f99629d77a"
+      ],
+      "report_link": "https://web3sec.notion.site/Misconfiguration-83e2224099e54ea0bfda1138223527eb?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_umbrellanetwork",
+      "name": "Umbrella Network",
+      "dataset_file": "dataset/raw/UmbrellaNetwork.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Underflow",
+      "platform": "Ethereum",
+      "time": "2022/3/20 07:48",
+      "loss": null,
+      "root_cause": "_balance + _withdraw",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x33479bcfbc792aa0f8103ab0d7a3784788b5b0e1467c81ffbed1b7682660b4fa"
+      ],
+      "report_link": "https://zhuanlan.zhihu.com/p/485220134",
+      "matched_rules": {
+        "business_logic": [
+          "flow"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_unibotrouter",
+      "name": "UniBotRouter",
+      "dataset_file": "dataset/raw/UniBotRouter.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Arbitrary External Call",
+      "platform": "Ethereum",
+      "time": "2023-10-31 04:43:59 UTC",
+      "loss": "~$83,944 USD$",
+      "root_cause": "0xb2bd16ab",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xcbe521aea28911fe9983030748028e12541e347b8b6b974d026fa5065c22f0cf"
+      ],
+      "report_link": "https://web3sec.notion.site/Arbitrary-Call-7c381d35b33945f8be387fd03c6dfa48?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "arbitrary external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_unizenio",
+      "name": "UnizenIO",
+      "dataset_file": "dataset/raw/UnizenIO.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "unverified external call",
+      "platform": "Ethereum",
+      "time": "2024-03-08 22:23:35 UTC",
+      "loss": "~2M",
+      "root_cause": "0x1ef29a02",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xdd0636e2598f4d7b74f364fedb38f334365fd956747a04a6dd597444af0bc1c0"
+      ],
+      "report_link": "https://web3sec.notion.site/Arbitrary-call-0a4c953a188546729c7a6b942f273b2a?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "unverified external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_unverifiedcontr_0x00c409",
+      "name": "UnverifiedContr_0x00C409",
+      "dataset_file": "dataset/raw/UnverifiedContr_0x00C409.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "unverified external call",
+      "platform": "Ethereum",
+      "time": "2024-04-17 13:32:47 UTC",
+      "loss": "~ 18 eth",
+      "root_cause": "0xba381f8f",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x998f1da472d927e74405b0aa1bbf5c1dbc50d74b39977bed3307ea2ada1f1d3f"
+      ],
+      "report_link": "https://web3sec.notion.site/Lack-of-Access-Control-1cd72927411380278c2eec84d901ad73?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "unverified external call"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_unverifiedcontr_0x452e25",
+      "name": "UnverifiedContr_0x452E25",
+      "dataset_file": "dataset/raw/UnverifiedContr_0x452E25.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "lack-of-access-control",
+      "platform": "Ethereum",
+      "time": "2024-07-03 02:47:23 UTC",
+      "loss": "27 ETH",
+      "root_cause": "uniswapV3SwapCallback",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x1194e1d6085885ce054a7ff8cd3cd0c3fa308ec87e4ccde8dd0549842fef4f1b"
+      ],
+      "report_link": "https://blog.blockmagnates.com/watch-your-back-while-you-want-to-do-aribitrage-with-uniswap-flashloan-f456e4f3e99d",
+      "matched_rules": {
+        "reentrancy": [
+          "callback"
+        ],
+        "access_control": [
+          "access control",
+          "lack of access"
+        ],
+        "business_logic": [
+          "arbitrage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_uraniumfinance",
+      "name": "Uranium Finance",
+      "dataset_file": "dataset/raw/UraniumFinance.json",
+      "vulnerability_type_ids": [
+        "precision_rounding"
+      ],
+      "raw_cause": "Precision processing error",
+      "platform": "BNBChain",
+      "time": "2021/4/28 3:02",
+      "loss": null,
+      "root_cause": "swap",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x5a504fe72ef7fc76dfeb4d979e533af4e23fe37e90b5516186d5787893c37991"
+      ],
+      "report_link": "https://web3sec.notion.site/Incorrect-calculation-10000-vs-1000-5382319195184d1d85ab70b193b7d444?pvs=23",
+      "matched_rules": {
+        "precision_rounding": [
+          "precision",
+          "calculation",
+          "10000",
+          "1000"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_usdtstakingcontract28",
+      "name": "USDTStakingContract28",
+      "dataset_file": "dataset/raw/USDTStakingContract28.json",
+      "vulnerability_type_ids": [
+        "access_control"
+      ],
+      "raw_cause": "Lack of access control",
+      "platform": "Ethereum",
+      "time": "2023-07-15 04:54:59 UTC",
+      "loss": "~20999 USD",
+      "root_cause": "tokenAllowAll",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xfc872bf5ca8f04b18b82041ec563e4abf2e31e1fc27d1ea5dee39bc8a79d2d06"
+      ],
+      "report_link": "https://web3sec.notion.site/Access-Control-1d872927411380b4b515e7644d4c60cb?pvs=23",
+      "matched_rules": {
+        "access_control": [
+          "access control",
+          "lack of access"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_uwerx",
+      "name": "Uwerx",
+      "dataset_file": "dataset/raw/Uwerx.json",
+      "vulnerability_type_ids": [
+        "accounting_drift",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2023/8/2",
+      "loss": null,
+      "root_cause": "_transfer",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x3b19e152943f31fe0830b67315ddc89be9a066dc89174256e17bc8c2d35b5af8"
+      ],
+      "report_link": "https://web3sec.notion.site/Price-Manipulation-a4f97cb0d7df48f2b8ecdc7db1247e4c?pvs=23",
+      "matched_rules": {
+        "accounting_drift": [
+          "burn"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ],
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_vinu",
+      "name": "VINU",
+      "dataset_file": "dataset/raw/VINU.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Flashloan",
+      "platform": "Ethereum",
+      "time": "2023/6/6",
+      "loss": null,
+      "root_cause": "addLiquidityETH",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xaf46a42fe1ed7193b25c523723dc047c7500e50a00ecb7bbb822d665adb3e1f3"
+      ],
+      "report_link": "https://web3sec.notion.site/Lack-of-Validation-ce5fe860cee74abebd5a3759d8163eaf?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_visorfinance",
+      "name": "Visor Finance",
+      "dataset_file": "dataset/raw/VisorFinance.json",
+      "vulnerability_type_ids": [
+        "reentrancy",
+        "business_logic"
+      ],
+      "raw_cause": "logic bug",
+      "platform": "Ethereum",
+      "time": "2021/12/21 14:18",
+      "loss": null,
+      "root_cause": "deposit",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0x27f2210536553392cf180c0b37055b3dc92094a5d585d7d2a51f790c9145e47c",
+        "0x69272d8c84d67d1da2f6425b339192fa472898dce936f24818fda415c1c1ff3f"
+      ],
+      "report_link": "https://www.panewslab.com/zh/articles/N1145282",
+      "matched_rules": {
+        "reentrancy": [
+          "reentrancy"
+        ],
+        "business_logic": [
+          "logic bug"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_waultfinance",
+      "name": "WaultFinance",
+      "dataset_file": "dataset/raw/WaultFinance.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "flash_loan_amplifier",
+        "business_logic"
+      ],
+      "raw_cause": "FlashLoan",
+      "platform": "BNBChain",
+      "time": "2021/8/4 1:49",
+      "loss": null,
+      "root_cause": "stake",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x31262f15a5b82999bf8d9d0f7e58dcb1656108e6031a2797b612216a95e1670e"
+      ],
+      "report_link": "https://zhuanlan.zhihu.com/p/396525700",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "flash_loan_amplifier": [
+          "flashloan",
+          "flash loan"
+        ],
+        "business_logic": [
+          "arbitrage"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_wifcoin_eth",
+      "name": "WIFCOIN_ETH",
+      "dataset_file": "dataset/raw/WIFCOIN_ETH.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "business logic flaw",
+      "platform": "Ethereum",
+      "time": "2024-06-16 08:35:35 UTC",
+      "loss": "~3.4 ETH (WIF token)",
+      "root_cause": "claimEarned",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xda8f6a4bed7e5689a343d111632d37480c0316f1d20b732803c4bd482823e284"
+      ],
+      "report_link": "https://web3sec.notion.site/Business-logic-flaw-7acc485d43764851a53c82409dc1a9bb?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw",
+          "claim"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_wildcredit",
+      "name": "Wild Credit",
+      "dataset_file": "dataset/raw/WildCredit.json",
+      "vulnerability_type_ids": [
+        "access_control",
+        "business_logic"
+      ],
+      "raw_cause": "Contract Vulnerability",
+      "platform": "Ethereum",
+      "time": "2021/5/27 3:56",
+      "loss": null,
+      "root_cause": "initialize",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xdbef3b393a64608756c284568217355f694a0e5c8edf80eac75ec087d642ce07"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "access_control": [
+          "initialize"
+        ],
+        "business_logic": [
+          "contract vulnerability"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_wiselending",
+      "name": "WiseLending",
+      "dataset_file": "dataset/raw/WiseLending.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "accounting_drift"
+      ],
+      "raw_cause": "Bad HealthFactor Check",
+      "platform": "Ethereum",
+      "time": "2024-01-12 19:29:23 UTC",
+      "loss": "~464K",
+      "root_cause": "_calculateShares",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x04e16a79ff928db2fa88619cdd045cdfc7979a61d836c9c9e585b3d6f6d8bc31"
+      ],
+      "report_link": "https://web3sec.notion.site/Precision-Loss-Vulnerability-in-Share-Accounting-4e0231af7958498385f39b5a13cab362?pvs=23",
+      "matched_rules": {
+        "precision_rounding": [
+          "rounding",
+          "rounding error"
+        ],
+        "accounting_drift": [
+          "donation",
+          "share",
+          "healthfactor"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_xave_finance",
+      "name": "Xave Finance",
+      "dataset_file": "dataset/raw/Xave Finance.json",
+      "vulnerability_type_ids": [
+        "precision_rounding",
+        "access_control"
+      ],
+      "raw_cause": "Malicious Proposal Mint & Transfer Ownership",
+      "platform": "Ethereum",
+      "time": "2022-10-08 17:04:11 UTC",
+      "loss": "100,000,000,000,000 RNBW",
+      "root_cause": "executeProposalWithIndex",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xc18ec2eb7d41638d9982281e766945d0428aaeda6211b4ccb6626ea7cff31f4a"
+      ],
+      "report_link": "https://web3sec.notion.site/DaoModule-misconfiguration-865207fc337346bfae1d64acf9c2f40f?pvs=23",
+      "matched_rules": {
+        "precision_rounding": [
+          "10000",
+          "1000"
+        ],
+        "access_control": [
+          "malicious proposal",
+          "owner"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_xcarnival",
+      "name": "XCarnival",
+      "dataset_file": "dataset/raw/XCarnival.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Lack of judging",
+      "platform": "Ethereum",
+      "time": "2022/6/26 12:03",
+      "loss": null,
+      "root_cause": "pledgeAndBorrow",
+      "transaction_count": 7,
+      "transaction_hashes": [
+        "0x1149b8285bedd6e858c225d0cd187818e66ae12a0dd4de8de98ea132e3d1470c",
+        "0x605488dd5595e9e29a085ca26d7c377dded5fa96099cc33b6193c1b00effed23",
+        "0xd14beb55a20f7d050a3a93320c5cad387041312c4c29fe3b133ebe8a2165d59b",
+        "0xc417ba285a06a0e493ee0ae692217633e11aac50999c7a5474bee966cda2d461",
+        "0x0163856aaa678676b22e072186c1bdc55ed44a5a0e2cf44500362800663ddce9",
+        "0xf1dcc5e32839fb5c17ffe9322fab8d954512e578fccbdf2b533d9e0d91a72f6c",
+        "0x66b1d24442e2a0fc1d4670c543b2f66e952588399f72149975b6c4d259074ca5"
+      ],
+      "report_link": "https://www.freebuf.com/articles/others-articles/337562.html",
+      "matched_rules": {
+        "business_logic": [
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_xstable_protocol",
+      "name": "XSTABLE Protocol",
+      "dataset_file": "dataset/raw/XSTABLE Protocol.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Incorrect Logic Check",
+      "platform": "Ethereum",
+      "time": "2022-08-09 20:04:26 UTC",
+      "loss": "",
+      "root_cause": "_transfer",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x873f7c77d5489c1990f701e9bb312c103c5ebcdcf0a472db726730814bfd55f3"
+      ],
+      "report_link": "https://web3sec.notion.site/Incorrect-Logic-Check-get-rewards-over-skim-b1cfa378291841fc98bf599a8d1d4fc6?pvs=23",
+      "matched_rules": {
+        "business_logic": [
+          "fallback_default"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_yearn",
+      "name": "Yearn",
+      "dataset_file": "dataset/raw/Yearn.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "accounting_drift"
+      ],
+      "raw_cause": "Wrong setting",
+      "platform": "Ethereum",
+      "time": "2023/4/13",
+      "loss": null,
+      "root_cause": "rebalance / constructor",
+      "transaction_count": 2,
+      "transaction_hashes": [
+        "0xd55e43c1602b28d4fd4667ee445d570c8f298f5401cf04e62ec329759ecda95d",
+        "0x8db0ef33024c47200d47d8e97b0fcfc4b51de1820dfb4e911f0e3fb0a4053138"
+      ],
+      "report_link": "https://blockapex.io/yearn-finance-hack-analysis/",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "manipulate"
+        ],
+        "accounting_drift": [
+          "share"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_zenterest",
+      "name": "Zenterest",
+      "dataset_file": "dataset/raw/Zenterest.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Price Out Of Date",
+      "platform": "Ethereum",
+      "time": "2024-08-16 13:58:23 UTC",
+      "loss": "~21000 USD",
+      "root_cause": "accrueInterest / ZenterestPriceFeed",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0xfe8bc757d87e97a5471378c90d390df47e1b29bb9fca918b94acd8ecfaadc598"
+      ],
+      "report_link": "https://learnblockchain.cn/article/9079",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "oracle"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_zoomer",
+      "name": "Zoomer",
+      "dataset_file": "dataset/raw/Zoomer.json",
+      "vulnerability_type_ids": [
+        "business_logic"
+      ],
+      "raw_cause": "Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2024-02-23 15:41:35 UTC",
+      "loss": "~14 ETH",
+      "root_cause": "0x72c4cff6",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x06d7e7436414c658a33452d28400799f3637e83930dcec39b3bd065dabc6ef04"
+      ],
+      "report_link": null,
+      "matched_rules": {
+        "business_logic": [
+          "business logic",
+          "logic flaw"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    },
+    {
+      "case_id": "raw_zunamiprotocol",
+      "name": "ZunamiProtocol",
+      "dataset_file": "dataset/raw/ZunamiProtocol.json",
+      "vulnerability_type_ids": [
+        "oracle_manipulation",
+        "precision_rounding",
+        "flash_loan_amplifier"
+      ],
+      "raw_cause": "Price Manipulation",
+      "platform": "Ethereum",
+      "time": "2023-08-13 22:34:47 UTC",
+      "loss": "~$2M",
+      "root_cause": "cacheAssetPrice",
+      "transaction_count": 1,
+      "transaction_hashes": [
+        "0x0788ba222970c7c68a738b0e08fb197e669e61f9b226ceec4cab9b85abe8cceb"
+      ],
+      "report_link": "https://web3sec.notion.site/Flawed-Price-Dependency-a1396fbf87814894a2c417ea1f41a299?pvs=23",
+      "matched_rules": {
+        "oracle_manipulation": [
+          "price manipulation",
+          "manipulate"
+        ],
+        "precision_rounding": [
+          "calculation"
+        ],
+        "flash_loan_amplifier": [
+          "flash loan"
+        ]
+      },
+      "manual_review_status": "auto_classified_needs_review"
+    }
+  ]
+}

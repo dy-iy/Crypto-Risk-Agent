@@ -1,9 +1,11 @@
 import asyncio
+import logging
 import sys
 import time
 from typing import List, Optional, Dict, Set
 
 import aiohttp
+import httpx
 
 from app.attackpilot.daos.contract import ContractDao
 from app.attackpilot.downloaders.defs import Downloader
@@ -211,7 +213,7 @@ class TenderlyDao:
             return {}
         return full_result
 
-    async def simulate_tx_in_tenderly(self, transaction_hash: str):
+    async def simulate_tx_in_tenderly(self, transaction_hash: str, *, enrich_contracts: bool = True):
         tx_info = await self.tx_downloader.download(transaction_hash=transaction_hash)
 
         payload = {
@@ -238,9 +240,18 @@ class TenderlyDao:
         transaction = full_result.get('transaction', {})
         contracts = full_result.get('contracts', [])
 
+        # Transaction summaries consume only transaction data. Source enrichment is
+        # needed by the debugger, not by this earlier collection stage.
+        if not enrich_contracts:
+            return transaction, contracts, dict(self.addr2property)
+
         addresses = transaction.get('addresses', [])
         contracts = await self._supplement_missing_contracts(addresses, contracts)
-        addr2name = await self._load_contract_name(set(addresses))
+        known_names = {
+            c['address'].lower(): c['contract_name'] for c in contracts
+            if c.get('address') and c.get('contract_name') and c.get('public') is not False
+        }
+        addr2name = await self._load_contract_name(set(addresses), known_names)
         addr2name.update(self.addr2property)
 
         return transaction, contracts, addr2name
@@ -465,17 +476,29 @@ class TenderlyDao:
         valid_supplements = [d for d in supplemental_data if isinstance(d, dict)]
         return existing_contracts + valid_supplements
 
-    async def _load_contract_name(self, contract_addresses: Set[str]) -> Dict[str, Dict[str, str]]:
-        addr_list = list(contract_addresses)
+    async def _load_contract_name(self, contract_addresses: Set[str], known_names=None) -> Dict[str, str]:
+        names = dict(known_names or {})
+        addr_list = sorted({addr.lower() for addr in contract_addresses} - names.keys())
         semaphore = asyncio.Semaphore(5)
 
         async def _create_task(_address: str):
             async with semaphore:
-                return await ContractDao(downloader=self.source_downloader).get_contract_name(_address)
+                try:
+                    async with asyncio.timeout(10):
+                        return await ContractDao(downloader=self.source_downloader).get_contract_name(_address)
+                except (httpx.HTTPError, aiohttp.ClientError, TimeoutError, ValueError, KeyError, TypeError) as exc:
+                    # Names are optional labels. Keep the address and real trace;
+                    # never let an explorer outage discard a successful replay.
+                    logging.getLogger(__name__).warning(
+                        'Contract name unavailable for %s (%s); retaining address.',
+                        _address, type(exc).__name__,
+                    )
+                    return ''
 
         tasks = [_create_task(addr) for addr in addr_list]
         result = await asyncio.gather(*tasks)
-        return {addr_list[i]: result[i] for i in range(len(addr_list))}
+        names.update(zip(addr_list, result))
+        return names
 
 
 class BundleTenderlyDao:

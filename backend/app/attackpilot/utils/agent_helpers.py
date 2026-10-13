@@ -294,15 +294,19 @@ class TokenManager:
 
 class ResponseParser:
     @classmethod
-    def process_response(cls, response: str, _format: str) -> Any:
+    def process_response(cls, response: str, _format: str, *, strict: bool = False) -> Any:
         if _format == 'str': return response
         if _format == 'solidity': return cls._extract_solidity_code(response)
 
         clean_text = response.strip()
         try:
             parsed = cls._robust_parse(clean_text)
+            if strict and _format in ('json', 'dict') and not isinstance(parsed, dict):
+                raise JSONParsingError('Expected a JSON object')
             return parsed if isinstance(parsed, (dict, list)) else {"result": parsed}
-        except Exception:
+        except Exception as exc:
+            if strict:
+                raise JSONParsingError('模型未返回有效的结构化结果') from exc
             return {} if _format in ['json', 'dict'] else []
 
     @classmethod

@@ -1,0 +1,20 @@
+{
+  "checks": [
+    "guest list never silently imports",
+    "market and follow management share cloud state",
+    "full-library follows include non-market coin",
+    "zero threshold saved",
+    "failed unfollow retains prior state",
+    "daily revision warns and regenerates",
+    "historical report remains identifiable",
+    "local import requires selection and retries partial failures",
+    "legacy routes preserve valid market selection or open follows",
+    "empty follows disable generation",
+    "account switch isolates follow list",
+    "coin details follow and return work without ranking data",
+    "news legacy return link points to market"
+  ],
+  "errors": [],
+  "missing": [],
+  "requests": 142
+}

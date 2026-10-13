@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useNavigate, useParams } from "../services/navigation";
 import { Alert, App as AntdApp, Button, Layout, Segmented, Space, Spin, Tabs, Tag, Typography } from "antd";
 import { Activity, ArrowLeft, Bot, FileText, FolderOpen, Home, ListTree, RefreshCcw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
@@ -16,7 +17,7 @@ import LogStream from "../components/LogStream";
 import LearningGuidePanel from "../components/LearningGuidePanel";
 import MacroAnalysisPanel from "../components/MacroAnalysisPanel";
 import StructuredReport from "../components/StructuredReport";
-import { getAutomatedReview, getMacroAnalysis, getTask, getTaskLogs } from "../services/api";
+import { createReportTranslation, errorMessage, getAutomatedReview, getMacroAnalysis, getReportTranslation, getTask, getTaskLogs } from "../services/api";
 import TaskEventService from "../services/TaskEventService";
 import {
   LanguageMode,
@@ -31,6 +32,7 @@ import {
 } from "../types";
 import { modeLabel, t } from "../utils/i18n";
 import { formatDurationZh, taskStatusLabel } from "../utils/presentation";
+import { useAttackPilotIdentity } from "../context";
 
 
 const { Header, Content } = Layout;
@@ -85,6 +87,7 @@ const Dashboard: React.FC = () => {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const { message } = AntdApp.useApp();
+  const { userId, onLogin } = useAttackPilotIdentity();
   const mountedRef = useRef(true);
   const generatedNoticeRef = useRef({ report: false, macro: false, review: false });
   const [task, setTask] = useState<Task | null>(null);
@@ -101,6 +104,13 @@ const Dashboard: React.FC = () => {
   const [activeMainTab, setActiveMainTab] = useState("");
   const [macroAnalysis, setMacroAnalysis] = useState<MacroAnalysisResponse | null>(null);
   const [automatedReview, setAutomatedReview] = useState<AutomatedReviewResponse | null>(null);
+  const [reportLanguage, setReportLanguage] = useState<"zh" | "original">("zh");
+  const [translationRevision, setTranslationRevision] = useState(0);
+  const [translation, setTranslation] = useState<{
+    taskId: string; source: string; report: string | null;
+    status: "translating" | "ready" | "missing" | "original" | "error";
+    error?: string;
+  } | null>(null);
   const verification = task?.result && typeof task.result === "object" && "verification" in task.result
     ? task.result.verification as { status?: string } | null : null;
   const verificationLabel = ({ verified: "回放验证通过", failed: "验证未通过", skipped: "验证已跳过", not_run: "验证未执行" } as Record<string, string>)[verification?.status || "not_run"] || "验证未完成";
@@ -223,6 +233,28 @@ const Dashboard: React.FC = () => {
   const hasReplay = hasFinalReport;
   const hasLearningGuide = hasFinalReport || hasMacroAnalysis;
   const hasConsistencyReview = hasFinalReport || hasAutomatedReview;
+  const currentTranslation = translation?.taskId === taskId && translation.source === finalReportText ? translation : null;
+  const translating = hasFinalReport && reportLanguage === "zh" && (!currentTranslation || currentTranslation.status === "translating");
+  const displayedReport = reportLanguage === "zh" && currentTranslation?.report ? currentTranslation.report : finalReportText;
+  const displayedTask = useMemo(() => task ? { ...task, final_report: displayedReport } : null, [task, displayedReport]);
+  const usingTranslation = reportLanguage === "zh" && currentTranslation?.status === "ready";
+
+  useEffect(() => {
+    if (!taskId || !finalReportText || reportLanguage !== "zh") return;
+    let cancelled = false;
+    const source = finalReportText;
+    getReportTranslation(taskId).then(async (payload) => {
+      if (cancelled) return;
+      if (payload.status === "missing" && userId) {
+        setTranslation({ taskId, source, report: null, status: "translating" });
+        payload = await createReportTranslation(taskId);
+      }
+      if (!cancelled) setTranslation({ taskId, source, report: payload.translated_report, status: payload.status });
+    }).catch((error: unknown) => {
+      if (!cancelled) setTranslation({ taskId, source, report: null, status: "error", error: errorMessage(error) });
+    });
+    return () => { cancelled = true; };
+  }, [finalReportText, reportLanguage, taskId, translationRevision, userId]);
 
   useEffect(() => {
     generatedNoticeRef.current = { report: false, macro: false, review: false };
@@ -361,7 +393,9 @@ const Dashboard: React.FC = () => {
       ),
       children: (
         <StructuredReport
-          task={task}
+          task={displayedTask}
+          originalTask={task}
+          translated={usingTranslation}
           events={events}
           mode={viewMode}
           macroAnalysis={macroAnalysis}
@@ -379,7 +413,7 @@ const Dashboard: React.FC = () => {
           {t(language, "replayTab")}
         </Space>
       ),
-      children: <AttackReplayTimeline task={task} events={events} mode={viewMode} />,
+      children: <AttackReplayTimeline task={displayedTask} events={events} mode={viewMode} />,
     };
 
     const learningTab: MainTabItem = {
@@ -492,6 +526,7 @@ const Dashboard: React.FC = () => {
     agentStats,
     automatedReview,
     events,
+    displayedTask,
     hasConsistencyReview,
     hasFinalReport,
     hasLearningGuide,
@@ -504,6 +539,7 @@ const Dashboard: React.FC = () => {
     task,
     taskId,
     viewMode,
+    usingTranslation,
   ]);
 
   const desiredTab = activeMainTab || getDefaultMainTab(viewMode, isTaskRunning);
@@ -521,6 +557,7 @@ const Dashboard: React.FC = () => {
         ),
         children: (
           <AgentInsights
+            taskStatus={task?.status}
             events={events}
             selectedAgent={selectedAgent}
             onSelectAgent={setSelectedAgent}
@@ -581,7 +618,7 @@ const Dashboard: React.FC = () => {
         <Space size={12} className="review-topbar-main">
           <Button icon={<ArrowLeft size={16} />} onClick={() => navigate("/tasks")} title="返回任务控制台" />
           <Button icon={<Home size={16} />} onClick={() => navigate("/")} title="返回首页" />
-          
+          <span className="workbench-brand-mark compact"><Image src="/attackpilot/riskpilot_logo.png" width={40} height={40} alt="AttackPilot 标志" /></span>
           <div className="review-title-block">
             <Typography.Title level={5} className="review-title">
               {task?.dapp_name ? `${task.dapp_name} 攻击复盘` : "攻击复盘工作台"}
@@ -629,6 +666,24 @@ const Dashboard: React.FC = () => {
           : "实时分析任务 · 仅本人可见。补丁验证状态以报告中的实际执行结果为准。"} />}
 
         {errorMsg ? <Alert type="error" showIcon message={errorMsg} closable onClose={() => setErrorMsg("")} /> : null}
+
+        {hasFinalReport && <div className="report-language-toolbar">
+          <Space wrap>
+            <Typography.Text strong>报告语言</Typography.Text>
+            <Segmented value={reportLanguage} onChange={(value) => setReportLanguage(value as "zh" | "original")}
+              options={[{ label: "中文", value: "zh" }, { label: "原文", value: "original" }]} />
+            {translating ? <><Spin size="small" /><Typography.Text type="secondary">正在准备中文译文，当前显示原文…</Typography.Text></> : null}
+            {usingTranslation ? <Tag color="blue">中文译文 · 可切换原文核对</Tag> : null}
+            {reportLanguage === "original" ? <Tag>模型原始报告</Tag> : null}
+            {reportLanguage === "zh" && currentTranslation?.status === "original" ? <Tag>原报告已为中文</Tag> : null}
+          </Space>
+          {reportLanguage === "zh" && currentTranslation?.status === "missing" && !userId &&
+            <Alert type="info" showIcon title="这份历史报告尚无中文译文，当前显示归档原文。"
+              action={<Button size="small" onClick={onLogin}>登录生成中文译文</Button>} />}
+          {reportLanguage === "zh" && currentTranslation?.status === "error" &&
+            <Alert type="warning" showIcon title="中文译文暂时无法加载，当前显示原文。" description={currentTranslation.error}
+              action={<Button size="small" onClick={() => { setTranslation(null); setTranslationRevision(value => value + 1); }}>重试</Button>} />}
+        </div>}
 
         <div className="task-overview">
           <div>

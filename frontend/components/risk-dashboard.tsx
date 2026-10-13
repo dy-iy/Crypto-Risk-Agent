@@ -1,7 +1,13 @@
 "use client";
 
-import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { accountScopeEvent, getAccountScope, getAccountSignal, subscribeAccountScope, localStore, sessionStore } from "@/lib/browser-storage";
+
+
+import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
+import FollowManager from "@/components/follows/follow-manager";
+import { useFollows } from "@/lib/follows";
+import { legacyPortfolioTarget } from "@/lib/market-symbols";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AgentProgress, LoadingDots } from "@/components/ui/loading-states";
@@ -12,14 +18,12 @@ import {
 } from "@/lib/news-analysis";
 import {
   clearApiCache,
-  CoinLibraryItem,
   CoinRankingItem,
   DailyRiskReport,
   DailyReportSubscription,
   DailySchedulerStatus,
   FeishuBindingStatus,
   fetchCoinRanking,
-  fetchCoinLibrary,
   fetchDailyReportSubscription,
   fetchDailyRiskReport,
   fetchDailySchedulerStatus,
@@ -59,7 +63,6 @@ import {
   AuditSummary,
   addFavorite,
   changePassword,
-  createUserAsset,
   deleteAccountData,
   deleteAnalysisReport,
   deleteFeishuBinding,
@@ -76,11 +79,9 @@ import {
   fetchStorageInventory,
   fetchSystemReadiness,
   fetchSystemTaskEvents,
-  fetchUserAssets,
   generateDailyRiskReport,
   loginUser,
   logoutUser,
-  PortfolioWatchlistItem,
   pruneExpiredAuthSessions,
   pruneGuestSimAccounts,
   pruneInvalidJsonBackups,
@@ -98,7 +99,6 @@ import {
   updateDailyReportSubscription,
   updateDailySchedulerStatus,
   updateAnalysisReportDisposition,
-  updateUserAsset,
 } from "@/lib/api";
 
 const AttackPilotWorkbench = dynamic(() => import("@/components/attackpilot/workbench"), {
@@ -106,7 +106,7 @@ const AttackPilotWorkbench = dynamic(() => import("@/components/attackpilot/work
   loading: () => <LoadingDots label="加载链上攻击复盘" />,
 });
 
-type ActiveView = "attackpilot" | "home" | "chat" | "news" | "coin" | "daily" | "portfolio" | "sim" | "reports" | "favoriteNews" | "favoriteReports" | "my" | "settings";
+type ActiveView = "attackpilot" | "home" | "chat" | "news" | "coin" | "daily" | "sim" | "reports" | "favoriteNews" | "favoriteReports" | "my" | "settings";
 type ChatRole = "user" | "assistant";
 
 type ChatMessage = {
@@ -169,17 +169,10 @@ type NewsTrendBucket = {
   timestamp: number;
 };
 type MyVaultTab = "overview" | "assets" | "news" | "reports" | "alerts" | "reviews";
-type UserAssetFormState = {
-  alertThreshold: string;
-  isHolding: boolean;
-  symbol: string;
-};
 type AccountCenterStats = {
   favoriteNews: number;
   favoriteReports: number;
-  highRiskAssets: number;
   loadingAssets: boolean;
-  pendingAlerts: number;
   watchedAssets: number;
 };
 
@@ -193,13 +186,8 @@ type AnalysisRecord = {
   dispositionNote?: string;
 };
 
-const PortfolioRiskRadar = dynamic(() => import("@/components/portfolio-risk-radar"), {
-  loading: () => <DeferredPanelLoader title="组合风险雷达加载中" />,
-  ssr: false,
-});
-
-const SimTradingPanel = dynamic(() => import("@/components/sim-trading-panel"), {
-  loading: () => <DeferredPanelLoader title="模拟交易面板加载中" />,
+const MarketTerminal = dynamic(() => import("@/components/market/market-terminal"), {
+  loading: () => <DeferredPanelLoader title="行情看盘加载中" />,
   ssr: false,
 });
 
@@ -248,7 +236,7 @@ const fallbackNews: NewsRankingItem[] = [
     risk_type: "交易所风险",
     published_at: "2026-04-20 10:28:00",
     coins: ["--"],
-    summary: "提现暂停叠加用户投诉，需关注资产流动性与运营稳定性。",
+    summary: "提现暂停叠加用户投诉，需关注币种流动性与运营稳定性。",
     evidence: "官方暂停提现公告、社群投诉增加、恢复时间不明确。",
   },
   {
@@ -368,8 +356,7 @@ const viewRoutes: Record<ActiveView, string> = {
   news: "/news",
   coin: "/coins",
   daily: "/daily",
-  portfolio: "/portfolio",
-  sim: "/sim",
+  sim: "/market",
   reports: "/reports",
   favoriteNews: "/favorites/news",
   favoriteReports: "/favorites/reports",
@@ -384,8 +371,8 @@ function resolveViewFromPathname(pathname: string | null, fallback: ActiveView):
   if (pathname.startsWith("/news")) return "news";
   if (pathname.startsWith("/coins")) return "coin";
   if (pathname.startsWith("/daily")) return "daily";
-  if (pathname.startsWith("/portfolio")) return "portfolio";
-  if (pathname.startsWith("/sim")) return "sim";
+  if (pathname.startsWith("/portfolio")) return "my";
+  if (pathname.startsWith("/sim") || pathname.startsWith("/market")) return "sim";
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/favorites/news")) return "favoriteNews";
   if (pathname.startsWith("/favorites/reports")) return "favoriteReports";
@@ -417,17 +404,11 @@ const activeAnalysisTaskStorageKey = "cryptorisk.activeAnalysisTask";
 const newsUpdateJobStorageKey = "cryptorisk.newsUpdateJobId";
 const authUsernameStorageKey = "cryptorisk.auth.username";
 const reportCreatedEventName = "cryptorisk:analysis-record-created";
-const userAssetsUpdatedEventName = "cryptorisk:user-assets-updated";
 const maxStoredAnalysisRecords = 80;
 const maxStoredChatMessages = 120;
 const maxRankingTableRows = 60;
 const newsRankingFetchLimit = 0;
 const storageWriteDelayMs = 250;
-const defaultUserAssetForm: UserAssetFormState = {
-  alertThreshold: "70",
-  isHolding: false,
-  symbol: "",
-};
 
 const initialChatProgressStage: ChatProgressStage = "input_standardization";
 const chatProgressLabels: Record<ChatProgressStage, string> = {
@@ -451,7 +432,7 @@ function readStoredAnalysisRecords() {
   if (typeof window === "undefined") return [];
 
   try {
-    const raw = window.localStorage.getItem(analysisRecordsStorageKey);
+    const raw = localStore.getItem(analysisRecordsStorageKey);
     const parsed = raw ? (JSON.parse(raw) as AnalysisRecord[]) : [];
     return Array.isArray(parsed) ? trimAnalysisRecords(parsed) : [];
   } catch {
@@ -463,16 +444,18 @@ function readStoredSelectedRecordId() {
   if (typeof window === "undefined") return "";
   const recordId = new URLSearchParams(window.location.search).get("record");
   if (recordId) return recordId;
-  return window.localStorage.getItem(selectedRecordStorageKey) || "";
+  return localStore.getItem(selectedRecordStorageKey) || "";
 }
 
 function readStoredChatMessages() {
   if (typeof window === "undefined") return initialChatMessages;
 
   try {
-    const raw = window.localStorage.getItem(chatMessagesStorageKey);
+    const raw = localStore.getItem(chatMessagesStorageKey);
     const parsed = raw ? JSON.parse(raw) : initialChatMessages;
-    return Array.isArray(parsed) ? trimChatMessages(parsed as ChatMessage[]) : initialChatMessages;
+    return Array.isArray(parsed) ? trimChatMessages(parsed.filter((item): item is ChatMessage =>
+      item && typeof item.id === "string" && typeof item.content === "string" && ["user", "assistant"].includes(item.role)
+    )) : initialChatMessages;
   } catch {
     return initialChatMessages;
   }
@@ -484,7 +467,9 @@ function trimChatMessages(messages: ChatMessage[]) {
 }
 
 function trimAnalysisRecords(records: AnalysisRecord[]) {
-  const normalized = records.map(normalizeAnalysisRecord);
+  const normalized = records.filter((record) => record && typeof record.id === "string"
+    && typeof record.createdAt === "string" && typeof record.title === "string" && typeof record.input === "string"
+    && record.report && typeof record.report.risk_score === "number").map(normalizeAnalysisRecord);
   if (normalized.length <= maxStoredAnalysisRecords) return normalized;
   return normalized
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -523,16 +508,16 @@ function buildCoinTableAIContext(item: CoinRankingItem) {
 
 function writeStoredChatMessages(messages: ChatMessage[]) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(chatMessagesStorageKey, JSON.stringify(trimChatMessages(messages)));
+  localStore.setItem(chatMessagesStorageKey, JSON.stringify(trimChatMessages(messages)));
 }
 
 function writeStoredAnalysisRecords(records: AnalysisRecord[]) {
   if (typeof window === "undefined") return;
   const trimmed = trimAnalysisRecords(records);
   if (trimmed.length) {
-    window.localStorage.setItem(analysisRecordsStorageKey, JSON.stringify(trimmed));
+    localStore.setItem(analysisRecordsStorageKey, JSON.stringify(trimmed));
   } else {
-    window.localStorage.removeItem(analysisRecordsStorageKey);
+    localStore.removeItem(analysisRecordsStorageKey);
   }
 }
 
@@ -567,7 +552,12 @@ function toAnalysisReportPayload(record: AnalysisRecord) {
 }
 
 function persistRemoteAnalysisReport(record: AnalysisRecord) {
-  return saveAnalysisReport(toAnalysisReportPayload(record)).catch(() => undefined);
+  if (getAccountScope() === "guest") return Promise.resolve();
+  return saveAnalysisReport(toAnalysisReportPayload(record)).catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    window.dispatchEvent(new CustomEvent("cryptorisk:report-sync-error"));
+    console.warn("报告已保存在本机，但云端同步失败", error);
+  });
 }
 
 function mapRemoteAnalysisReport(item: {
@@ -592,14 +582,14 @@ function mapRemoteAnalysisReport(item: {
 
 function readStoredAuthUsername() {
   if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(authUsernameStorageKey) || "";
+  return localStore.getItem(authUsernameStorageKey) || "";
 }
 
 function writeStoredAuthUsername(username: string) {
   if (typeof window === "undefined") return;
   const normalized = username.trim().toLowerCase();
   if (normalized) {
-    window.localStorage.setItem(authUsernameStorageKey, normalized);
+    localStore.setItem(authUsernameStorageKey, normalized);
   }
 }
 
@@ -626,20 +616,27 @@ function updateStoredChatMessage(messageId: string, updater: (message: ChatMessa
 function persistAnalysisTaskSnapshot(snapshot: AnalysisTaskSnapshot | null) {
   if (typeof window === "undefined") return;
   if (!snapshot || snapshot.status !== "running") {
-    window.sessionStorage.removeItem(activeAnalysisTaskStorageKey);
+    sessionStore.removeItem(activeAnalysisTaskStorageKey);
     return;
   }
-  window.sessionStorage.setItem(activeAnalysisTaskStorageKey, JSON.stringify(snapshot));
+  sessionStore.setItem(activeAnalysisTaskStorageKey, JSON.stringify(snapshot));
 }
 
 function clearStoredAnalysisTaskSnapshot() {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(activeAnalysisTaskStorageKey);
+  sessionStore.removeItem(activeAnalysisTaskStorageKey);
 }
 
 let activeAnalysisTask: AnalysisTaskSnapshot | null = null;
 let activeAnalysisPromise: Promise<void> | null = null;
 const analysisTaskListeners = new Set<(snapshot: AnalysisTaskSnapshot | null) => void>();
+if (typeof window !== "undefined") {
+  window.addEventListener(accountScopeEvent, () => {
+    activeAnalysisTask = null;
+    activeAnalysisPromise = null;
+    notifyAnalysisTaskListeners();
+  });
+}
 
 function notifyAnalysisTaskListeners() {
   analysisTaskListeners.forEach((listener) => listener(activeAnalysisTask));
@@ -658,6 +655,7 @@ function subscribeAnalysisTask(listener: (snapshot: AnalysisTaskSnapshot | null)
 }
 
 function startAnalysisTask(input: string) {
+  const signal = getAccountSignal();
   const trimmed = input.trim();
   if (!trimmed) return null;
   if (activeAnalysisTask?.status === "running" && activeAnalysisPromise) {
@@ -684,6 +682,7 @@ function startAnalysisTask(input: string) {
   activeAnalysisPromise = (async () => {
     try {
       const response = await streamChatMessage(trimmed, (event) => {
+        signal.throwIfAborted();
         activeAnalysisTask = {
           ...(activeAnalysisTask || snapshot),
           stage: event.stage,
@@ -692,6 +691,7 @@ function startAnalysisTask(input: string) {
         persistAnalysisTaskSnapshot(activeAnalysisTask);
         notifyAnalysisTaskListeners();
       });
+      signal.throwIfAborted();
       const record: AnalysisRecord = {
         id: `report-${Date.now()}`,
         title: buildReportTitle(trimmed, response.data),
@@ -704,7 +704,7 @@ function startAnalysisTask(input: string) {
       const nextRecords = [record, ...readStoredAnalysisRecords()];
       writeStoredAnalysisRecords(nextRecords);
       void persistRemoteAnalysisReport(record);
-      window.localStorage.setItem(selectedRecordStorageKey, record.id);
+      localStore.setItem(selectedRecordStorageKey, record.id);
       const followUpQuestion = extractEventAnalysisFollowUpQuestion(trimmed);
       const assistantMessageId = `assistant-${Date.now()}`;
       appendStoredChatMessages([{
@@ -725,6 +725,7 @@ function startAnalysisTask(input: string) {
       notifyAnalysisTaskListeners();
       if (followUpQuestion) {
         window.setTimeout(() => {
+          if (signal.aborted) return;
           void streamRiskAssistant(
             followUpQuestion,
             {
@@ -740,6 +741,7 @@ function startAnalysisTask(input: string) {
               },
             },
             (chunk) => {
+              signal.throwIfAborted();
               updateStoredChatMessage(assistantMessageId, (message) => ({
                 ...message,
                 content: message.content + chunk,
@@ -750,6 +752,7 @@ function startAnalysisTask(input: string) {
               userQuestion: followUpQuestion,
             },
           ).catch((assistantError) => {
+            if (signal.aborted) return;
             console.error(assistantError);
             updateStoredChatMessage(assistantMessageId, (message) => ({
               ...message,
@@ -759,6 +762,7 @@ function startAnalysisTask(input: string) {
         }, 0);
       }
     } catch (error) {
+      if (signal.aborted) return;
       console.error(error);
       activeAnalysisTask = {
         ...snapshot,
@@ -768,9 +772,11 @@ function startAnalysisTask(input: string) {
         updatedAt: new Date().toISOString(),
       };
     } finally {
-      activeAnalysisPromise = null;
-      clearStoredAnalysisTaskSnapshot();
-      notifyAnalysisTaskListeners();
+      if (!signal.aborted) {
+        activeAnalysisPromise = null;
+        clearStoredAnalysisTaskSnapshot();
+        notifyAnalysisTaskListeners();
+      }
     }
   })();
 
@@ -783,17 +789,17 @@ function isActiveNewsUpdateJob(job: NewsUpdateJob | null) {
 
 function readStoredNewsUpdateJobId() {
   if (typeof window === "undefined") return "";
-  return window.sessionStorage.getItem(newsUpdateJobStorageKey) || "";
+  return sessionStore.getItem(newsUpdateJobStorageKey) || "";
 }
 
 function storeNewsUpdateJobId(jobId: string) {
   if (typeof window === "undefined" || !jobId) return;
-  window.sessionStorage.setItem(newsUpdateJobStorageKey, jobId);
+  sessionStore.setItem(newsUpdateJobStorageKey, jobId);
 }
 
 function clearStoredNewsUpdateJobId() {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(newsUpdateJobStorageKey);
+  sessionStore.removeItem(newsUpdateJobStorageKey);
 }
 
 type InitialDashboardSnapshot = {
@@ -841,9 +847,6 @@ function shouldSyncReportsForView(view: ActiveView) {
   return view === "chat" || view === "reports" || view === "favoriteReports" || view === "my";
 }
 
-function shouldLoadAccountAssetsForView(view: ActiveView) {
-  return view === "daily" || view === "my";
-}
 
 function shouldReadChatHistoryForView(view: ActiveView) {
   return view === "chat";
@@ -883,6 +886,11 @@ function DeferredPanelLoader({ title }: { title: string }) {
 }
 
 export default function RiskDashboard({ initialView = "home" }: { initialView?: ActiveView }) {
+  const scope = useSyncExternalStore(subscribeAccountScope, getAccountScope, () => "guest");
+  return <RiskDashboardContent key={scope} initialView={initialView} />;
+}
+
+function RiskDashboardContent({ initialView = "home" }: { initialView?: ActiveView }) {
   const router = useRouter();
   const pathname = usePathname();
   const [currentSearch, setCurrentSearch] = useState(() => getWindowSearch());
@@ -893,6 +901,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [overview, setOverview] = useState<RiskOverview | null>(initialSnapshot.overview);
   const [newsRanking, setNewsRanking] = useState<NewsRankingItem[]>(initialSnapshot.newsRanking);
   const [coinRanking, setCoinRanking] = useState<CoinRankingItem[]>(initialSnapshot.coinRanking);
+  const dailyRequestRef = useRef(0);
+  const dailyGenerationPendingRef = useRef(false);
   const [dailyReport, setDailyReport] = useState<DailyRiskReport | null>(initialSnapshot.dailyReport);
   const [rankingDataStatus, setRankingDataStatus] = useState<RankingDataStatus>(initialRankingDataStatus);
   const [dailyReportFetching, setDailyReportFetching] = useState(false);
@@ -948,8 +958,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   const [favoriteReports, setFavoriteReports] = useState<FavoriteItem[]>([]);
   const [favoriteNews, setFavoriteNews] = useState<FavoriteItem[]>([]);
   const [favoriteActionLoadingId, setFavoriteActionLoadingId] = useState("");
-  const [accountAssets, setAccountAssets] = useState<PortfolioWatchlistItem[]>([]);
-  const [accountAssetsLoading, setAccountAssetsLoading] = useState(false);
+  const accountFollows = useFollows();
   const [reportSidebarCollapsed, setReportSidebarCollapsed] = useState(false);
   const reportSyncUserRef = useRef("");
   const [chatLoading, setChatLoading] = useState(() => getActiveAnalysisTaskSnapshot()?.status === "running");
@@ -991,15 +1000,15 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
         setCoinRanking(coinData?.items || overviewCoins);
         setRankingDataStatus({
           mode: "real",
-          updatedAt: overviewData.date || newsData?.date || coinData?.date || formatTimestamp(new Date()),
+          updatedAt: formatTimestamp(new Date()),
           newsSourceStatus: "connected",
-          agentStatus: "ready",
+          agentStatus: "unknown",
           message: "已连接后端风险排行榜，展示真实新闻标注结果",
         });
       } catch (error) {
         console.error(error);
         if (!ignore) {
-          setRankingError("排行数据暂未连接，当前展示本地演示数据。请确认 FastAPI 后端已启动。");
+          setRankingError("排行数据加载失败，当前为明确标注的演示样例，请检查网络后重试。");
           setNewsRanking(fallbackNews);
           setCoinRanking(fallbackCoins);
           setRankingDataStatus(demoRankingDataStatus);
@@ -1021,14 +1030,15 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     if (activeView !== "daily") return;
 
     async function loadSavedDailyReport() {
+      const requestId = ++dailyRequestRef.current;
       setDailyReportFetching(true);
       setDailyReportError("");
       try {
         const data = await fetchDailyRiskReport(rankingRange);
-        if (!ignore) setDailyReport(data);
+        if (!ignore && requestId === dailyRequestRef.current) setDailyReport(data);
       } catch (error) {
         console.error(error);
-        if (!ignore) setDailyReportError("已保存的资产日报读取失败，仍可重新生成。");
+        if (!ignore && requestId === dailyRequestRef.current) setDailyReportError("已保存的关注日报读取失败，仍可重新生成。");
       } finally {
         if (!ignore) setDailyReportFetching(false);
       }
@@ -1037,6 +1047,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     void loadSavedDailyReport();
     return () => {
       ignore = true;
+      dailyRequestRef.current += 1;
     };
   }, [activeView, authUser?.id, rankingRange]);
 
@@ -1066,7 +1077,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
   useEffect(() => {
     let ignore = false;
-    if (activeView !== "daily" && activeView !== "settings") return;
+    if ((activeView !== "daily" && activeView !== "settings") || !authUser?.id) return;
 
     const feishuStatus = new URLSearchParams(getWindowSearch()).get("feishu");
     const feishuStatusMessage = feishuStatus === "bound"
@@ -1152,6 +1163,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
         const user = await fetchCurrentUser();
         if (!ignore) setAuthUser(user);
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
         console.error(error);
         if (!ignore) setAuthUser(null);
       }
@@ -1230,7 +1242,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
         const remoteIds = new Set(remoteRecords.map((record) => record.id));
         await Promise.all(localRecords.filter((record) => !remoteIds.has(record.id)).map(persistRemoteAnalysisReport));
       } catch (error) {
-        console.error(error);
+        if (!ignore) window.dispatchEvent(new Event("cryptorisk:report-sync-error"));
+        console.warn("报告同步失败", error);
       }
     }
 
@@ -1240,40 +1253,11 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     };
   }, [activeView, authUser]);
 
-  useEffect(() => {
-    let ignore = false;
-    if (!authUser || !shouldLoadAccountAssetsForView(activeView)) {
-      return;
-    }
 
-    async function loadAccountAssets(showLoading = true) {
-      if (showLoading) setAccountAssetsLoading(true);
-      try {
-        const items = await fetchUserAssets();
-        if (!ignore) setAccountAssets(items);
-      } catch (error) {
-        console.error(error);
-        if (!ignore) setAccountAssets([]);
-      } finally {
-        if (!ignore) setAccountAssetsLoading(false);
-      }
-    }
-
-    function handleUserAssetsUpdated() {
-      void loadAccountAssets(false);
-    }
-
-    void loadAccountAssets();
-    window.addEventListener(userAssetsUpdatedEventName, handleUserAssetsUpdated);
-    return () => {
-      ignore = true;
-      window.removeEventListener(userAssetsUpdatedEventName, handleUserAssetsUpdated);
-    };
-  }, [activeView, authUser]);
 
   useEffect(() => {
     if (pathname !== "/reports" || !recordIdFromUrl) return;
-    window.localStorage.setItem(selectedRecordStorageKey, recordIdFromUrl);
+    localStore.setItem(selectedRecordStorageKey, recordIdFromUrl);
   }, [pathname, recordIdFromUrl]);
 
   useEffect(() => {
@@ -1286,7 +1270,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
   useEffect(() => {
     if (!storedSelectedRecordId) return;
-    window.localStorage.setItem(selectedRecordStorageKey, storedSelectedRecordId);
+    localStore.setItem(selectedRecordStorageKey, storedSelectedRecordId);
   }, [storedSelectedRecordId]);
 
   useEffect(() => {
@@ -1333,8 +1317,6 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
   const displayNews = newsRanking;
   const displayCoins = coinRanking;
-  const topNews = displayNews[0] || emptyNewsItem;
-  const topCoin = displayCoins[0] || emptyCoinItem;
   const reportRecords = analysisRecords;
   const selectedRecordId = recordIdFromUrl || storedSelectedRecordId;
   const selectedRecord = useMemo(
@@ -1342,19 +1324,17 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       || (!selectedRecordId ? reportRecords[0] || null : null),
     [reportRecords, selectedRecordId],
   );
+  useEffect(() => {
+    if (pathname.startsWith("/portfolio")) {
+      const query = new URLSearchParams(currentSearch);
+      router.replace(legacyPortfolioTarget(query.get("asset") || query.get("symbol")));
+    }
+  }, [pathname, currentSearch, router]);
   const selectedVaultTab = parseMyVaultTab(new URLSearchParams(currentSearch).get("tab"));
-  const accountStats = useMemo<AccountCenterStats>(() => {
-    const riskyAssets = accountAssets.filter((item) => item.risk_score >= 80 || ["high", "critical"].includes(item.risk_level));
-    const pendingAssets = accountAssets.filter((item) => item.risk_score >= item.alert_threshold || ["high", "critical"].includes(item.risk_level));
-    return {
-      favoriteNews: favoriteNews.length,
-      favoriteReports: favoriteReports.length,
-      highRiskAssets: riskyAssets.length,
-      loadingAssets: accountAssetsLoading || Boolean(authUser && !shouldLoadAccountAssetsForView(activeView) && accountAssets.length === 0),
-      pendingAlerts: pendingAssets.length,
-      watchedAssets: accountAssets.length,
-    };
-  }, [accountAssets, accountAssetsLoading, activeView, authUser, favoriteNews.length, favoriteReports.length]);
+  const accountStats: AccountCenterStats = {
+    favoriteNews: favoriteNews.length, favoriteReports: favoriteReports.length,
+    loadingAssets: accountFollows.loading, watchedAssets: accountFollows.items.length,
+  };
 
   useEffect(() => {
     const requestLogin = () => { setAuthError(""); setAuthModalOpen(true); };
@@ -1373,7 +1353,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
   function handleSelectRecord(id: string) {
     setStoredSelectedRecordId(id);
-    window.localStorage.setItem(selectedRecordStorageKey, id);
+    localStore.setItem(selectedRecordStorageKey, id);
   }
 
   function handleSelectReportRecord(id: string) {
@@ -1400,26 +1380,34 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }
 
   function handleDailyRangeChange(range: RankingRange) {
+    dailyRequestRef.current += 1;
     setDailyReport(null);
     setDailyReportError("");
     handleChangeRankingRange(range);
   }
 
   async function handleGenerateDailyReport() {
+    if (!authUser) { setAuthModalOpen(true); return; }
+    if (dailyGenerationPendingRef.current) return;
+    dailyGenerationPendingRef.current = true;
+    const requestId = ++dailyRequestRef.current;
     setDailyReportLoading(true);
     setDailyReportError("");
     try {
       const data = await generateDailyRiskReport(rankingRange);
-      setDailyReport(data);
+      if (requestId === dailyRequestRef.current) setDailyReport(data);
     } catch (error) {
       console.error(error);
-      setDailyReportError("资产日报生成失败，请稍后重试或检查后端 Agent 服务。");
+      if (requestId === dailyRequestRef.current) setDailyReportError(error instanceof Error ? error.message : "关注日报生成失败，请稍后重试。");
     } finally {
+      dailyGenerationPendingRef.current = false;
       setDailyReportLoading(false);
     }
   }
 
   async function handleToggleDailyReportSubscription(enabled: boolean) {
+    if (!authUser) { setAuthModalOpen(true); return; }
+    if (dailyReportSubscriptionLoading) return;
     setDailyReportSubscriptionLoading(true);
     setDailyReportError("");
     try {
@@ -1431,10 +1419,6 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     } finally {
       setDailyReportSubscriptionLoading(false);
     }
-  }
-
-  function handleStartFeishuBinding() {
-    window.location.href = "/api/feishu/oauth/start";
   }
 
   async function handleDeleteFeishuBinding() {
@@ -1472,14 +1456,14 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       setCoinRanking(coinData?.items || overviewCoins);
       setRankingDataStatus({
         mode: "real",
-        updatedAt: overviewData.date || newsData?.date || coinData?.date || formatTimestamp(new Date()),
+        updatedAt: formatTimestamp(new Date()),
         newsSourceStatus: "connected",
-        agentStatus: "ready",
-        message: "新闻更新后排行榜已刷新",
+        agentStatus: "unknown",
+        message: "排行榜数据已刷新",
       });
     } catch (error) {
       console.error(error);
-      setRankingError("新闻已更新，但排行榜刷新失败，请稍后重新打开排行榜。");
+      setRankingError("排行榜刷新失败，请检查网络后重试。");
     } finally {
       if (!silent) setRankingLoading(false);
     }
@@ -1491,6 +1475,10 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     try {
       const readiness = await fetchSystemReadiness();
       setSystemReadiness(readiness);
+      if (!authUser?.is_admin) {
+        setSystemStatusError(authUser ? "当前账号没有管理员权限；公开健康检查已显示。" : "管理员登录后可查看运行详情；公开健康检查已显示。");
+        return;
+      }
       const [auditResult, taskEventsResult, rateLimitResult, storageResult, backupResult, schedulerResult] = await Promise.allSettled([
         fetchAuditSummary(24),
         fetchSystemTaskEvents(12),
@@ -1529,7 +1517,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     } finally {
       setSystemStatusLoading(false);
     }
-  }, []);
+  }, [authUser]);
 
   const handlePruneAuditEvents = useCallback(async () => {
     setAuditPruneLoading(true);
@@ -1563,9 +1551,9 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     } catch (error) {
       console.error(error);
       if (error instanceof ApiRequestError && error.status === 401) {
-        setSystemStatusError("管理员登录后才能清理游客模拟账户。");
+        setSystemStatusError("管理员登录后才能清理历史游客模拟数据账户。");
       } else if (error instanceof ApiRequestError && error.status === 403) {
-        setSystemStatusError("当前账号没有管理员权限，无法清理游客模拟账户。");
+        setSystemStatusError("当前账号没有管理员权限，无法清理历史游客模拟数据账户。");
       } else {
         setSystemStatusError("游客模拟账户清理失败，请稍后重试。");
       }
@@ -1740,9 +1728,6 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
       setFavoriteNewsIds(new Set());
       setAnalysisRecords([]);
       setStoredSelectedRecordId("");
-      window.localStorage.removeItem(analysisRecordsStorageKey);
-      window.localStorage.removeItem(selectedRecordStorageKey);
-      window.localStorage.removeItem(chatMessagesStorageKey);
       setChatMessages(initialChatMessages);
       setAccountExportMessage(
         `账号数据已删除：报告 ${result.summary.analysis_reports_deleted}，收藏 ${result.summary.favorites_deleted}，资产 ${result.summary.portfolio_watchlist_deleted}，日报 ${result.summary.daily_reports_deleted}，模拟交易 ${result.summary.sim_accounts_deleted || 0}，审计事件 ${result.summary.audit_events_deleted || 0}。`
@@ -1762,6 +1747,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }, [accountDeleteLoading]);
 
   async function handleUpdateTodayNews() {
+    if (!authUser) { setAuthModalOpen(true); return; }
+    if (!authUser.is_admin) { setNewsUpdateError("公共新闻采集和评分更新仅限管理员操作。"); return; }
     if (newsUpdateLoading) return;
     setNewsUpdateLoading(true);
     setNewsUpdateError("");
@@ -1917,6 +1904,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
   }
 
   function handleClearChatHistory() {
+    if (!window.confirm("确定清除当前账户的聊天记录？已生成的报告会保留。")) return;
     setChatMessages(initialChatMessages);
     writeStoredChatMessages(initialChatMessages);
   }
@@ -2065,14 +2053,14 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
         writeStoredAnalysisRecords(nextRecords);
         const selectedStillExists = nextRecords.some((record) => record.id === selectedRecordId);
         const nextSelected = selectedStillExists ? selectedRecordId : nextRecords[0].id;
-        window.localStorage.setItem(selectedRecordStorageKey, nextSelected);
+        localStore.setItem(selectedRecordStorageKey, nextSelected);
         setStoredSelectedRecordId(nextSelected);
         if (activeView === "reports") {
           navigateTo(`/reports?record=${encodeURIComponent(nextSelected)}`, "replace");
         }
       } else {
-        window.localStorage.removeItem(analysisRecordsStorageKey);
-        window.localStorage.removeItem(selectedRecordStorageKey);
+        localStore.removeItem(analysisRecordsStorageKey);
+        localStore.removeItem(selectedRecordStorageKey);
         setStoredSelectedRecordId("");
         if (activeView === "reports") navigateTo("/reports", "replace");
       }
@@ -2086,8 +2074,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
     });
     setAnalysisRecords([]);
     setStoredSelectedRecordId("");
-    window.localStorage.removeItem(analysisRecordsStorageKey);
-    window.localStorage.removeItem(selectedRecordStorageKey);
+    localStore.removeItem(analysisRecordsStorageKey);
+    localStore.removeItem(selectedRecordStorageKey);
     if (activeView === "reports") navigateTo("/reports", "replace");
   }
 
@@ -2132,20 +2120,18 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
 
           <div className="px-3 py-4 sm:px-6 sm:py-5 2xl:px-8">
             <div className="min-w-0 space-y-5">
-              {shouldLoadRankingsForView(activeView) && rankingError && <Notice tone="amber" text={rankingError} />}
+              {shouldLoadRankingsForView(activeView) && rankingError && <div role="alert" className="space-y-2"><Notice tone="amber" text={rankingError} /><button type="button" disabled={rankingLoading} onClick={() => void refreshRankingsAfterUpdate()} className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50">重试加载</button></div>}
               {shouldLoadRankingsForView(activeView) && (
                 <RankingDataStatusBar status={rankingDataStatus} />
               )}
 
-              {activeView !== "attackpilot" && activeView !== "chat" && activeView !== "portfolio" && activeView !== "sim" && activeView !== "daily" && activeView !== "reports" && activeView !== "favoriteNews" && activeView !== "favoriteReports" && activeView !== "my" && activeView !== "settings" && (
+              {activeView !== "attackpilot" && activeView !== "chat" && activeView !== "sim" && activeView !== "daily" && activeView !== "reports" && activeView !== "favoriteNews" && activeView !== "favoriteReports" && activeView !== "my" && activeView !== "settings" && (
                 <MetricGrid
                   activeView={activeView}
                   coinItems={displayCoins}
                   loading={rankingLoading}
                   newsItems={displayNews}
                   overview={overview}
-                  topCoin={topCoin}
-                  topNews={topNews}
                 />
               )}
 
@@ -2206,8 +2192,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   loading={dailyReportLoading}
                   onChangeRange={handleDailyRangeChange}
                   onDeleteFeishuBinding={handleDeleteFeishuBinding}
+                  onBindFeishu={() => { if (authUser) return true; setAuthModalOpen(true); return false; }}
                   onGenerate={handleGenerateDailyReport}
-                  onStartFeishuBinding={handleStartFeishuBinding}
                   onToggleSubscription={handleToggleDailyReportSubscription}
                   range={rankingRange}
                   subscription={dailyReportSubscription}
@@ -2217,11 +2203,8 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
               {activeView === "attackpilot" && (
                 <AttackPilotWorkbench userId={authUser?.id || null} onLogin={() => { setAuthError(""); setAuthModalOpen(true); }} />
               )}
-              {activeView === "portfolio" && (
-                <PortfolioRiskRadar />
-              )}
               {activeView === "sim" && (
-                <SimTradingPanel key={authUser?.id || "guest"} embedded />
+                <MarketTerminal key={authUser?.id || "guest"} />
               )}
               {activeView === "reports" && (
                 <ReportsView
@@ -2265,7 +2248,7 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
               )}
               {activeView === "my" && (
                 <MyView
-                  key={selectedVaultTab}
+                  key={`${authUser?.id || "guest"}:${selectedVaultTab}`}
                   favoriteNews={favoriteNews}
                   favoriteReports={favoriteReports}
                   onChangeView={handleChangeView}
@@ -2301,7 +2284,6 @@ export default function RiskDashboard({ initialView = "home" }: { initialView?: 
                   onPruneInvalidJsonBackups={handlePruneInvalidJsonBackups}
                   onPruneRuntimeJobs={handlePruneRuntimeJobs}
                   onRunDailySchedulerNow={handleRunDailySchedulerNow}
-                  onStartFeishuBinding={handleStartFeishuBinding}
                   onToggleDailyScheduler={handleToggleDailyScheduler}
                   onRefreshSystemStatus={loadSystemStatus}
                   rateLimitStatus={rateLimitStatus}
@@ -2362,9 +2344,8 @@ function Sidebar({
     { key: "home", label: "首页总览", icon: <HomeIcon /> },
     { key: "chat", label: "事件风险分析", icon: <ChatIcon /> },
     { key: "reports", label: "分析报告", icon: <FileIcon /> },
-    { key: "portfolio", label: "我的风险资产", icon: <PortfolioIcon /> },
-    { key: "daily", label: "资产日报", icon: <BotIcon /> },
-    { key: "sim", label: "模拟交易盘", icon: <TradeIcon /> },
+    { key: "daily", label: "关注日报", icon: <BotIcon /> },
+    { key: "sim", label: "行情看盘", icon: <TradeIcon /> },
     { key: "attackpilot", label: "链上攻击复盘", icon: <ShieldIcon /> },
   ];
 
@@ -2437,8 +2418,8 @@ function Sidebar({
           <span className="h-2 w-2 rounded-full bg-emerald-500" />
           系统状态
         </div>
-        <p className="mt-2 text-xl font-bold text-emerald-600">运行中</p>
-        <p className="mt-1 text-xs text-slate-500">所有 Agent 正常运行</p>
+        <p className="mt-2 text-xl font-bold text-emerald-600">按需分析</p>
+        <p className="mt-1 text-xs text-slate-500">查看服务配置与运行检查</p>
       </div>
 
       <div className="px-6 pb-6 text-xs leading-6 text-slate-400">
@@ -2634,13 +2615,11 @@ function AccountCenterPopover({
   const userName = user.display_name || user.username;
   const email = user.email || "邮箱未绑定";
   const statsItems = [
-    ["关注资产", stats.loadingAssets ? "--" : String(stats.watchedAssets), "text-blue-700"],
-    ["高风险", stats.loadingAssets ? "--" : String(stats.highRiskAssets), "text-red-600"],
-    ["未处理预警", stats.loadingAssets ? "--" : String(stats.pendingAlerts), "text-orange-600"],
+    ["关注币种", stats.loadingAssets ? "--" : String(stats.watchedAssets), "text-blue-700"],
     ["收藏报告", String(stats.favoriteReports), "text-violet-700"],
   ] as const;
   const shortcuts = [
-    { badge: stats.loadingAssets ? "--" : String(stats.watchedAssets), icon: <PortfolioIcon />, label: "设置关注资产", path: "/my?tab=assets" },
+    { badge: stats.loadingAssets ? "--" : String(stats.watchedAssets), icon: <PortfolioIcon />, label: "设置关注币种", path: "/my?tab=assets" },
     { badge: String(stats.favoriteNews), icon: <ChartIcon />, label: "收藏新闻", path: "/favorites/news" },
     { badge: String(stats.favoriteReports), icon: <FileIcon />, label: "收藏报告", path: "/favorites/reports" },
   ];
@@ -2734,6 +2713,25 @@ function AuthModal({
   const [username, setUsername] = useState(() => readStoredAuthUsername());
   const [password, setPassword] = useState("");
   const passwordStrength = getPasswordStrength(password, username);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+    function keydown(event: KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
+      if (event.key !== "Tab") return;
+      const items = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"]') || []);
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+    document.addEventListener("keydown", keydown);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", keydown); previousFocus?.focus(); };
+  }, []);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2746,15 +2744,15 @@ function AuthModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-lg border border-blue-100 bg-white shadow-2xl shadow-slate-900/20">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 px-4 py-6" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title" className="max-h-[calc(100dvh-3rem)] w-full max-w-md overflow-y-auto rounded-lg border border-blue-100 bg-white shadow-xl">
         <div className="flex items-center justify-between gap-3 border-b border-blue-100 px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white">
               <UsersIcon />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-950">{mode === "login" ? "用户登录" : "注册账号"}</h2>
+              <h2 id="auth-dialog-title" className="text-lg font-bold text-slate-950">{mode === "login" ? "用户登录" : "注册账号"}</h2>
               <p className="text-xs font-semibold text-slate-500">CryptoRisk Agent</p>
             </div>
           </div>
@@ -2925,11 +2923,10 @@ function MobileNav({
     ["home", "总览"],
     ["chat", "对话"],
     ["reports", "报告"],
-    ["portfolio", "资产"],
     ["daily", "日报"],
     ["news", "新闻榜"],
     ["coin", "币种榜"],
-    ["sim", "模拟盘"],
+    ["sim", "看盘"],
     ["attackpilot", "攻击复盘"],
   ];
 
@@ -2959,26 +2956,22 @@ function MetricGrid({
   loading,
   newsItems,
   overview,
-  topCoin,
-  topNews,
 }: {
   activeView: ActiveView;
   coinItems: CoinRankingItem[];
   loading: boolean;
   newsItems: NewsRankingItem[];
   overview: RiskOverview | null;
-  topCoin: CoinRankingItem;
-  topNews: NewsRankingItem;
 }) {
   const deferredNewsItems = useDeferredValue(newsItems);
   const deferredCoinItems = useDeferredValue(coinItems);
   const metrics = useMemo(
-    () => getMetrics(activeView, overview, topNews, topCoin, loading, deferredNewsItems, deferredCoinItems),
-    [activeView, deferredCoinItems, deferredNewsItems, loading, overview, topCoin, topNews],
+    () => getMetrics(activeView, overview, loading, deferredNewsItems, deferredCoinItems),
+    [activeView, deferredCoinItems, deferredNewsItems, loading, overview],
   );
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-onboarding-id="home-metrics">
+    <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-onboarding-id="home-metrics">
       {metrics.map((metric) => (
         <MetricCard key={metric.label} {...metric} />
       ))}
@@ -3014,21 +3007,21 @@ function MetricCard({
   }[tone];
 
   return (
-    <article className="risk-card rounded-lg p-5">
+    <article className="risk-card min-w-0 rounded-lg p-3 sm:p-5">
       <div className="flex items-start justify-between gap-4">
-        <div className={`flex h-14 w-14 items-center justify-center rounded-full ${toneStyle}`}>{icon}</div>
-        <SparklineChart
+        <div className={`flex h-9 w-9 shrink-0 sm:h-12 sm:w-12 items-center justify-center rounded-full ${toneStyle}`}>{icon}</div>
+        {series && series.length > 1 && <SparklineChart
           ariaLabel={`${label}最近趋势`}
-          className="mt-7 h-9 w-24"
-          series={series || buildFallbackTrendSeries(clampScore(Number(value) || 0 || 40))}
+          className="hidden h-9 w-24 sm:block"
+          series={series}
           tone={tone}
-        />
+        />}
       </div>
       <div className="mt-3">
         <p className="text-sm font-semibold text-slate-600">{label}</p>
-        <p className={`mt-1 text-3xl font-bold ${toneStyle.split(" ")[1]}`}>{value}</p>
+        <p className={`mt-1 text-2xl sm:text-3xl font-bold ${toneStyle.split(" ")[1]}`}>{value}</p>
         <p className="mt-2 text-xs text-slate-500">
-          较昨日{" "}
+          样本分段变化{" "}
           <span className={`font-semibold ${deltaTextClass(deltaTone)}`}>{delta}</span>
           {deltaPercent && <span className={`ml-1 font-semibold ${deltaTextClass(deltaTone)}`}>{deltaPercent}</span>}
         </p>
@@ -3045,10 +3038,10 @@ function RankingDataStatusBar({ status }: { status: RankingDataStatus }) {
   const agentLabel = {
     ready: "Agent 标注正常",
     fallback: "Agent 兜底/离线",
-    unknown: "Agent 状态检测中",
+    unknown: "Agent 状态未验证",
   }[status.agentStatus];
   const sourceLabel = {
-    connected: "新闻源已连接",
+    connected: "排行榜接口已连接",
     fallback: "新闻源未连接",
     unknown: "新闻源检测中",
   }[status.newsSourceStatus];
@@ -3063,7 +3056,7 @@ function RankingDataStatusBar({ status }: { status: RankingDataStatus }) {
           <span className="text-sm font-bold">{status.message}</span>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-bold">
-          <span className="rounded-md bg-white/70 px-2.5 py-1">更新时间：{status.updatedAt || "--"}</span>
+          <span className="rounded-md bg-white/70 px-2.5 py-1">读取时间：{status.updatedAt || "--"}</span>
           <span className="rounded-md bg-white/70 px-2.5 py-1">{sourceLabel}</span>
           <span className="rounded-md bg-white/70 px-2.5 py-1">{agentLabel}</span>
         </div>
@@ -3153,7 +3146,7 @@ function CommandHero({
           </button>
           <div className="flex h-11 items-center gap-2 rounded-lg border border-blue-100 bg-slate-50 px-4 text-sm font-semibold text-slate-600">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            Agent 工作流在线
+            多智能体协同分析
           </div>
         </div>
       </div>
@@ -3364,10 +3357,12 @@ function ChatView({
               <form onSubmit={onSubmit} className="rounded-2xl border border-blue-100 bg-white p-3 shadow-xl shadow-blue-100/70" data-onboarding-id="chat-input">
                 <textarea
                   ref={textareaRef}
+                  aria-label="待分析的新闻或事件内容"
+                  maxLength={12000}
                   value={message}
                   onChange={(event) => onMessageChange(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
                       event.preventDefault();
                       event.currentTarget.form?.requestSubmit();
                     }
@@ -3426,7 +3421,7 @@ function AnalysisCardsPanel({
               key={record.id}
               href={`/reports?record=${encodeURIComponent(record.id)}`}
               onClick={() => {
-                window.localStorage.setItem(selectedRecordStorageKey, record.id);
+                localStore.setItem(selectedRecordStorageKey, record.id);
                 onSelectRecord(record.id);
               }}
               className="block rounded-lg border border-blue-100 bg-white p-3 shadow-sm transition-colors duration-200 hover:border-blue-300 hover:bg-blue-50"
@@ -3578,8 +3573,8 @@ function DailyReportView({
   loading,
   onChangeRange,
   onDeleteFeishuBinding,
+  onBindFeishu,
   onGenerate,
-  onStartFeishuBinding,
   onToggleSubscription,
   range,
   subscription,
@@ -3594,13 +3589,14 @@ function DailyReportView({
   loading: boolean;
   onChangeRange: (range: RankingRange) => void;
   onDeleteFeishuBinding: () => void;
+  onBindFeishu: () => boolean;
   onGenerate: () => void;
-  onStartFeishuBinding: () => void;
   onToggleSubscription: (enabled: boolean) => void;
   range: RankingRange;
   subscription: DailyReportSubscription | null;
   subscriptionLoading: boolean;
 }) {
+  const follows = useFollows();
   const report = useMemo(() => (agentReport ? buildDailyRiskReport(range, agentReport) : null), [agentReport, range]);
   const sourceLabel = report?.source === "llm" ? "LangGraph Agent 生成" : report ? "LangGraph 规则兜底" : loading ? "Agent 生成中" : fetching ? "读取已保存日报" : "等待生成";
   const busy = loading || fetching;
@@ -3610,6 +3606,11 @@ function DailyReportView({
   return (
     <section className="space-y-5">
       {error && <Notice tone="amber" text={error} />}
+      {follows.error && <Notice tone="amber" text={follows.error} />}
+      {agentReport && agentReport.report_kind !== "follows_v1" && <Notice tone="amber" text="历史版本：此日报按原资产规则生成，原始内容保留。重新生成后将仅分析当前关注币种。" />}
+      {agentReport?.report_kind === "follows_v1" && follows.loaded && follows.scope !== "guest" && agentReport.follows_revision !== follows.revision && <Notice tone="amber" text="关注列表或风险阈值已变更，当前日报生成于变更前。可重新生成，或等待下次定时更新。" />}
+      {follows.loaded && !follows.items.length && <Notice tone="amber" text="请先添加关注币种，再生成关注日报。" />}
+      <Link href="/my?tab=assets" className="inline-block text-sm font-semibold text-blue-700 underline">管理关注币种</Link>
       {feishuBindingMessage && (
         <p className={`rounded-lg border px-3 py-2 text-sm font-bold ${feishuBindingMessage.includes("失败") ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
           {feishuBindingMessage}
@@ -3623,22 +3624,22 @@ function DailyReportView({
                 {report?.alertLevel || "未生成"}
               </span>
               <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                {range === "24h" ? "近1天" : "近7天"}资产日报
+                {range === "24h" ? "近1天" : "近7天"}关注日报
               </span>
               <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                 {sourceLabel}
               </span>
             </div>
             <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
-              {report?.headline || "生成你的今日资产日报"}
+              {report?.headline || "生成你的今日关注日报"}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
               {report?.summary || "点击按钮后，系统会调用 LangGraph Agent，自动聚合今日新闻中与你已添加资产相关的风险信号，并按资产生成 BTC、ETH 等分项分析。"}
             </p>
             <p className="mt-3 text-xs font-semibold text-slate-400">
               {report
-                ? `生成日期：${report.createdAt || report.generationDate || "--"} · 数据基准：${report.generatedAt} · 关注资产 ${report.userAssetsCount} 个 · 命中资产 ${report.affectedAssets.length} 个 · 新闻样本 ${report.newsCount} 条`
-                : "只展示你在“我的风险资产”中添加的资产，不会混入全市场排行榜结果。"}
+                ? `生成日期：${report.createdAt || report.generationDate || "--"} · 数据基准：${report.generatedAt} · 关注币种 ${report.userAssetsCount} 个 · 命中资产 ${report.affectedAssets.length} 个 · 新闻样本 ${report.newsCount} 条`
+                : "只展示你在“我的关注”中添加的资产，不会混入全市场排行榜结果。"}
             </p>
             {report && (report.impactSummary || report.focusPoints.length > 0) && (
               <div className="mt-4 rounded-lg border border-blue-100 bg-slate-50 p-3">
@@ -3682,25 +3683,22 @@ function DailyReportView({
                 {feishuBindingLoading ? "处理中" : `解绑飞书${feishuBinding?.name ? `：${feishuBinding.name}` : ""}`}
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={onStartFeishuBinding}
-                disabled={feishuBindingLoading}
+              <a href="/api/feishu/oauth/start" onClick={event => { if (!onBindFeishu()) event.preventDefault(); }}
                 className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <LinkIcon />
                 {feishuBindingLoading ? "读取飞书状态" : "绑定飞书接收日报"}
-              </button>
+              </a>
             )}
             <RangeSegmentedControl range={range} onChangeRange={onChangeRange} />
             <button
               type="button"
               onClick={onGenerate}
-              disabled={busy}
+              disabled={busy || follows.loading || !follows.loaded || follows.items.length === 0}
               className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm shadow-blue-200 transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
               <span className={loading ? "animate-spin" : ""}>{loading ? <RefreshIcon /> : <BotIcon />}</span>
-              生成今日资产日报
+              生成今日关注日报
             </button>
           </div>
         </div>
@@ -3710,7 +3708,7 @@ function DailyReportView({
             <DailyMetricCard label="个人风险分" value={String(report.personalScore)} tone="blue" icon={<TrendIcon />} />
             <DailyMetricCard label="相关高风险事件" value={String(report.personalHighCount)} tone="red" icon={<AlertIcon />} />
             <DailyMetricCard label="资产分项报告" value={String(report.assetReports.length)} tone="purple" icon={<FileIcon />} />
-            <DailyMetricCard label="关注/持仓资产" value={`${report.userAssetsCount}/${report.holdingAssetsCount}`} tone="green" icon={<CoinIcon />} />
+            <DailyMetricCard label="关注币种" value={String(report.userAssetsCount)} tone="green" icon={<CoinIcon />} />
           </div>
         )}
       </div>
@@ -3721,7 +3719,7 @@ function DailyReportView({
             <AgentProgress
               activeStage="report_generation"
               icon={<BotIcon />}
-              title={loading ? "Agent 正在生成资产日报" : "正在读取已保存日报"}
+              title={loading ? "Agent 正在生成关注日报" : "正在读取已保存日报"}
               steps={loading ? ["读取用户资产", "匹配今日新闻", "聚合分资产风险", "保存日报"] : ["定位用户日报库", "读取最近生成记录", "恢复页面展示"]}
             />
           ) : (
@@ -3729,7 +3727,7 @@ function DailyReportView({
               <div>
                 <PanelTitle icon={<BotIcon />} title="按用户资产生成" />
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  日报会先读取你的关注/持仓资产，再从已有新闻风险数据中筛选直接相关事件，最后由 Agent 生成聚合分析。没有添加到资产库的币种不会出现在这里。
+                  日报会先读取你的关注币种，再从已有新闻风险数据中筛选直接相关事件，最后由 Agent 生成聚合分析。没有添加到资产库的币种不会出现在这里。
                 </p>
               </div>
               <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-4">
@@ -3750,14 +3748,14 @@ function DailyReportView({
           <section className="risk-card rounded-lg p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <PanelTitle icon={<FileIcon />} title="资产分项报告" />
-              <span className="text-xs font-semibold text-slate-500">只包含你已添加的关注/持仓资产</span>
+              <span className="text-xs font-semibold text-slate-500">只包含你已添加的关注币种</span>
             </div>
             <div className="mt-4 space-y-4">
               {report.assetReports.length ? report.assetReports.map((asset) => (
                 <DailyAssetReportCard key={asset.assetSymbol} asset={asset} />
               )) : (
                 <div className="rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-6 text-center text-sm font-semibold text-slate-500">
-                  {report.userAssetsCount === 0 ? "你还没有添加关注资产。请先到“我的风险资产”添加币种后再生成日报。" : "本期未生成资产分项报告"}
+                  {report.userAssetsCount === 0 ? "你还没有添加关注币种。请先到“我的关注”添加币种后再生成日报。" : "本期未生成资产分项报告"}
                 </div>
               )}
             </div>
@@ -3827,8 +3825,7 @@ function DailyReportView({
 
 function DailyAssetReportCard({ asset }: { asset: DailyAssetReport }) {
   const hasEvidence = asset.evidenceSummary.length > 0;
-  const holdingLabel = asset.isHolding ? "持仓" : "关注";
-  const priceTone = (asset.priceChange24h || 0) >= 0 ? "text-emerald-600" : "text-rose-600";
+  const holdingLabel = "关注";
 
   return (
     <article className="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
@@ -3838,7 +3835,7 @@ function DailyAssetReportCard({ asset }: { asset: DailyAssetReport }) {
             <CoinMark symbol={asset.assetName || asset.assetSymbol} />
             <div>
               <h2 className="text-base font-bold leading-6 text-slate-950">{asset.assetName || asset.assetSymbol}</h2>
-              <p className="text-xs font-semibold text-slate-500">{asset.assetSymbol} · {asset.exposureLabel || holdingLabel}</p>
+              <p className="text-xs font-semibold text-slate-500">{asset.assetSymbol} · {holdingLabel}</p>
             </div>
             <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{holdingLabel}</span>
             <span className="rounded-md bg-slate-50 px-2 py-1 text-xs font-bold text-slate-500">命中 {asset.sourceEventCount} 个聚合信号</span>
@@ -3882,12 +3879,9 @@ function DailyAssetReportCard({ asset }: { asset: DailyAssetReport }) {
           </div>
         </div>
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-          <p className="text-xs font-bold text-slate-500">资产状态</p>
-          <div className="mt-2 space-y-1 text-xs font-semibold leading-5 text-slate-600">
-            <p>市值：{asset.marketValue ? formatCurrency(asset.marketValue) : "--"}</p>
-            <p className={priceTone}>24h：{asset.priceChange24h !== undefined ? formatVaultPercent(asset.priceChange24h) : "--"}</p>
-            <p>暴露：{asset.exposureMode || "bucket"} / {asset.exposureBucket || "none"}</p>
-          </div>
+          <p className="text-xs font-bold text-slate-500">关注信息</p>
+          <p className="mt-2 text-xs leading-5 text-slate-600">查看相关新闻与风险阈值，持续跟踪关注币种的事件进展。</p>
+          <Link href="/my?tab=assets" className="mt-2 inline-block text-xs font-semibold text-blue-700">管理关注与风险阈值</Link>
         </div>
       </div>
 
@@ -4275,331 +4269,26 @@ function EmptyReportsView({ onChangeView }: { onChangeView: (view: ActiveView) =
   );
 }
 
-function MyView({
-  favoriteNews,
-  favoriteReports,
-  onChangeView,
-  onLoginClick,
-  selectedTab,
-  user,
-}: {
-  favoriteNews: FavoriteItem[];
-  favoriteReports: FavoriteItem[];
-  onChangeView: (view: ActiveView) => void;
-  onLoginClick: () => void;
-  selectedTab: MyVaultTab;
-  user: AuthUser | null;
+function MyView({ favoriteNews, favoriteReports, onChangeView, onLoginClick, selectedTab, user }: {
+  favoriteNews: FavoriteItem[]; favoriteReports: FavoriteItem[]; onChangeView: (view: ActiveView) => void;
+  onLoginClick: () => void; selectedTab: MyVaultTab; user: AuthUser | null;
 }) {
+  const follows = useFollows();
   const [activeTab, setActiveTab] = useState<MyVaultTab>(selectedTab);
-  const [watchlist, setWatchlist] = useState<PortfolioWatchlistItem[]>([]);
-  const [coinLibrary, setCoinLibrary] = useState<CoinLibraryItem[]>([]);
-  const [loadingAssets, setLoadingAssets] = useState(true);
-  const [loadingCoinLibrary, setLoadingCoinLibrary] = useState(true);
-  const [assetForm, setAssetForm] = useState<UserAssetFormState>(defaultUserAssetForm);
-  const [assetSaving, setAssetSaving] = useState(false);
-  const [assetActionError, setAssetActionError] = useState("");
-  const [assetActionMessage, setAssetActionMessage] = useState("");
-  const [alertDrafts, setAlertDrafts] = useState<Record<string, string>>({});
-  const [alertSavingSymbol, setAlertSavingSymbol] = useState("");
-  const [alertActionError, setAlertActionError] = useState("");
-  const [alertActionMessage, setAlertActionMessage] = useState("");
-  const highRiskAssets = watchlist.filter((item) => item.risk_score >= 80 || ["high", "critical"].includes(item.risk_level));
-  const pendingAlerts = watchlist.filter((item) => item.risk_score >= item.alert_threshold || ["high", "critical"].includes(item.risk_level));
-  const recentReports = favoriteReports.slice(0, 4);
-  const recentNews = favoriteNews.slice(0, 4);
-  const latestAssetUpdated = watchlist.map((item) => item.updated_at).filter(Boolean).sort().pop();
-  const lastUpdated = latestAssetUpdated || favoriteNews[0]?.created_at || favoriteReports[0]?.created_at || "--";
-  const selectedSymbols = new Set(watchlist.map((item) => item.symbol));
-  const availableCoins = coinLibrary.filter((coin) => !selectedSymbols.has(coin.symbol) || coin.symbol === assetForm.symbol);
-  const tabs: Array<[MyVaultTab, string]> = [
-    ["overview", "总览"],
-    ["assets", "关注资产"],
-    ["news", "收藏新闻"],
-    ["reports", "收藏报告"],
-    ["alerts", "预警规则"],
-    ["reviews", "风险复盘"],
-  ];
-
-  function changeTab(tab: MyVaultTab) {
-    setActiveTab(tab);
-  }
-
-  useEffect(() => {
-    let ignore = false;
-    async function loadWatchlist() {
-      setLoadingAssets(true);
-      setLoadingCoinLibrary(true);
-      try {
-        const [items, coins] = await Promise.all([
-          fetchUserAssets(),
-          fetchCoinLibrary(undefined, 200),
-        ]);
-        if (!ignore) {
-          setWatchlist(items);
-          setCoinLibrary(coins);
-        }
-      } catch (error) {
-        console.error(error);
-        if (!ignore) {
-          setWatchlist([]);
-          setCoinLibrary([]);
-        }
-      } finally {
-        if (!ignore) {
-          setLoadingAssets(false);
-          setLoadingCoinLibrary(false);
-        }
-      }
-    }
-    void loadWatchlist();
-    return () => {
-      ignore = true;
-    };
-  }, [user?.id]);
-
-  async function handleAddUserAsset(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const symbol = assetForm.symbol;
-    if (!symbol) {
-      setAssetActionError("请选择币种");
-      return;
-    }
-    setAssetSaving(true);
-    setAssetActionError("");
-    setAssetActionMessage("");
-    try {
-      await createUserAsset({
-        symbol,
-        is_watched: true,
-        is_holding: assetForm.isHolding,
-        exposure_mode: "bucket",
-        exposure_bucket: assetForm.isHolding ? "medium" : "none",
-        alert_threshold: parseVaultAlertThreshold(assetForm.alertThreshold),
-      });
-      const items = await fetchUserAssets();
-      setWatchlist(items);
-      setAssetForm(defaultUserAssetForm);
-      const coinName = coinLibrary.find((coin) => coin.symbol === symbol)?.name || symbol;
-      setAssetActionMessage(`${coinName} 已加入关注资产库，全站风险功能会使用同一份数据。`);
-      window.dispatchEvent(new CustomEvent(userAssetsUpdatedEventName, { detail: { symbol } }));
-    } catch (error) {
-      console.error(error);
-      setAssetActionError("添加关注资产失败，请检查代码后重试。");
-    } finally {
-      setAssetSaving(false);
-    }
-  }
-
-  async function handleSaveAlertThreshold(symbol: string) {
-    if (!symbol || alertSavingSymbol) return;
-    const item = watchlist.find((entry) => entry.symbol === symbol);
-    const threshold = parseVaultAlertThreshold(alertDrafts[symbol] ?? String(item?.alert_threshold ?? 70));
-    setAlertSavingSymbol(symbol);
-    setAlertActionError("");
-    setAlertActionMessage("");
-    try {
-      await updateUserAsset(symbol, { alert_threshold: threshold });
-      const items = await fetchUserAssets();
-      setWatchlist(items);
-      setAlertDrafts((drafts) => ({ ...drafts, [symbol]: String(threshold) }));
-      setAlertActionMessage(`${symbol} 预警线已更新为 ${threshold}`);
-      window.dispatchEvent(new CustomEvent(userAssetsUpdatedEventName, { detail: { symbol } }));
-    } catch (error) {
-      console.error(error);
-      setAlertActionError("预警线保存失败，请稍后重试。");
-    } finally {
-      setAlertSavingSymbol("");
-    }
-  }
-
-  if (selectedTab === "assets") {
-    return (
-      <section>
-        <VaultPanel title="我的关注资产">
-          <VaultAssetQuickAdd
-            coinOptions={availableCoins}
-            error={assetActionError}
-            form={assetForm}
-            loadingCoins={loadingCoinLibrary}
-            message={assetActionMessage}
-            onChange={setAssetForm}
-            onSubmit={handleAddUserAsset}
-            saving={assetSaving}
-          />
-          {!user && (
-            <button
-              type="button"
-              onClick={onLoginClick}
-              className="mb-3 inline-flex h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white transition-colors duration-200 hover:bg-blue-700"
-            >
-              <UserIcon />
-              登录后同步
-            </button>
-          )}
-          <VaultAssetTable items={watchlist} loading={loadingAssets} />
-        </VaultPanel>
-      </section>
-    );
-  }
-
-  return (
-    <section className="space-y-5">
-      <div className="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/60 sm:p-6" data-onboarding-id="risk-vault">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">My Risk Vault</p>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">我的风控档案库</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              沉淀全站共享的关注资产库、收藏新闻、分析报告、预警规则和复盘记录；账户资料继续放在系统设置里。
-            </p>
-          </div>
-          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-right">
-            <p className="text-xs font-bold text-blue-600">{user ? "当前用户" : "访客模式"}</p>
-            <p className="mt-1 max-w-[220px] truncate text-sm font-bold text-slate-950">{user?.display_name || user?.username || "未登录"}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">最近更新：{lastUpdated}</p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <VaultStatusCard label="关注资产" value={loadingAssets ? "--" : String(watchlist.length)} helper="用户资产库" tone="blue" />
-          <VaultStatusCard label="高风险资产" value={loadingAssets ? "--" : String(highRiskAssets.length)} helper="风险分 >= 80" tone="red" />
-          <VaultStatusCard label="收藏新闻" value={String(favoriteNews.length)} helper="风险情报收藏" tone="green" />
-          <VaultStatusCard label="收藏报告" value={String(favoriteReports.length)} helper="AI 分析档案" tone="purple" />
-          <VaultStatusCard label="未处理预警" value={loadingAssets ? "--" : String(pendingAlerts.length)} helper="达到提醒线" tone="orange" />
-        </div>
-
-        {!user && (
-          <button
-            type="button"
-            onClick={onLoginClick}
-            className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700"
-          >
-            <UserIcon />
-            登录后同步风控档案
-          </button>
-        )}
-      </div>
-
-      <section className="rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/60">
-        <div className="risk-scroll flex gap-1 overflow-x-auto border-b border-blue-100 px-4 pt-3">
-          {tabs.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => changeTab(key)}
-              className={`relative h-11 shrink-0 px-3 text-sm font-bold transition-colors duration-200 ${
-                activeTab === key ? "text-blue-700" : "text-slate-500 hover:text-blue-700"
-              }`}
-              aria-pressed={activeTab === key}
-            >
-              {label}
-              {activeTab === key && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-blue-600" />}
-            </button>
-          ))}
-        </div>
-
-        <div className="p-4 sm:p-5">
-          {activeTab === "overview" && (
-            <div className="grid gap-5 xl:grid-cols-2">
-              <VaultMiniList
-                actionLabel="去新闻收藏"
-                items={recentNews.map((item) => ({
-                  href: `/news/${encodeURIComponent(item.item_id)}`,
-                  meta: `${formatScoreReasonText(favoriteString(item, "risk_type", "综合风险"))} · ${favoriteString(item, "published_at", item.created_at)}`,
-                  score: favoriteNumber(item, "risk_score"),
-                  title: item.title,
-                }))}
-                onAction={() => onChangeView("favoriteNews")}
-                title="最近收藏新闻"
-              />
-              <VaultMiniList
-                actionLabel="去报告收藏"
-                items={recentReports.map((item) => {
-                  const report = favoriteRecord(item, "report");
-                  return {
-                    href: `/reports?record=${encodeURIComponent(item.item_id)}`,
-                    meta: `收藏时间：${item.created_at}`,
-                    score: typeof report?.risk_score === "number" ? clampScore(report.risk_score) : 0,
-                    title: item.title,
-                  };
-                })}
-                onAction={() => onChangeView("favoriteReports")}
-                title="最近保存报告"
-              />
-            </div>
-          )}
-
-          {activeTab === "assets" && (
-            <div className="space-y-4">
-              <VaultAssetQuickAdd
-                error={assetActionError}
-                coinOptions={availableCoins}
-                form={assetForm}
-                loadingCoins={loadingCoinLibrary}
-                message={assetActionMessage}
-                onChange={setAssetForm}
-                onSubmit={handleAddUserAsset}
-                saving={assetSaving}
-              />
-              <VaultAssetTable items={watchlist} loading={loadingAssets} />
-            </div>
-          )}
-
-          {activeTab === "news" && (
-            <VaultMiniList
-              actionLabel="进入收藏新闻页"
-              items={favoriteNews.map((item) => ({
-                href: `/news/${encodeURIComponent(item.item_id)}`,
-                meta: `${favoriteStringArray(item, "coins").join(", ") || "--"} · ${formatScoreReasonText(favoriteString(item, "risk_type", "综合风险"))}`,
-                score: favoriteNumber(item, "risk_score"),
-                title: item.title,
-              }))}
-              onAction={() => onChangeView("favoriteNews")}
-              title="收藏新闻"
-            />
-          )}
-
-          {activeTab === "reports" && (
-            <VaultMiniList
-              actionLabel="进入收藏报告页"
-              items={favoriteReports.map((item) => {
-                const report = favoriteRecord(item, "report");
-                return {
-                  href: `/reports?record=${encodeURIComponent(item.item_id)}`,
-                  meta: `生成/收藏时间：${item.created_at}`,
-                  score: typeof report?.risk_score === "number" ? clampScore(report.risk_score) : 0,
-                  title: item.title,
-                };
-              })}
-              onAction={() => onChangeView("favoriteReports")}
-              title="收藏报告"
-            />
-          )}
-
-          {activeTab === "alerts" && (
-            <VaultAlertRules
-              drafts={alertDrafts}
-              error={alertActionError}
-              items={watchlist}
-              loading={loadingAssets}
-              message={alertActionMessage}
-              onChangeThreshold={(symbol, value) => {
-                setAlertActionError("");
-                setAlertActionMessage("");
-                setAlertDrafts((drafts) => ({ ...drafts, [symbol]: value }));
-              }}
-              onSaveThreshold={handleSaveAlertThreshold}
-              savingSymbol={alertSavingSymbol}
-            />
-          )}
-
-          {activeTab === "reviews" && (
-            <VaultReviewList reports={favoriteReports} watchlist={watchlist} />
-          )}
-        </div>
-      </section>
-    </section>
-  );
+  const tabs: Array<[MyVaultTab, string]> = [["overview", "总览"], ["assets", "关注币种"], ["news", "收藏新闻"], ["reports", "收藏报告"], ["reviews", "风险复盘"]];
+  const newsList = <VaultMiniList title="收藏新闻" actionLabel="进入收藏新闻页" onAction={() => onChangeView("favoriteNews")} items={favoriteNews.map(item => ({ href: `/news/${encodeURIComponent(item.item_id)}`, meta: favoriteString(item, "published_at", item.created_at), score: favoriteNumber(item, "risk_score"), title: item.title }))}/>;
+  const reportList = <VaultMiniList title={activeTab === "reviews" ? "风险复盘 · 已保存分析" : "收藏报告"} actionLabel="进入收藏报告页" onAction={() => onChangeView("favoriteReports")} items={favoriteReports.map(item => { const report = favoriteRecord(item, "report"); return { href: `/reports?record=${encodeURIComponent(item.item_id)}`, meta: `保存时间：${item.created_at}`, score: typeof report?.risk_score === "number" ? clampScore(report.risk_score) : 0, title: item.title }; })}/>;
+  return <section className="space-y-5">
+    {activeTab === "overview" && <div className="risk-card rounded-lg p-5" data-onboarding-id="risk-vault"><h2 className="text-2xl font-bold">我的风控档案库</h2><p className="mt-2 text-sm text-slate-500">集中管理关注币种、收藏新闻与分析报告，保留风险复盘记录。</p>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3"><VaultStatusCard label="关注币种" value={follows.loading ? "—" : String(follows.items.length)} helper={user ? "账号关注" : "浏览器自选"} tone="blue"/><VaultStatusCard label="收藏新闻" value={String(favoriteNews.length)} helper="风险情报" tone="green"/><VaultStatusCard label="收藏报告" value={String(favoriteReports.length)} helper="历史分析" tone="purple"/></div>
+      {!user && <button onClick={onLoginClick} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white">登录后同步风控档案</button>}
+    </div>}
+    <div className="risk-card rounded-lg p-4"><div className="mb-5 flex gap-2 overflow-x-auto border-b border-blue-100 pb-3">{tabs.map(([key, label]) => <button className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold ${activeTab === key || activeTab === "alerts" && key === "assets" ? "bg-blue-50 text-blue-700" : "text-slate-500"}`} aria-pressed={activeTab === key} key={key} onClick={() => setActiveTab(key)}>{label}</button>)}</div>
+      {(activeTab === "assets" || activeTab === "alerts") && <FollowManager key={follows.scope} onLogin={onLoginClick}/>}
+      {activeTab === "overview" && <><div className="mb-4 flex gap-4 text-sm text-blue-700"><button onClick={() => setActiveTab("assets")}>管理关注币种</button><Link href="/daily">查看关注日报</Link></div><div className="grid gap-4 xl:grid-cols-2">{newsList}{reportList}</div></>}
+      {activeTab === "news" && newsList}{(activeTab === "reports" || activeTab === "reviews") && reportList}
+    </div>
+  </section>;
 }
 
 function VaultStatusCard({
@@ -4659,150 +4348,6 @@ function VaultPanel({
   );
 }
 
-function VaultAssetQuickAdd({
-  coinOptions,
-  compact = false,
-  error,
-  form,
-  loadingCoins,
-  message,
-  onChange,
-  onSubmit,
-  saving,
-}: {
-  coinOptions: CoinLibraryItem[];
-  compact?: boolean;
-  error: string;
-  form: UserAssetFormState;
-  loadingCoins: boolean;
-  message: string;
-  onChange: (form: UserAssetFormState) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  saving: boolean;
-}) {
-  const selectDisabled = loadingCoins || !coinOptions.length || saving;
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className={`mb-4 rounded-lg border border-blue-100 bg-blue-50/50 p-3 ${compact ? "" : "sm:p-4"}`}
-    >
-      <div className="grid gap-3 md:grid-cols-[minmax(160px,1fr)_120px_auto_auto]">
-        <label className="min-w-0">
-          <span className="text-xs font-bold text-slate-500">选择币种</span>
-          <select
-            value={form.symbol}
-            onChange={(event) => onChange({ ...form, symbol: event.target.value })}
-            disabled={selectDisabled}
-            className="mt-1 h-10 w-full cursor-pointer rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-slate-950 outline-none transition-colors duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-          >
-            <option value="">{loadingCoins ? "正在加载币种库" : coinOptions.length ? "从币种库选择" : "暂无可添加币种"}</option>
-            {coinOptions.map((coin) => (
-              <option key={coin.symbol} value={coin.symbol}>
-                {coin.name} · {coin.symbol} · {coin.category}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span className="text-xs font-bold text-slate-500">预警线</span>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={form.alertThreshold}
-            onChange={(event) => onChange({ ...form, alertThreshold: event.target.value })}
-            className="mt-1 h-10 w-full rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-slate-950 outline-none transition-colors duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-          />
-        </label>
-        <label className="flex h-10 items-center gap-2 self-end rounded-lg border border-blue-100 bg-white px-3 text-sm font-bold text-slate-600">
-          <input
-            type="checkbox"
-            checked={form.isHolding}
-            onChange={(event) => onChange({ ...form, isHolding: event.target.checked })}
-            className="h-4 w-4 rounded border-blue-200 text-blue-600"
-          />
-          持仓
-        </label>
-        <button
-          type="submit"
-          disabled={saving || !form.symbol}
-          className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 self-end rounded-lg bg-blue-600 px-4 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-        >
-          {saving ? <RefreshIcon /> : <PlusIcon />}
-          添加关注资产
-        </button>
-      </div>
-      {(error || message) && (
-        <p className={`mt-2 text-xs font-semibold ${error ? "text-red-600" : "text-emerald-700"}`}>
-          {error || message}
-        </p>
-      )}
-    </form>
-  );
-}
-
-function VaultAssetTable({
-  compact = false,
-  items,
-  loading,
-}: {
-  compact?: boolean;
-  items: PortfolioWatchlistItem[];
-  loading: boolean;
-}) {
-  if (loading) return <VaultEmpty text="正在加载关注资产" />;
-  if (!items.length) return <VaultEmpty text="暂无关注资产，可在上方添加币种" />;
-  return (
-    <div className="risk-scroll overflow-x-auto rounded-lg border border-blue-100">
-      <table className={`w-full text-left text-sm ${compact ? "min-w-[720px]" : "min-w-[980px]"}`}>
-        <thead className="border-b border-blue-100 bg-slate-50 text-xs font-bold text-slate-500">
-          <tr>
-            <th className="px-3 py-3">资产</th>
-            {!compact && <th className="px-3 py-3">当前价格</th>}
-            <th className="px-3 py-3 text-center">风险分</th>
-            <th className="px-3 py-3 text-center">风险等级</th>
-            <th className="px-3 py-3 text-center">今日预警</th>
-            <th className="px-3 py-3 text-center">24H</th>
-            <th className="px-3 py-3 text-center">操作</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-blue-50">
-          {items.map((item) => {
-            const alerting = item.risk_score >= item.alert_threshold || ["high", "critical"].includes(item.risk_level);
-            return (
-              <tr key={item.symbol} className="transition-colors duration-200 hover:bg-blue-50/50">
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-2">
-                    <CoinMark symbol={item.symbol} />
-                    <div>
-                      <p className="font-bold text-slate-950">{item.symbol}</p>
-                      <p className="text-xs font-semibold text-slate-500">{item.is_holding ? "持仓中" : "关注中"}</p>
-                    </div>
-                  </div>
-                </td>
-                {!compact && <td className="px-3 py-3 font-semibold tabular-nums text-slate-700">{formatCurrency(item.current_price)}</td>}
-                <td className={`px-3 py-3 text-center font-bold tabular-nums ${riskScoreTextStyle(item.risk_score, item.risk_level)}`}>{clampScore(item.risk_score)}</td>
-                <td className="px-3 py-3 text-center"><RiskBadge level={formatPortfolioVaultRiskLevel(item.risk_level)} /></td>
-                <td className="px-3 py-3 text-center font-bold text-orange-600">{alerting ? 1 : 0}</td>
-                <td className={`px-3 py-3 text-center font-bold ${item.price_change_24h >= 0 ? "text-emerald-600" : "text-red-600"}`}>{formatVaultPercent(item.price_change_24h)}</td>
-                <td className="px-3 py-3 text-center">
-                  <Link
-                    href={`/portfolio?asset=${encodeURIComponent(item.symbol)}`}
-                    className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-3 text-xs font-bold text-white transition-colors duration-200 hover:bg-blue-700"
-                  >
-                    查看雷达
-                  </Link>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function VaultMiniList({
   actionLabel,
   items,
@@ -4840,150 +4385,10 @@ function VaultMiniList({
   );
 }
 
-function VaultAlertRules({
-  drafts,
-  error,
-  items,
-  loading,
-  message,
-  onChangeThreshold,
-  onSaveThreshold,
-  savingSymbol,
-}: {
-  drafts: Record<string, string>;
-  error: string;
-  items: PortfolioWatchlistItem[];
-  loading: boolean;
-  message: string;
-  onChangeThreshold: (symbol: string, value: string) => void;
-  onSaveThreshold: (symbol: string) => void;
-  savingSymbol: string;
-}) {
-  if (loading) return <VaultEmpty text="正在加载预警规则" />;
-  if (!items.length) return <VaultEmpty text="暂无预警规则，添加关注资产后会生成默认风险分提醒线" />;
-  return (
-    <div className="space-y-3">
-      {items.map((item) => (
-        <form
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-white px-4 py-3"
-          key={item.symbol}
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSaveThreshold(item.symbol);
-          }}
-        >
-          <div>
-            <p className="font-bold text-slate-950">{item.symbol}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">当前 AI 风险分 {clampScore(item.risk_score)}，达到设置阈值时提醒</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex h-9 items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/50 px-3 text-xs font-bold text-slate-600">
-              预警线
-              <input
-                className="h-7 w-16 rounded-md border border-blue-100 bg-white px-2 text-sm font-bold text-slate-950 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                max={100}
-                min={0}
-                onChange={(event) => onChangeThreshold(item.symbol, event.target.value)}
-                type="number"
-                value={drafts[item.symbol] ?? String(item.alert_threshold ?? 70)}
-              />
-            </label>
-            <span className={`rounded-lg px-2 py-1 text-xs font-bold ${item.risk_score >= item.alert_threshold ? "bg-orange-50 text-orange-700" : "bg-emerald-50 text-emerald-700"}`}>
-              {item.risk_score >= item.alert_threshold ? "已触发" : "监控中"}
-            </span>
-            <button
-              className="h-9 rounded-lg border border-blue-100 bg-white px-3 text-xs font-bold text-blue-700 transition-colors duration-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={savingSymbol === item.symbol}
-              type="submit"
-            >
-              {savingSymbol === item.symbol ? "保存中" : "保存"}
-            </button>
-          </div>
-        </form>
-      ))}
-      {(error || message) && (
-        <p className={`text-xs font-semibold ${error ? "text-red-600" : "text-emerald-700"}`}>
-          {error || message}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function VaultReviewList({ reports, watchlist }: { reports: FavoriteItem[]; watchlist: PortfolioWatchlistItem[] }) {
-  if (!reports.length) return <VaultEmpty text="暂无风险复盘记录。收藏报告后，这里会展示当时风险分与当前风险分对比。" />;
-  return (
-    <div className="space-y-3">
-      {reports.slice(0, 8).map((favorite) => {
-        const report = favoriteRecord(favorite, "report");
-        const savedScore = typeof report?.risk_score === "number" ? clampScore(report.risk_score) : 0;
-        const symbol = inferAssetSymbolFromFavorite(favorite);
-        const currentScore = watchlist.find((item) => symbol && item.symbol.includes(symbol))?.risk_score;
-        const diff = typeof currentScore === "number" ? currentScore - savedScore : null;
-        return (
-          <Link
-            className="grid gap-3 rounded-lg border border-blue-100 bg-white p-4 transition-colors duration-200 hover:bg-blue-50 md:grid-cols-[minmax(0,1fr)_160px]"
-            href={`/reports?record=${encodeURIComponent(favorite.item_id)}`}
-            key={favorite.id}
-          >
-            <div className="min-w-0">
-              <p className="line-clamp-1 font-bold text-slate-950">{favorite.title}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">保存时风险分 {savedScore} · {favorite.created_at}</p>
-            </div>
-            <div className="text-sm font-bold text-slate-700">
-              当前：{typeof currentScore === "number" ? currentScore : "--"}
-              {diff !== null && <span className={diff <= 0 ? "ml-2 text-emerald-600" : "ml-2 text-red-600"}>{diff >= 0 ? "+" : ""}{diff}</span>}
-            </div>
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
 function VaultEmpty({ text }: { text: string }) {
   return <div className="rounded-lg border border-dashed border-blue-100 bg-blue-50/50 px-4 py-8 text-center text-sm font-semibold text-slate-500">{text}</div>;
 }
 
-function parseVaultAlertThreshold(value: string) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 70;
-  return Math.max(0, Math.min(100, Math.round(numeric)));
-}
-
-function formatPortfolioVaultRiskLevel(level: string) {
-  if (level === "critical") return "极高风险";
-  if (level === "high") return "高风险";
-  if (level === "medium") return "中风险";
-  return "低风险";
-}
-
-function formatCurrency(value: number) {
-  if (!Number.isFinite(value)) return "--";
-  return `${formatVaultNumber(value, value >= 100 ? 2 : 6)} USDT`;
-}
-
-function formatVaultNumber(value: number, digits = 2) {
-  if (!Number.isFinite(value)) return "--";
-  return value.toLocaleString("en-US", {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: value >= 100 ? 2 : 0,
-  });
-}
-
-function formatVaultPercent(value: number) {
-  if (!Number.isFinite(value)) return "--";
-  const normalized = Math.abs(value) > 1 ? value / 100 : value;
-  return `${normalized >= 0 ? "+" : ""}${(normalized * 100).toFixed(2)}%`;
-}
-
-function inferAssetSymbolFromFavorite(favorite: FavoriteItem) {
-  const coins = favoriteStringArray(favorite, "coins");
-  if (coins[0]) return coins[0].replace(/USDT$/, "");
-  const input = favoriteString(favorite, "input", favorite.title);
-  const match = input.match(/\b[A-Z]{2,12}USDT\b|\b(BTC|ETH|SOL|BNB|XRP|SUI|TON)\b/);
-  return match?.[0]?.replace(/USDT$/, "") || "";
-}
 
 function FavoriteNewsView({
   favorites,
@@ -5212,7 +4617,6 @@ function SettingsView({
   onPruneInvalidJsonBackups,
   onPruneRuntimeJobs,
   onRunDailySchedulerNow,
-  onStartFeishuBinding,
   onToggleDailyScheduler,
   onRefreshSystemStatus,
   onUpdateTodayNews,
@@ -5257,7 +4661,6 @@ function SettingsView({
   onPruneInvalidJsonBackups: () => void;
   onPruneRuntimeJobs: () => void;
   onRunDailySchedulerNow: () => void;
-  onStartFeishuBinding: () => void;
   onToggleDailyScheduler: (enabled: boolean) => void;
   onRefreshSystemStatus: () => void;
   onUpdateTodayNews: () => void;
@@ -5301,6 +4704,7 @@ function SettingsView({
   const backupInvalidTargetCount = backupManifest?.items.filter((item) => item.kind === "runtime_json_invalid_backup").length ?? 0;
 
   const loadAuthSessions = useCallback(async () => {
+    if (getAccountScope() === "guest") { setSessionsError("登录后可查看登录会话和账号安全记录。"); return; }
     setSessionsLoading(true);
     setSessionsError("");
     try {
@@ -5570,9 +4974,9 @@ function SettingsView({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600">Daily Scheduler</p>
-              <h3 className="mt-1 text-lg font-bold text-slate-950">每日新闻与资产日报定时任务</h3>
+              <h3 className="mt-1 text-lg font-bold text-slate-950">每日新闻与关注日报定时任务</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                每天 {schedulerTime} 自动更新新闻，并只为已订阅用户生成近 1 天资产日报。
+                每天 {schedulerTime} 自动更新新闻，并只为已订阅用户生成近 1 天关注日报。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -5668,7 +5072,7 @@ function SettingsView({
                 className="inline-flex h-10 items-center gap-2 rounded-lg border border-cyan-200 bg-cyan-50 px-3 text-sm font-bold text-cyan-800 transition-colors duration-200 hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <TrashIcon />
-                {simPruneLoading ? "清理中" : "清理游客模拟"}
+                {simPruneLoading ? "清理中" : "清理历史游客模拟数据"}
               </button>
               <button
                 type="button"
@@ -5972,7 +5376,7 @@ function SettingsView({
                 飞书账号绑定
               </h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                绑定后，每日 08:00 资产日报会发送到当前账号自己的飞书。
+                绑定后，每日 08:00 关注日报会发送到当前账号自己的飞书。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -5995,15 +5399,12 @@ function SettingsView({
                   {feishuBindingLoading ? "处理中" : "解绑飞书"}
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={onStartFeishuBinding}
-                  disabled={feishuBindingLoading}
+                <a href="/api/feishu/oauth/start"
                   className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-bold text-white transition-colors duration-200 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <LinkIcon />
                   {feishuBindingLoading ? "读取状态" : "绑定飞书"}
-                </button>
+                </a>
               )}
             </div>
           </div>
@@ -6028,7 +5429,7 @@ function SettingsView({
                 删除账号数据
               </h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                删除会清除账号、登录会话、收藏、分析报告、资产 watchlist、日报和模拟交易状态。请输入当前密码并确认 DELETE。
+                删除会清除账号、登录会话、收藏、分析报告、资产 watchlist、日报和历史模拟交易状态。请输入当前密码并确认 DELETE。
               </p>
             </div>
             <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[minmax(160px,1fr)_150px_auto]">
@@ -6453,7 +5854,7 @@ function formatDatastoreName(name: string) {
     analysis_reports: "分析报告",
     portfolio: "资产 Watchlist",
     task_audit: "任务审计",
-    daily_reports: "资产日报",
+    daily_reports: "关注日报",
     invalid_json_backups: "损坏 JSON 备份",
     sim_accounts: "模拟账户状态",
   };
@@ -8181,6 +7582,7 @@ function SparklineChart({
   series: TrendPoint[];
   tone: MetricTone;
 }) {
+  if (!series.length) return <span className="text-xs text-slate-500">暂无趋势</span>;
   const color = getToneColor(tone);
   const width = 96;
   const height = 36;
@@ -8212,7 +7614,7 @@ function MultiLineTrendChart({
   const padding = 18;
   const allValues = seriesSets.flatMap((set) => set.points.map((point) => point.value));
   const domain = getValueDomain(allValues, undefined);
-  const lineSets = seriesSets.map((set) => {
+  const lineSets = seriesSets.filter((set) => set.points.length).map((set) => {
     const normalized = normalizeTrendSeries(set.points);
     return {
       ...set,
@@ -8233,6 +7635,7 @@ function MultiLineTrendChart({
 
   return (
     <div className={`relative rounded-lg bg-slate-50 p-3 ${className || ""}`}>
+      {!lineSets.length && <p className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">暂无可核验的历史趋势</p>}
       <svg
         ref={svgRef}
         className="h-full w-full"
@@ -8292,13 +7695,12 @@ function getPageMeta(view: ActiveView) {
     chat: ["事件风险分析", "面向新闻 / 公告 / 链上事件的多智能体风险研判"],
     news: ["新闻风险榜", "基于新闻文本与风险规则的实时风险排行"],
     coin: ["币种风险榜", "基于新闻、公告与链上事件聚合的币种风险排行"],
-    daily: ["资产日报", "自动聚合并分析与你关注资产相关的今日风险"],
-    portfolio: ["我的风险资产", "Portfolio Risk Radar 个性化资产风险监控"],
-    sim: ["模拟交易盘", "基于最近 7 天 15 分钟 K 线的现货模拟回放"],
+    daily: ["关注日报", "自动聚合并分析与你关注币种相关的今日风险"],
+    sim: ["行情看盘", "公开现货行情、多周期图表与市场深度"],
     reports: ["分析报告", "查看、管理与导出风险分析结果报告"],
     favoriteNews: ["收藏新闻", "个人风险情报收藏库"],
     favoriteReports: ["收藏报告", "已收藏的 Agent 风控研判档案"],
-    my: ["我的风控档案库", "关注资产与近期预警待处理事项"],
+    my: ["我的风控档案库", "关注币种、收藏与历史分析"],
     settings: ["系统设置", "Agent 运行状态与新闻更新"],
   } satisfies Record<ActiveView, [string, string]>;
 
@@ -8382,9 +7784,9 @@ function buildHomePriorities(newsItems: NewsRankingItem[], coinItems: CoinRankin
       title: highRiskCount ? `处理 ${highRiskCount} 条高风险事件` : "建立个人资产监控",
       detail: highRiskCount
         ? "优先把红色预警与高风险新闻转为报告并记录处置状态。"
-        : "添加关注资产后，日报和资产雷达会给出个性化命中。",
-      action: highRiskCount ? "进入事件分析" : "进入我的风险资产",
-      view: highRiskCount ? "chat" as ActiveView : "portfolio" as ActiveView,
+        : "添加关注币种后，关注日报会给出个性化命中。",
+      action: highRiskCount ? "进入事件分析" : "进入行情看盘",
+      view: highRiskCount ? "chat" as ActiveView : "sim" as ActiveView,
       tone: "blue" as const,
     },
   ];
@@ -8486,7 +7888,7 @@ function buildCoinTrendSeries(item: CoinRankingItem, range: RankingRange): Trend
   });
 
   if (!related.length || totals.every((value) => value === 0)) {
-    return buildFallbackTrendSeries(clampScore(item.final_score), range);
+    return [];
   }
 
   let previous = clampScore(item.final_score);
@@ -8499,22 +7901,6 @@ function buildCoinTrendSeries(item: CoinRankingItem, range: RankingRange): Trend
       value,
       timestamp,
       meta: { 相关新闻: totals[index] },
-    };
-  });
-}
-
-function buildFallbackTrendSeries(score: number, range: RankingRange = "7d"): TrendPoint[] {
-  const count = range === "24h" ? 12 : 7;
-  const stepMs = range === "24h" ? 2 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-  const end = Date.now();
-  const safeScore = clampScore(score || 40);
-  return Array.from({ length: count }, (_, index) => {
-    const offset = Math.round(Math.sin((index + 1) * 1.4) * 5 + (index - count + 1) * 0.8);
-    const timestamp = end - (count - index - 1) * stepMs;
-    return {
-      label: formatTrendLabel(timestamp, range),
-      value: clampScore(safeScore + offset),
-      timestamp,
     };
   });
 }
@@ -8539,7 +7925,8 @@ function buildCoinAggregateTrendSeries(
   metric: "avg_score" | "high_count" | "news_count"
 ): TrendPoint[] {
   if (!items.length) return buildFlatTrendSeries(0, range);
-  const perCoin = items.map((item) => buildCoinTrendSeries(item, range));
+  const perCoin = items.map((item) => buildCoinTrendSeries(item, range)).filter((series) => series.length);
+  if (!perCoin.length) return [];
   const length = perCoin[0]?.length || (range === "24h" ? 12 : 7);
   return Array.from({ length }, (_, index) => {
     const points = perCoin.map((series) => series[index]).filter(Boolean);
@@ -8562,6 +7949,7 @@ function buildCoinAggregateTrendSeries(
 }
 
 function getMetricDelta(series: TrendPoint[]) {
+  if (series.length < 2) return { delta: "暂无对比数据", deltaPercent: "", deltaTone: "neutral" as const };
   const normalized = normalizeTrendSeries(series);
   const latest = normalized[normalized.length - 1]?.value || 0;
   const previous = normalized[normalized.length - 2]?.value || 0;
@@ -8644,7 +8032,7 @@ function normalizeTrendSeries(series: TrendPoint[]) {
       series[0],
     ];
   }
-  return buildFallbackTrendSeries(40);
+  return [];
 }
 
 function getChartPoints(
@@ -8744,7 +8132,7 @@ function buildDailyRiskReport(range: RankingRange, agentReport: DailyRiskReport)
     generatedAt: agentReport.generated_at || getDailyGeneratedAt([], range),
     createdAt: agentReport.created_at || agentReport.saved_at || "",
     generationDate: agentReport.generation_date || "",
-    headline: agentReport.headline || "资产日报",
+    headline: agentReport.headline || "关注日报",
     highCount: agentReport.high_count || 0,
     personalHighCount: agentReport.personal_high_count || 0,
     riskThemes: mapAgentDailyThemes(agentReport.risk_themes || []),
@@ -8805,7 +8193,7 @@ function mapAgentDailyAssetReports(items: DailyRiskReport["asset_reports"]): Dai
     assetSymbol: item.asset_symbol,
     assetName: item.asset_name || item.asset_symbol,
     isHolding: Boolean(item.is_holding),
-    exposureLabel: item.exposure_label || (item.is_holding ? "持仓资产" : "关注资产"),
+    exposureLabel: item.exposure_label || (item.is_holding ? "关注币种" : "关注币种"),
     exposureMode: item.exposure_mode,
     exposureBucket: item.exposure_bucket,
     marketValue: item.market_value,
@@ -8902,7 +8290,7 @@ function readRankingFilter<T extends string>(
   const value = new URLSearchParams(window.location.search).get(key);
   if (value && isValid(value)) return value;
 
-  const storedValue = window.sessionStorage.getItem(rankingStateKey(scope, key));
+  const storedValue = sessionStore.getItem(rankingStateKey(scope, key));
   return storedValue && isValid(storedValue) ? storedValue : fallback;
 }
 
@@ -8911,10 +8299,10 @@ function readRankingRange(): RankingRange {
   const value = new URLSearchParams(window.location.search).get("range");
   if (value && isRankingRange(value)) return value;
 
-  const storedNewsRange = window.sessionStorage.getItem(rankingStateKey("news", "range"));
+  const storedNewsRange = sessionStore.getItem(rankingStateKey("news", "range"));
   if (storedNewsRange && isRankingRange(storedNewsRange)) return storedNewsRange;
 
-  const storedCoinRange = window.sessionStorage.getItem(rankingStateKey("coin", "range"));
+  const storedCoinRange = sessionStore.getItem(rankingStateKey("coin", "range"));
   return storedCoinRange && isRankingRange(storedCoinRange) ? storedCoinRange : "24h";
 }
 
@@ -8923,7 +8311,7 @@ function syncRankingUrl(scope: "news" | "coin", params: Record<string, string>) 
   const searchParams = new URLSearchParams(window.location.search);
   Object.entries(params).forEach(([key, value]) => {
     searchParams.set(key, value);
-    window.sessionStorage.setItem(rankingStateKey(scope, key), value);
+    sessionStore.setItem(rankingStateKey(scope, key), value);
   });
   const search = searchParams.toString();
   const nextUrl = `${window.location.pathname}${search ? `?${search}` : ""}`;
@@ -8937,7 +8325,7 @@ function rankingStateKey(scope: "news" | "coin", key: string) {
 function withReturnTo(path: string) {
   if (typeof window === "undefined") return path;
   const returnTo = `${window.location.pathname}${window.location.search}`;
-  window.sessionStorage.setItem(scrollStorageKey(returnTo), String(window.scrollY));
+  sessionStore.setItem(scrollStorageKey(returnTo), String(window.scrollY));
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}returnTo=${encodeURIComponent(returnTo)}`;
 }
@@ -8945,9 +8333,9 @@ function withReturnTo(path: string) {
 function restoreRankingScroll() {
   if (typeof window === "undefined") return;
   const key = scrollStorageKey(`${window.location.pathname}${window.location.search}`);
-  const value = window.sessionStorage.getItem(key);
+  const value = sessionStore.getItem(key);
   if (!value) return;
-  window.sessionStorage.removeItem(key);
+  sessionStore.removeItem(key);
   const top = Number(value);
   if (Number.isNaN(top)) return;
   window.setTimeout(() => {
@@ -9186,8 +8574,6 @@ function formatLowRiskGateBrief(gate: Record<string, unknown>) {
 function getMetrics(
   view: ActiveView,
   overview: RiskOverview | null,
-  topNews: NewsRankingItem,
-  topCoin: CoinRankingItem,
   loading: boolean,
   newsItems: NewsRankingItem[],
   coinItems: CoinRankingItem[]
@@ -9195,31 +8581,13 @@ function getMetrics(
   const distribution = getNewsDistribution(newsItems);
   const averageRiskScore = getAverageRiskScore(newsItems);
   const redAlertCount = getRedAlertCount(newsItems);
-  const newsTotal = newsItems.length || overview?.total_news || 0;
+  const newsTotal = overview?.total_news ?? newsItems.length;
   const newsBuckets = buildNewsTrendBuckets(newsItems, "7d");
   const newsTotalSeries = newsBuckets.map((bucket) => ({ label: bucket.label, value: bucket.newsCount, timestamp: bucket.timestamp }));
   const highNewsSeries = newsBuckets.map((bucket) => ({ label: bucket.label, value: bucket.highCount, timestamp: bucket.timestamp }));
   const averageNewsSeries = newsBuckets.map((bucket) => ({ label: bucket.label, value: bucket.avgScore, timestamp: bucket.timestamp }));
   const redAlertSeries = newsBuckets.map((bucket) => ({ label: bucket.label, value: bucket.redCount, timestamp: bucket.timestamp }));
   const metricDelta = (series: TrendPoint[]) => getMetricDelta(series);
-
-  if (view === "chat") {
-    return [
-      { label: "今日事件分析", value: "126", delta: "↑ 18.7%", tone: "purple" as const, icon: <ChatIcon /> },
-      { label: "高风险事件", value: "28", delta: "↑ 21.2%", tone: "orange" as const, icon: <AlertIcon /> },
-      { label: "平均分析时长", value: "2.4s", delta: "↓ 8.6%", tone: "blue" as const, icon: <ClockIcon /> },
-      { label: "建议覆盖率", value: "96%", delta: "↑ 3.2%", tone: "green" as const, icon: <SmileIcon /> },
-    ];
-  }
-
-  if (view === "reports") {
-    return [
-      { label: "累计报告数", value: "1,286", delta: "↑ 8.6%", tone: "blue" as const, icon: <FileIcon /> },
-      { label: "今日新增报告", value: "36", delta: "↑ 16.2%", tone: "green" as const, icon: <PlusIcon /> },
-      { label: "高风险报告", value: "12", delta: "↑ 9.1%", tone: "red" as const, icon: <AlertIcon /> },
-      { label: "自动生成成功率", value: "98%", delta: "↑ 2.3%", tone: "purple" as const, icon: <CheckIcon /> },
-    ];
-  }
 
   if (view === "coin") {
     const coinDistribution = getCoinDistribution(coinItems);
@@ -9247,10 +8615,10 @@ function getMetrics(
   }
 
   return [
-    { label: "今日高风险新闻", value: loading ? "--" : String(distribution.high || overview?.high_risk_news || (topNews.risk_score > 80 ? 1 : 0)), tone: "red" as const, icon: <FileIcon />, series: highNewsSeries, ...metricDelta(highNewsSeries) },
-    { label: "红色预警事件", value: loading ? "--" : String(redAlertCount), tone: "orange" as const, icon: <ShieldIcon />, series: redAlertSeries, ...metricDelta(redAlertSeries) },
-    { label: "平均风险分", value: loading ? "--" : String(averageRiskScore), tone: "blue" as const, icon: <TrendIcon />, series: averageNewsSeries, ...metricDelta(averageNewsSeries) },
-    { label: "实时监测状态", value: "运行中", delta: "所有 Agent 正常", tone: "green" as const, icon: <SmileIcon /> },
+    { label: "今日高风险新闻", value: loading ? "--" : String(overview?.high_risk_news ?? distribution.high), tone: "red" as const, icon: <FileIcon />, series: highNewsSeries, ...metricDelta(highNewsSeries) },
+    { label: "预览红色预警", value: loading ? "--" : String(redAlertCount), tone: "orange" as const, icon: <ShieldIcon />, series: redAlertSeries, ...metricDelta(redAlertSeries) },
+    { label: "预览平均风险分", value: loading ? "--" : String(averageRiskScore), tone: "blue" as const, icon: <TrendIcon />, series: averageNewsSeries, ...metricDelta(averageNewsSeries) },
+    { label: "监测新闻总数", value: loading ? "--" : String(newsTotal), tone: "green" as const, icon: <FileIcon />, series: newsTotalSeries, ...metricDelta(newsTotalSeries) },
   ];
 }
 
@@ -9302,7 +8670,6 @@ function KeyIcon() { return <IconSvg><circle cx="7.5" cy="14.5" r="3.5" /><path 
 function ShieldIcon() { return <IconSvg><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z" /><path d="m9 12 2 2 4-5" /></IconSvg>; }
 function AlertIcon() { return <IconSvg><path d="m12 3 10 18H2z" /><path d="M12 9v5" /><path d="M12 18h.01" /></IconSvg>; }
 function ClockIcon() { return <IconSvg><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></IconSvg>; }
-function SmileIcon() { return <IconSvg><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01" /><path d="M15 9h.01" /></IconSvg>; }
 function TrendIcon() { return <IconSvg><path d="m4 16 5-5 4 4 7-8" /><path d="M14 7h6v6" /></IconSvg>; }
 function SendIcon() { return <IconSvg><path d="M22 2 11 13" /><path d="m22 2-7 20-4-9-9-4z" /></IconSvg>; }
 function BotIcon() { return <IconSvg><rect x="5" y="8" width="14" height="11" rx="4" /><path d="M12 4v4" /><path d="M9 13h.01" /><path d="M15 13h.01" /><path d="M10 17h4" /></IconSvg>; }

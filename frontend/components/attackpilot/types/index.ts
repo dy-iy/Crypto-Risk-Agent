@@ -292,7 +292,7 @@ export interface MacroAnalysisResponse {
   transaction_to_property: Record<string, unknown>;
 }
 
-export type ConsistencyStatus = "pass" | "warning" | "risk";
+export type ConsistencyStatus = "pass" | "warning" | "risk" | "unavailable";
 
 export interface AgentSignalSummary {
   agent: string;
@@ -323,7 +323,7 @@ export interface AutomatedReviewResponse {
   generated_at: string;
   review_type: string;
   status: ConsistencyStatus;
-  score: number;
+  score: number | null;
   checks: ConsistencyCheck[];
   agent_signals: AgentSignalSummary[];
   shared_transactions: Array<{ value: string; agents: string[] }>;

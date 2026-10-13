@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import math
+from contextlib import contextmanager
+from copy import deepcopy
 import random
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -394,7 +396,7 @@ class SimEngine:
         self._accounts: dict[str, SimAccountState] = self._load_accounts()
 
     def reset(self, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> dict[str, Any]:
-        with self._lock:
+        with self._mutation(account_id):
             account = SimAccountState()
             self._accounts[_normalize_account_id(account_id)] = account
             self._persist_accounts_unlocked()
@@ -411,7 +413,7 @@ class SimEngine:
         ]
 
     def next(self, account_id: str | None = DEFAULT_SIM_ACCOUNT_ID) -> dict[str, Any]:
-        with self._lock:
+        with self._mutation(account_id):
             account = self._account_unlocked(account_id)
             if account.current_index < self.max_index:
                 account.current_index += 1
@@ -425,7 +427,7 @@ class SimEngine:
         target_time: str | None = None,
         account_id: str | None = DEFAULT_SIM_ACCOUNT_ID,
     ) -> dict[str, Any]:
-        with self._lock:
+        with self._mutation(account_id):
             account = self._account_unlocked(account_id)
             if index is None and target_time:
                 parsed_time = _parse_news_time(target_time)
@@ -461,7 +463,7 @@ class SimEngine:
 
     def delete_account(self, account_id: str | None) -> int:
         normalized = _normalize_account_id(account_id)
-        with self._lock:
+        with self._mutation(account_id):
             if normalized not in self._accounts:
                 return 0
             del self._accounts[normalized]
@@ -471,7 +473,7 @@ class SimEngine:
     def prune_guest_accounts(self, retention_days: int = DEFAULT_GUEST_RETENTION_DAYS) -> dict[str, Any]:
         safe_days = max(1, min(3650, int(retention_days or DEFAULT_GUEST_RETENTION_DAYS)))
         cutoff = datetime.now(timezone.utc) - timedelta(days=safe_days)
-        with self._lock:
+        with self._mutation():
             deleted_ids = [
                 account_id
                 for account_id, account in self._accounts.items()
@@ -519,10 +521,10 @@ class SimEngine:
     ) -> dict[str, Any]:
         normalized = _normalize_symbol(symbol)
         amount = _float(amount_usdt)
-        if amount <= 0:
+        if not math.isfinite(amount) or amount <= 0:
             raise SimError("Buy amount must be greater than 0")
 
-        with self._lock:
+        with self._mutation(account_id):
             account = self._account_unlocked(account_id)
             price = self._price_unlocked(normalized, account)
             fee = amount * FEE_RATE
@@ -551,7 +553,7 @@ class SimEngine:
     ) -> dict[str, Any]:
         normalized = _normalize_symbol(symbol)
 
-        with self._lock:
+        with self._mutation(account_id):
             account = self._account_unlocked(account_id)
             position = account.positions.get(normalized, Position())
             if position.quantity <= 0:
@@ -562,7 +564,7 @@ class SimEngine:
             else:
                 sell_quantity = _float(quantity)
 
-            if sell_quantity <= 0:
+            if not math.isfinite(sell_quantity) or sell_quantity <= 0:
                 raise SimError("Sell quantity must be greater than 0")
             if sell_quantity > position.quantity + 1e-12:
                 raise SimError("Insufficient position quantity")
@@ -582,13 +584,30 @@ class SimEngine:
             self._persist_accounts_unlocked()
             return self._state_unlocked(account)
 
+    @contextmanager
+    def _mutation(self, account_id=None):
+        with self._lock:
+            previous = dict(self._accounts)
+            key = _normalize_account_id(account_id)
+            if key in previous:
+                previous[key] = deepcopy(previous[key])
+            try:
+                yield
+            except Exception:
+                self._accounts = previous
+                raise
+
     def _account_unlocked(self, account_id: str | None) -> SimAccountState:
         normalized = _normalize_account_id(account_id)
         account = self._accounts.get(normalized)
         if not account:
             account = SimAccountState()
             self._accounts[normalized] = account
-            self._persist_accounts_unlocked()
+            try:
+                self._persist_accounts_unlocked()
+            except Exception:
+                self._accounts.pop(normalized, None)
+                raise
         return account
 
     def _touch_account_unlocked(self, account: SimAccountState) -> None:
@@ -614,7 +633,8 @@ class SimEngine:
                 for account_id, account in sorted(self._accounts.items())
             },
         }
-        write_runtime_json_atomic(SIM_ACCOUNTS_PATH, payload)
+        if not write_runtime_json_atomic(SIM_ACCOUNTS_PATH, payload):
+            raise SimError("模拟账户保存失败，本次操作未完成，请稍后重试")
 
     def _price_unlocked(self, symbol: str, account: SimAccountState) -> float:
         return float(self.klines[symbol][account.current_index]["close"])

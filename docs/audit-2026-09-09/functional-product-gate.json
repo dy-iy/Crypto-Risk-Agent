@@ -1,0 +1,715 @@
+{
+  "status": "pass",
+  "total_checks": 6,
+  "failed_checks": 0,
+  "warning_checks": 0,
+  "checks": [
+    {
+      "name": "risk_case_coverage",
+      "passed": true,
+      "severity": "critical",
+      "message": "评测集覆盖满足上线门槛",
+      "details": {
+        "total_cases": 88,
+        "min_total_cases": 80,
+        "scenario_counts": {
+          "S1_ATTACK_EXPLOIT": 8,
+          "S2_EXCHANGE_ABNORMALITY": 8,
+          "S5_REGULATORY_ENFORCEMENT": 8,
+          "S3_STABLECOIN_RESERVE": 8,
+          "S6_MARKET_LIQUIDATION": 8,
+          "S0_GENERAL_UNKNOWN": 8,
+          "S7_FRAUD_GOVERNANCE": 8,
+          "S4_INFRASTRUCTURE_FAILURE": 8,
+          "S8_WHALE_ONCHAIN_FLOW": 8,
+          "S9_TOKEN_ISSUANCE_ANOMALY": 8,
+          "S10_BRIDGE_CROSS_CHAIN_RISK": 8
+        },
+        "min_cases_per_scenario": 4,
+        "undercovered_scenarios": {},
+        "scenarios_without_high_risk_examples": [],
+        "high_risk_requirement_exemptions": [
+          "S0_GENERAL_UNKNOWN"
+        ],
+        "scenarios_without_counterexamples": [],
+        "missing_fields": [],
+        "duplicate_ids": []
+      }
+    },
+    {
+      "name": "frontend_api_boundaries",
+      "passed": true,
+      "severity": "critical",
+      "message": "前端未发现本地地址或端口硬编码",
+      "details": {
+        "forbidden_patterns": [
+          "localhost",
+          "127\\.0\\.0\\.1",
+          "\\b8000\\b",
+          "\\b8001\\b",
+          "\\b8002\\b"
+        ],
+        "violations": [],
+        "violation_count": 0
+      }
+    },
+    {
+      "name": "runtime_data_gitignored",
+      "passed": true,
+      "severity": "critical",
+      "message": "运行时数据已纳入 gitignore",
+      "details": {
+        "required_entries": [
+          "backend/app/data/auth.sqlite3",
+          "backend/app/data/analysis_reports.sqlite3",
+          "backend/app/data/portfolio.sqlite3",
+          "backend/app/data/task_audit.sqlite3",
+          "backend/app/data/sim_accounts.json",
+          "backend/app/data/portfolio_refresh_jobs.json",
+          "backend/app/data/update_jobs.json",
+          "backend/app/data/*.invalid.*.bak"
+        ],
+        "missing_entries": []
+      }
+    },
+    {
+      "name": "env_example_contract",
+      "passed": true,
+      "severity": "critical",
+      "message": "环境变量模板完整且未发现疑似真实密钥",
+      "details": {
+        "path": ".env.example",
+        "required_keys": [
+          "DEEPSEEK_API_KEY",
+          "DEEPSEEK_MODEL",
+          "DEEPSEEK_BASE_URL",
+          "DEEPSEEK_TIMEOUT",
+          "CRYPTO_RISK_AGENT_OFFLINE",
+          "AUTH_PASSWORD_PEPPER",
+          "CORS_ALLOWED_ORIGINS",
+          "ALLOW_LOCAL_CORS",
+          "ALLOW_USER_ID_QUERY_OVERRIDE",
+          "CSRF_PROTECTION_ENABLED",
+          "TRUST_PROXY_HEADERS",
+          "ALLOW_PUBLIC_SYSTEM_OBSERVABILITY",
+          "ALLOW_PUBLIC_REPORT_DEBUG",
+          "ALLOW_SYSTEM_EVENT_GLOBAL_QUERY",
+          "SYSTEM_ADMIN_USERNAMES",
+          "SYSTEM_ADMIN_USER_IDS",
+          "ALLOW_ADMIN_USERNAME_REGISTRATION",
+          "API_RATE_LIMIT_ENABLED",
+          "AUTH_RATE_LIMIT_PER_MINUTE",
+          "AGENT_RATE_LIMIT_PER_5_MINUTES",
+          "MUTATION_RATE_LIMIT_PER_MINUTE",
+          "MAX_REQUEST_BODY_BYTES",
+          "TASK_AUDIT_RETENTION_DAYS",
+          "TASK_AUDIT_MAX_EVENTS"
+        ],
+        "missing_keys": [],
+        "forbidden_matches": []
+      }
+    },
+    {
+      "name": "product_security_controls",
+      "passed": true,
+      "severity": "critical",
+      "message": "关键产品安全与账号生命周期控制已存在",
+      "details": {
+        "required_controls": [
+          {
+            "name": "llm_config_contract",
+            "path": "backend/app/services/llm_config_service.py",
+            "patterns": [
+              "EXPECTED_DEEPSEEK_MODEL = \"deepseek-v4-pro\"",
+              "get_deepseek_config",
+              "MAX_DEEPSEEK_TIMEOUT"
+            ]
+          },
+          {
+            "name": "llm_runtime_uses_config_service",
+            "path": "backend/app/llm.py",
+            "patterns": [
+              "get_deepseek_config",
+              "base_url=config.base_url",
+              "timeout=config.timeout",
+              "model=config.model"
+            ]
+          },
+          {
+            "name": "csrf_service",
+            "path": "backend/app/services/csrf_service.py",
+            "patterns": [
+              "CSRF_PROTECTION_ENABLED",
+              "x-cryptorisk-csrf",
+              "UNSAFE_METHODS",
+              "session_cookie_name"
+            ]
+          },
+          {
+            "name": "csrf_middleware",
+            "path": "backend/main.py",
+            "patterns": [
+              "csrf_request_allowed",
+              "_csrf_request_allowed",
+              "Missing CSRF protection header"
+            ]
+          },
+          {
+            "name": "proxy_header_trust_service",
+            "path": "backend/app/services/request_security_service.py",
+            "patterns": [
+              "TRUST_PROXY_HEADERS",
+              "request_uses_https",
+              "request_client_identity",
+              "request_security_context"
+            ]
+          },
+          {
+            "name": "session_cookie_proxy_guard",
+            "path": "backend/app/api/auth.py",
+            "patterns": [
+              "request_uses_https",
+              "secure=_is_secure_request(request)"
+            ]
+          },
+          {
+            "name": "rate_limit_proxy_guard",
+            "path": "backend/main.py",
+            "patterns": [
+              "request_client_identity",
+              "_request_identity"
+            ]
+          },
+          {
+            "name": "request_body_size_guard",
+            "path": "backend/main.py",
+            "patterns": [
+              "max_request_body_bytes",
+              "request_body_exceeds_limit",
+              "Request body too large",
+              "status_code=413"
+            ]
+          },
+          {
+            "name": "request_body_limit_service",
+            "path": "backend/app/services/request_body_limit_service.py",
+            "patterns": [
+              "MAX_REQUEST_BODY_BYTES",
+              "DEFAULT_MAX_REQUEST_BODY_BYTES",
+              "MAX_REQUEST_BODY_BYTES_LIMIT",
+              "request_body_exceeds_limit",
+              "content_length_exceeds_limit"
+            ]
+          },
+          {
+            "name": "safe_public_error_responses",
+            "path": "backend/app/services/error_response_service.py",
+            "patterns": [
+              "PUBLIC_AGENT_ERROR_DETAIL",
+              "PUBLIC_RISK_ASSISTANT_ERROR_DETAIL",
+              "PUBLIC_NEWS_UPDATE_ERROR_DETAIL",
+              "PUBLIC_INTERNAL_ERROR_DETAIL",
+              "public_error_payload"
+            ]
+          },
+          {
+            "name": "public_report_debug_sanitizer",
+            "path": "backend/app/services/report_response_service.py",
+            "patterns": [
+              "ALLOW_PUBLIC_REPORT_DEBUG",
+              "INTERNAL_REPORT_FIELDS",
+              "sanitize_risk_report_for_public_api",
+              "\"debug\"",
+              "\"raw_agent_outputs\""
+            ]
+          },
+          {
+            "name": "main_public_report_sanitizer",
+            "path": "backend/main.py",
+            "patterns": [
+              "sanitize_risk_report_for_public_api",
+              "_public_chat_response"
+            ]
+          },
+          {
+            "name": "main_safe_error_responses",
+            "path": "backend/main.py",
+            "patterns": [
+              "PUBLIC_AGENT_ERROR_DETAIL",
+              "PUBLIC_INTERNAL_ERROR_DETAIL",
+              "PUBLIC_RISK_ASSISTANT_ERROR_DETAIL",
+              "public_error_payload",
+              "request_failed",
+              "X-CryptoRisk-Job-ID"
+            ]
+          },
+          {
+            "name": "frontend_csrf_header",
+            "path": "frontend/lib/api.ts",
+            "patterns": [
+              "X-CryptoRisk-CSRF",
+              "csrfHeaders(restInit.method)",
+              "csrfHeaders(\"POST\")"
+            ]
+          },
+          {
+            "name": "frontend_api_path_runtime_guard",
+            "path": "frontend/lib/api.ts",
+            "patterns": [
+              "assertApiPath",
+              "apiFetch",
+              "path.startsWith(\"/api/\")",
+              "Frontend API requests must use /api/ paths."
+            ]
+          },
+          {
+            "name": "admin_username_registration_guard",
+            "path": "backend/app/services/auth_service.py",
+            "patterns": [
+              "ALLOW_ADMIN_USERNAME_REGISTRATION",
+              "_ensure_username_can_register",
+              "SYSTEM_ADMIN_USERNAMES"
+            ]
+          },
+          {
+            "name": "password_change_service",
+            "path": "backend/app/services/auth_service.py",
+            "patterns": [
+              "change_user_password",
+              "新密码不能与当前密码相同",
+              "DELETE FROM sessions WHERE user_id = ? AND token != ?"
+            ]
+          },
+          {
+            "name": "password_change_api",
+            "path": "backend/app/api/auth.py",
+            "patterns": [
+              "@router.post(\"/change-password\")",
+              "PasswordChangeRequest",
+              "change_user_password"
+            ]
+          },
+          {
+            "name": "session_management_service",
+            "path": "backend/app/services/auth_service.py",
+            "patterns": [
+              "list_user_sessions",
+              "revoke_other_sessions",
+              "_session_public_id",
+              "client_ip_hash",
+              "user_agent"
+            ]
+          },
+          {
+            "name": "auth_session_expiry_prune_service",
+            "path": "backend/app/services/auth_service.py",
+            "patterns": [
+              "prune_expired_sessions",
+              "_prune_expired_sessions",
+              "DELETE FROM sessions WHERE expires_at <= ?",
+              "remaining_sessions"
+            ]
+          },
+          {
+            "name": "session_management_api",
+            "path": "backend/app/api/auth.py",
+            "patterns": [
+              "@router.get(\"/sessions\"",
+              "@router.post(\"/sessions/revoke-others\")",
+              "list_user_sessions",
+              "revoke_other_sessions"
+            ]
+          },
+          {
+            "name": "system_auth_session_prune_api",
+            "path": "backend/app/api/system.py",
+            "patterns": [
+              "@router.post(\"/auth-sessions/prune\")",
+              "_require_system_admin_access(cryptorisk_session)",
+              "prune_expired_sessions"
+            ]
+          },
+          {
+            "name": "system_admin_operations_audit",
+            "path": "backend/app/api/system.py",
+            "patterns": [
+              "_record_system_admin_event",
+              "job_kind=\"system_admin\"",
+              "task_events_prune",
+              "guest_sim_accounts_prune",
+              "auth_sessions_prune",
+              "invalid_json_backups_prune",
+              "admin_user_id"
+            ]
+          },
+          {
+            "name": "runtime_job_prune_api",
+            "path": "backend/app/api/system.py",
+            "patterns": [
+              "@router.post(\"/runtime-jobs/prune\")",
+              "prune_update_jobs",
+              "prune_portfolio_refresh_jobs",
+              "runtime_jobs_prune"
+            ]
+          },
+          {
+            "name": "news_update_job_prune",
+            "path": "backend/app/api/risk_ranking.py",
+            "patterns": [
+              "load_runtime_json_or_quarantine",
+              "write_runtime_json_atomic",
+              "prune_update_jobs",
+              "active_statuses = {\"queued\", \"running\"}",
+              "_persist_update_jobs()",
+              "remaining_jobs"
+            ]
+          },
+          {
+            "name": "portfolio_refresh_job_prune",
+            "path": "backend/app/api/portfolio.py",
+            "patterns": [
+              "load_runtime_json_or_quarantine",
+              "write_runtime_json_atomic",
+              "prune_portfolio_refresh_jobs",
+              "_rebuild_latest_refresh_jobs_unlocked",
+              "_persist_refresh_jobs()",
+              "remaining_jobs"
+            ]
+          },
+          {
+            "name": "account_security_events_api",
+            "path": "backend/app/api/account.py",
+            "patterns": [
+              "@router.get(\"/security-events\")",
+              "list_account_security_events"
+            ]
+          },
+          {
+            "name": "system_task_events_admin_only",
+            "path": "backend/app/api/system.py",
+            "patterns": [
+              "@router.get(\"/task-events\")",
+              "_require_system_admin_access(cryptorisk_session)",
+              "_redact_public_audit_summary"
+            ]
+          },
+          {
+            "name": "system_storage_inventory_api",
+            "path": "backend/app/api/system.py",
+            "patterns": [
+              "@router.get(\"/storage-inventory\")",
+              "_require_system_admin_access",
+              "build_storage_inventory"
+            ]
+          },
+          {
+            "name": "system_invalid_json_backup_prune_api",
+            "path": "backend/app/api/system.py",
+            "patterns": [
+              "@router.post(\"/invalid-json-backups/prune\")",
+              "_require_system_admin_access",
+              "prune_invalid_json_backups",
+              "invalid_json_backups_prune"
+            ]
+          },
+          {
+            "name": "system_backup_manifest_api",
+            "path": "backend/app/api/system.py",
+            "patterns": [
+              "@router.get(\"/backup-manifest\")",
+              "_require_system_admin_access",
+              "build_backup_manifest"
+            ]
+          },
+          {
+            "name": "system_guest_sim_prune_api",
+            "path": "backend/app/api/system.py",
+            "patterns": [
+              "@router.post(\"/sim-accounts/prune\")",
+              "_require_system_admin_access",
+              "prune_guest_accounts"
+            ]
+          },
+          {
+            "name": "storage_inventory_service",
+            "path": "backend/app/services/storage_inventory_service.py",
+            "patterns": [
+              "build_storage_inventory",
+              "build_backup_manifest",
+              "sqlite_sidecar",
+              "sim_accounts.json",
+              "invalid_json_backups",
+              "runtime_json_invalid_backup",
+              "prune_invalid_json_backups",
+              "deleted_files",
+              "mode=ro",
+              "account_count",
+              "daily_reports"
+            ]
+          },
+          {
+            "name": "runtime_json_store_guard",
+            "path": "backend/app/services/runtime_json_store.py",
+            "patterns": [
+              "quarantine_invalid_json",
+              "load_runtime_json_or_quarantine",
+              "write_runtime_json_atomic",
+              ".invalid.",
+              "temp_path.replace"
+            ]
+          },
+          {
+            "name": "sim_account_persistence",
+            "path": "backend/app/services/sim_engine.py",
+            "patterns": [
+              "SIM_ACCOUNTS_PATH",
+              "_load_accounts",
+              "_persist_accounts_unlocked",
+              "load_runtime_json_or_quarantine",
+              "write_runtime_json_atomic",
+              "prune_guest_accounts",
+              "updated_at",
+              "sim_accounts.json"
+            ]
+          },
+          {
+            "name": "account_security_event_audit",
+            "path": "backend/app/services/account_security_event_service.py",
+            "patterns": [
+              "record_account_security_event",
+              "security_identifier_hash",
+              "job_kind=\"account_security\"",
+              "record_task_event"
+            ]
+          },
+          {
+            "name": "auth_failure_security_audit",
+            "path": "backend/app/api/auth.py",
+            "patterns": [
+              "event_type=\"login_failed\"",
+              "event_type=\"register_failed\"",
+              "event_type=\"password_change_failed\"",
+              "_request_security_payload",
+              "security_identifier_hash"
+            ]
+          },
+          {
+            "name": "frontend_password_change",
+            "path": "frontend/components/risk-dashboard.tsx",
+            "patterns": [
+              "handlePasswordChange",
+              "changePassword(currentPassword, newPassword)",
+              "修改登录密码"
+            ]
+          },
+          {
+            "name": "frontend_session_management",
+            "path": "frontend/components/risk-dashboard.tsx",
+            "patterns": [
+              "loadAuthSessions",
+              "handleRevokeOtherSessions",
+              "formatSessionUserAgent",
+              "登录会话"
+            ]
+          },
+          {
+            "name": "frontend_account_security_events",
+            "path": "frontend/components/risk-dashboard.tsx",
+            "patterns": [
+              "fetchAccountSecurityEvents",
+              "最近账号安全事件",
+              "formatSecurityEventContext",
+              "formatSecurityEventType"
+            ]
+          },
+          {
+            "name": "frontend_system_task_events",
+            "path": "frontend/components/risk-dashboard.tsx",
+            "patterns": [
+              "fetchSystemTaskEvents",
+              "systemTaskEvents",
+              "最近事件",
+              "formatAuditPayloadSummary",
+              "formatAuditUser"
+            ]
+          },
+          {
+            "name": "frontend_runtime_job_prune",
+            "path": "frontend/components/risk-dashboard.tsx",
+            "patterns": [
+              "pruneRuntimeJobs",
+              "handlePruneRuntimeJobs",
+              "清理任务状态",
+              "runtimeJobPruneMessage"
+            ]
+          },
+          {
+            "name": "frontend_storage_inventory",
+            "path": "frontend/components/risk-dashboard.tsx",
+            "patterns": [
+              "fetchStorageInventory",
+              "fetchBackupManifest",
+              "backupManifest",
+              "备份清单",
+              "pruneGuestSimAccounts",
+              "清理游客模拟",
+              "storageInventory",
+              "invalidJsonBackups",
+              "损坏 JSON 备份",
+              "runtime_json_invalid_backup",
+              "pruneInvalidJsonBackups",
+              "清理损坏备份",
+              "运行时存储盘点",
+              "formatDatastoreScale"
+            ]
+          },
+          {
+            "name": "frontend_storage_inventory_api",
+            "path": "frontend/lib/api.ts",
+            "patterns": [
+              "StorageInventory",
+              "invalid_json_backups",
+              "file_count",
+              "InvalidJsonBackupsPruneResult",
+              "\"/api/system/storage-inventory\"",
+              "fetchStorageInventory",
+              "BackupManifest",
+              "\"/api/system/backup-manifest\"",
+              "fetchBackupManifest",
+              "pruneGuestSimAccounts",
+              "/api/system/sim-accounts/prune",
+              "fetchSystemTaskEvents",
+              "/api/system/task-events",
+              "RuntimeJobsPruneResult",
+              "pruneRuntimeJobs",
+              "/api/system/runtime-jobs/prune",
+              "pruneInvalidJsonBackups",
+              "/api/system/invalid-json-backups/prune"
+            ]
+          },
+          {
+            "name": "frontend_auth_session_prune",
+            "path": "frontend/components/risk-dashboard.tsx",
+            "patterns": [
+              "pruneExpiredAuthSessions",
+              "handlePruneExpiredAuthSessions",
+              "清理过期会话",
+              "system_admin",
+              "系统运维"
+            ]
+          },
+          {
+            "name": "frontend_auth_session_prune_api",
+            "path": "frontend/lib/api.ts",
+            "patterns": [
+              "AuthSessionPruneResult",
+              "pruneExpiredAuthSessions",
+              "/api/system/auth-sessions/prune"
+            ]
+          },
+          {
+            "name": "security_readiness_checks",
+            "path": "backend/app/services/product_readiness_service.py",
+            "patterns": [
+              "DEEPSEEK_MODEL",
+              "DEEPSEEK_CLIENT",
+              "DEEPSEEK_TIMEOUT",
+              "MAX_REQUEST_BODY_BYTES",
+              "ALLOW_PUBLIC_REPORT_DEBUG",
+              "CSRF_PROTECTION_ENABLED",
+              "ALLOW_ADMIN_USERNAME_REGISTRATION",
+              "ALLOW_PUBLIC_SYSTEM_OBSERVABILITY",
+              "TRUST_PROXY_HEADERS",
+              "SIM_ACCOUNTS_PATH",
+              "PORTFOLIO_REFRESH_JOBS_PATH",
+              "UPDATE_JOBS_PATH",
+              "_json_runtime_status",
+              "json.loads",
+              "valid_json",
+              "json_error",
+              "sim_accounts_store",
+              "portfolio_refresh_jobs_store",
+              "news_update_jobs_store"
+            ]
+          },
+          {
+            "name": "account_export_delete_api",
+            "path": "backend/app/api/account.py",
+            "patterns": [
+              "@router.get(\"/export\")",
+              "@router.delete(\"\")",
+              "AccountDeleteRequest",
+              "verify_user_password",
+              "delete-my-account",
+              "account_delete_failed",
+              "account_export",
+              "account_delete",
+              "job_id=\"account-export-redacted\"",
+              "job_id=\"account-delete-redacted\""
+            ]
+          },
+          {
+            "name": "account_export_full_payload",
+            "path": "backend/app/services/account_export_service.py",
+            "patterns": [
+              "list_daily_report_payloads",
+              "sim_engine.account_state_snapshot",
+              "list_account_security_events",
+              "list_user_sessions",
+              "\"sim_account\"",
+              "\"auth_sessions\""
+            ]
+          },
+          {
+            "name": "account_lifecycle_service",
+            "path": "backend/app/services/account_lifecycle_service.py",
+            "patterns": [
+              "delete_account_data",
+              "delete_analysis_reports_for_user",
+              "delete_watchlist_records_for_user",
+              "delete_daily_reports_for_user",
+              "sim_engine.delete_account",
+              "delete_task_events_for_user",
+              "audit_events_deleted",
+              "delete_user_account"
+            ]
+          },
+          {
+            "name": "task_audit_user_lifecycle_cleanup",
+            "path": "backend/app/services/task_audit_service.py",
+            "patterns": [
+              "delete_task_events_for_user",
+              "DELETE FROM task_events WHERE user_id = ?",
+              "idx_task_events_user"
+            ]
+          },
+          {
+            "name": "frontend_account_delete_audit_summary",
+            "path": "frontend/components/risk-dashboard.tsx",
+            "patterns": [
+              "audit_events_deleted",
+              "审计事件"
+            ]
+          }
+        ],
+        "missing_controls": []
+      }
+    },
+    {
+      "name": "public_error_boundaries",
+      "passed": true,
+      "severity": "critical",
+      "message": "公开错误响应未拼接内部异常",
+      "details": {
+        "forbidden_patterns": [
+          "detail=f\\\"Agent workflow failed: \\{exc\\}\\\"",
+          "detail=f\\\"Risk assistant failed: \\{exc\\}\\\"",
+          "detail=f\\\"News update failed: \\{exc\\}\\\"",
+          "\\{\\\"detail\\\": f\\\"Agent workflow failed: \\{exc\\}\\\"\\}"
+        ],
+        "violations": [],
+        "violation_count": 0
+      }
+    }
+  ]
+}

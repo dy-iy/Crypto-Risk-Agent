@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, FiniteFloat, field_validator
 
 
 RiskLevel = Literal["low", "medium", "high", "critical"]
@@ -21,8 +21,8 @@ class UserWatchlist(BaseModel):
     exposure_mode: ExposureMode = "bucket"
     exposure_bucket: ExposureBucket = "none"
     custom_exposure_pct: float | None = Field(default=None, ge=0, le=1)
-    amount: float = Field(default=0, ge=0)
-    avg_buy_price: float = Field(default=0, ge=0)
+    amount: FiniteFloat = Field(default=0, ge=0)
+    avg_buy_price: FiniteFloat = Field(default=0, ge=0)
     alert_threshold: int = Field(default=70, ge=0, le=100)
     created_at: str
     updated_at: str
@@ -35,8 +35,8 @@ class UserWatchlistCreate(BaseModel):
     exposure_mode: ExposureMode = "bucket"
     exposure_bucket: ExposureBucket = "none"
     custom_exposure_pct: float | None = Field(default=None, ge=0, le=1)
-    amount: float = Field(default=0, ge=0)
-    avg_buy_price: float = Field(default=0, ge=0)
+    amount: FiniteFloat = Field(default=0, ge=0)
+    avg_buy_price: FiniteFloat = Field(default=0, ge=0)
     alert_threshold: int = Field(default=70, ge=0, le=100)
 
 
@@ -46,9 +46,17 @@ class UserWatchlistUpdate(BaseModel):
     exposure_mode: ExposureMode | None = None
     exposure_bucket: ExposureBucket | None = None
     custom_exposure_pct: float | None = Field(default=None, ge=0, le=1)
-    amount: float | None = Field(default=None, ge=0)
-    avg_buy_price: float | None = Field(default=None, ge=0)
+    amount: FiniteFloat | None = Field(default=None, ge=0)
+    avg_buy_price: FiniteFloat | None = Field(default=None, ge=0)
     alert_threshold: int | None = Field(default=None, ge=0, le=100)
+
+
+    @field_validator("is_watched", "is_holding", "exposure_mode", "exposure_bucket", "amount", "avg_buy_price", "alert_threshold", mode="before")
+    @classmethod
+    def reject_explicit_null(cls, value):
+        if value is None:
+            raise ValueError("字段不能为 null；保留原值请省略该字段")
+        return value
 
 
 class MarketCandle(BaseModel):

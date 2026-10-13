@@ -1,3 +1,5 @@
+import { readEventStream } from "@/lib/event-stream";
+import { clearCurrentAccountStorage, getAccountScope, getAccountSignal, setAccountScope, localStore, sessionStore } from "@/lib/browser-storage";
 export type EvidenceItem = {
   risk_category: string;
   evidence_text: string;
@@ -270,6 +272,8 @@ export type RiskOverview = {
 };
 
 export type DailyRiskReport = {
+  report_kind?: string;
+  follows_revision?: string;
   report_id?: string;
   date: string;
   range: "24h" | "7d";
@@ -975,14 +979,14 @@ export class ApiRequestError extends Error {
 }
 
 const legacyApiCachePrefix = "cryptorisk.api-cache:";
-const apiCachePrefix = "cryptorisk.api-cache:v2:";
-const simClientStorageKey = "cryptorisk.sim.client_id";
+const apiCachePrefix = "cryptorisk.api-cache:v3:";
 const apiCacheTtlMs = 3 * 60 * 1000;
 const csrfHeaderName = "X-CryptoRisk-CSRF";
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const memoryCache = new Map<string, { expiresAt: number; data: unknown }>();
 const pendingRequests = new Map<string, Promise<unknown>>();
-let fallbackSimClientId = "";
+let cacheGeneration = 0;
+let authGeneration = 0;
 
 function assertApiPath(path: string) {
   if (!path.startsWith("/api/")) {
@@ -992,34 +996,10 @@ function assertApiPath(path: string) {
 
 function apiFetch(path: string, init?: RequestInit) {
   assertApiPath(path);
-  return fetch(path, init);
-}
-
-function createSimClientId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
-
-function getSimClientId() {
-  if (typeof window === "undefined") return "";
-  try {
-    const existing = window.localStorage.getItem(simClientStorageKey);
-    if (existing) return existing;
-    const next = createSimClientId();
-    window.localStorage.setItem(simClientStorageKey, next);
-    return next;
-  } catch {
-    if (!fallbackSimClientId) fallbackSimClientId = createSimClientId();
-    return fallbackSimClientId;
-  }
-}
-
-function simClientHeaders(path: string): Record<string, string> {
-  if (!path.startsWith("/api/sim/")) return {};
-  const clientId = getSimClientId();
-  return clientId ? { "X-CryptoRisk-Sim-Client": clientId } : {};
+  const timeout = AbortSignal.timeout(path.includes("/stream") ? 300_000 : 120_000);
+  const signals = [timeout, ...(init?.signal ? [init.signal] : [])];
+  if (!path.startsWith("/api/auth/") && path !== "/api/account?confirm=delete-my-account") signals.push(getAccountSignal());
+  return fetch(path, { ...init, signal: AbortSignal.any(signals) });
 }
 
 function csrfHeaders(method?: string): Record<string, string> {
@@ -1028,13 +1008,13 @@ function csrfHeaders(method?: string): Record<string, string> {
 }
 
 function apiCacheKey(path: string) {
-  return `${apiCachePrefix}${path}`;
+  return `${apiCachePrefix}${getAccountScope()}:${path}`;
 }
 
 function shouldPersistApiCache(path: string) {
   if (path.startsWith("/api/rankings/news?") && path.includes("limit=0")) return false;
   if (path.startsWith("/api/rankings/coins?") && path.includes("limit=0")) return false;
-  return true;
+  return path.startsWith("/api/rankings/") || path.startsWith("/api/coin-library");
 }
 
 function readCachedJson<T>(path: string): T | null {
@@ -1047,11 +1027,11 @@ function readCachedJson<T>(path: string): T | null {
   if (typeof window === "undefined" || !shouldPersistApiCache(path)) return null;
 
   try {
-    const raw = window.sessionStorage.getItem(apiCacheKey(path));
+    const raw = sessionStore.getItem(apiCacheKey(path));
     if (!raw) return null;
     const entry = JSON.parse(raw) as { expiresAt: number; data: T };
     if (!entry.expiresAt || entry.expiresAt <= now) {
-      window.sessionStorage.removeItem(apiCacheKey(path));
+      sessionStore.removeItem(apiCacheKey(path));
       memoryCache.delete(path);
       return null;
     }
@@ -1068,21 +1048,22 @@ function writeCachedJson<T>(path: string, data: T) {
 
   if (typeof window === "undefined" || !shouldPersistApiCache(path)) return;
   try {
-    window.sessionStorage.setItem(apiCacheKey(path), JSON.stringify(entry));
+    sessionStore.setItem(apiCacheKey(path), JSON.stringify(entry));
   } catch {
     // Ignore storage quota/private-mode failures; memory cache still works.
   }
 }
 
 export function clearApiCache() {
+  cacheGeneration += 1;
   memoryCache.clear();
   pendingRequests.clear();
 
   if (typeof window === "undefined") return;
   try {
-    Object.keys(window.sessionStorage)
+    sessionStore.keys()
       .filter((key) => key.startsWith(apiCachePrefix) || key.startsWith(legacyApiCachePrefix))
-      .forEach((key) => window.sessionStorage.removeItem(key));
+      .forEach((key) => sessionStore.removeItem(key));
   } catch {
     // Ignore storage failures; memory cache has already been cleared.
   }
@@ -1091,23 +1072,24 @@ export function clearApiCache() {
 export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   assertApiPath(path);
   const { headers, ...restInit } = init || {};
+  const requestHeaders = new Headers(headers);
+  if (!requestHeaders.has("Content-Type")) requestHeaders.set("Content-Type", "application/json");
+  for (const [name, value] of Object.entries({ ...csrfHeaders(restInit.method) })) {
+    requestHeaders.set(name, value);
+  }
   const response = await apiFetch(path, {
     cache: "no-store",
     credentials: "same-origin",
     ...restInit,
-    headers: {
-      "Content-Type": "application/json",
-      ...simClientHeaders(path),
-      ...csrfHeaders(restInit.method),
-      ...(headers || {}),
-    },
+    headers: requestHeaders,
   });
 
   if (!response.ok) {
     let detail = "";
     try {
-      const payload = (await response.json()) as { detail?: string };
-      detail = payload.detail || "";
+      const payload = (await response.json()) as { detail?: unknown };
+      detail = typeof payload?.detail === "string" ? payload.detail
+        : Array.isArray(payload?.detail) ? payload.detail.map((item: { msg?: string }) => item?.msg || "参数无效").join("；") : "";
     } catch {
       detail = "";
     }
@@ -1125,13 +1107,14 @@ async function cachedRequestJson<T>(path: string): Promise<T> {
   const pending = pendingRequests.get(path);
   if (pending) return pending as Promise<T>;
 
+  const generation = cacheGeneration;
   const request = requestJson<T>(path)
     .then((data) => {
-      writeCachedJson(path, data);
+      if (generation === cacheGeneration) writeCachedJson(path, data);
       return data;
     })
     .finally(() => {
-      pendingRequests.delete(path);
+      if (pendingRequests.get(path) === request) pendingRequests.delete(path);
     });
   pendingRequests.set(path, request);
   return request;
@@ -1144,8 +1127,19 @@ export function sendChatMessage(message: string) {
   });
 }
 
-export function fetchCurrentUser() {
-  return requestJson<AuthUser | null>("/api/auth/me");
+function applyAuthUser(user: AuthUser | null) {
+  if (getAccountScope() !== (user?.id || "guest")) {
+    clearApiCache();
+    setAccountScope(user?.id || null);
+  }
+  return user;
+}
+
+export async function fetchCurrentUser() {
+  const generation = authGeneration;
+  const user = await requestJson<AuthUser | null>("/api/auth/me");
+  if (generation !== authGeneration) throw new DOMException("登录状态已更新", "AbortError");
+  return applyAuthUser(user);
 }
 
 export function exportAccountData() {
@@ -1156,25 +1150,38 @@ export function fetchAccountSecurityEvents(limit = 20) {
   return requestJson<{ items: AccountSecurityEvent[] }>(`/api/account/security-events?limit=${encodeURIComponent(String(limit))}`);
 }
 
-export function deleteAccountData(currentPassword: string) {
-  return requestJson<AccountDeleteResult>("/api/account?confirm=delete-my-account", {
+export async function deleteAccountData(currentPassword: string) {
+  authGeneration += 1;
+  const result = await requestJson<AccountDeleteResult>("/api/account?confirm=delete-my-account", {
     method: "DELETE",
     body: JSON.stringify({ current_password: currentPassword }),
   });
+  clearCurrentAccountStorage();
+  applyAuthUser(null);
+  localStore.setItem("cryptorisk.auth.version", String(Date.now()));
+  return result;
 }
 
-export function loginUser(username: string, password: string) {
-  return requestJson<AuthResponse>("/api/auth/login", {
+export async function loginUser(username: string, password: string) {
+  authGeneration += 1;
+  const response = await requestJson<AuthResponse>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
+  applyAuthUser(response.user);
+  localStore.setItem("cryptorisk.auth.version", String(Date.now()));
+  return response;
 }
 
-export function registerUser(username: string, password: string) {
-  return requestJson<AuthResponse>("/api/auth/register", {
+export async function registerUser(username: string, password: string) {
+  authGeneration += 1;
+  const response = await requestJson<AuthResponse>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
+  applyAuthUser(response.user);
+  localStore.setItem("cryptorisk.auth.version", String(Date.now()));
+  return response;
 }
 
 export function changePassword(currentPassword: string, newPassword: string) {
@@ -1197,10 +1204,12 @@ export function revokeOtherAuthSessions() {
   });
 }
 
-export function logoutUser() {
-  return requestJson<{ status: string; message: string }>("/api/auth/logout", {
-    method: "POST",
-  });
+export async function logoutUser() {
+  authGeneration += 1;
+  const response = await requestJson<{ status: string; message: string }>("/api/auth/logout", { method: "POST" });
+  applyAuthUser(null);
+  localStore.setItem("cryptorisk.auth.version", String(Date.now()));
+  return response;
 }
 
 export function fetchAnalysisReports() {
@@ -1282,57 +1291,19 @@ export async function streamChatMessage(
     throw new Error("ReadableStream is not supported in this browser");
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let result: ChatResponse | null = null;
-  let streamError = "";
-
-  const flushEvents = () => {
-    const events = buffer.split("\n\n");
-    buffer = events.pop() || "";
-
-    events.forEach((eventText) => {
-      const eventName = eventText
-        .split("\n")
-        .find((line) => line.startsWith("event:"))
-        ?.slice(6)
-        .trim() || "message";
-      const dataLine = eventText
-        .split("\n")
-        .find((line) => line.startsWith("data:"));
-      if (!dataLine) return;
-
-      const payload = dataLine.slice(5).trim();
-      if (!payload || payload === "{}") return;
-      const parsed = JSON.parse(payload) as unknown;
-
-      if (eventName === "progress") {
-        onProgress(parsed as ChatProgressEvent);
-      } else if (eventName === "result") {
-        result = parsed as ChatResponse;
-      } else if (eventName === "error") {
-        streamError = String((parsed as { detail?: string }).detail || "Agent workflow failed");
-      }
-    });
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    flushEvents();
-  }
-
-  buffer += decoder.decode();
-  flushEvents();
-
-  if (streamError) {
-    throw new Error(streamError);
-  }
-  if (!result) {
-    throw new Error("Agent workflow finished without result");
-  }
+  const signal = getAccountSignal();
+  await readEventStream(response, (name, data) => {
+    if (!data || typeof data !== "object") throw new Error("分析响应格式异常");
+    if (name === "progress") onProgress(data as ChatProgressEvent);
+    if (name === "result") {
+      const parsed = data as ChatResponse;
+      if (!parsed.data || typeof parsed.data.risk_score !== "number") throw new Error("分析报告缺少必要字段");
+      result = parsed;
+    }
+    if (name === "error") throw new Error(String((data as { detail?: string }).detail || "分析失败，请重试。"));
+  }, signal);
+  if (!result) throw new Error("分析连接已结束，但未收到完整报告，请重试。");
   return result as ChatResponse;
 }
 
@@ -1466,12 +1437,12 @@ export function fetchPortfolioWatchlist() {
   return requestJson<PortfolioWatchlistItem[]>("/api/portfolio/watchlist");
 }
 
-export function fetchCoinLibrary(query?: string, limit?: number) {
+export function fetchCoinLibrary(query?: string, limit?: number, signal?: AbortSignal) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (limit) params.set("limit", String(limit));
   const search = params.toString();
-  return requestJson<CoinLibraryItem[]>(`/api/coin-library${search ? `?${search}` : ""}`);
+  return requestJson<CoinLibraryItem[]>(`/api/coin-library${search ? `?${search}` : ""}`, { signal });
 }
 
 export function fetchUserAssets() {
@@ -1618,51 +1589,14 @@ export async function streamRiskAssistant(
     throw new Error("ReadableStream is not supported in this browser");
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let streamError = "";
-
-  const flushEvents = () => {
-    const events = buffer.split("\n\n");
-    buffer = events.pop() || "";
-
-    events.forEach((eventText) => {
-      const eventName = eventText
-        .split("\n")
-        .find((line) => line.startsWith("event:"))
-        ?.slice(6)
-        .trim() || "message";
-      const dataLine = eventText
-        .split("\n")
-        .find((line) => line.startsWith("data:"));
-      if (!dataLine) return;
-
-      const payload = dataLine.slice(5).trim();
-      if (!payload || payload === "{}") return;
-
-      const parsed = JSON.parse(payload) as { content?: string; detail?: string };
-      if (eventName === "error") {
-        streamError = String(parsed.detail || "Risk assistant failed");
-      } else if (parsed.content) {
-        onChunk(parsed.content);
-      }
-    });
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    flushEvents();
-  }
-
-  buffer += decoder.decode();
-  flushEvents();
-
-  if (streamError) {
-    throw new Error(streamError);
-  }
+  let receivedContent = false;
+  await readEventStream(response, (name, data) => {
+    if (!data || typeof data !== "object") throw new Error("助手响应格式异常");
+    const parsed = data as { content?: string; detail?: string };
+    if (name === "error") throw new Error(String(parsed.detail || "助手暂时无法回答，请重试。"));
+    if (typeof parsed.content === "string" && parsed.content) { receivedContent = true; onChunk(parsed.content); }
+  }, getAccountSignal());
+  if (!receivedContent) throw new Error("连接已结束，但未收到回答，请重试。");
 }
 
 export function fetchRiskOverview(date?: string) {
@@ -1760,144 +1694,5 @@ export function readCachedCoinDetail(symbol: string, date?: string) {
   const search = date ? `?date=${encodeURIComponent(date)}` : "";
   return readCachedJson<CoinRankingItem>(
     `/api/rankings/coins/${encodeURIComponent(symbol)}${search}`
-  );
-}
-
-export type SimSymbol = {
-  symbol: string;
-  base_symbol: string;
-  name: string;
-};
-
-export type SimPosition = {
-  symbol: string;
-  quantity: number;
-  avg_cost: number;
-  current_price: number;
-  market_value: number;
-  pnl: number;
-  pnl_rate: number;
-};
-
-export type SimTrade = {
-  time: string;
-  symbol: string;
-  side: "BUY" | "SELL";
-  price: number;
-  quantity: number;
-  amount_usdt: number;
-  fee: number;
-};
-
-export type SimRiskEvent = {
-  id: string;
-  time: string;
-  title: string;
-  summary: string;
-  risk_score: number;
-  risk_level: string;
-  risk_type: string;
-  affected_symbols: string[];
-  affected_assets: string[];
-  related_symbols?: string[];
-  related_symbol_details?: Array<{
-    symbol: string;
-    asset: string;
-    name: string;
-    matched_keywords: string;
-  }>;
-  evidence: string;
-  source_url?: string;
-  analysis?: Record<string, unknown>;
-  candle_index?: number;
-};
-
-export type SimState = {
-  current_index: number;
-  max_index: number;
-  start_time: string;
-  end_time: string;
-  sim_time: string;
-  cash: number;
-  positions: SimPosition[];
-  prices: Record<string, number>;
-  total_asset: number;
-  return_rate: number;
-  trade_history: SimTrade[];
-  risk_events: SimRiskEvent[];
-};
-
-export type SimCandle = {
-  openTime: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  closeTime: number;
-  time: string;
-};
-
-type SimEnvelope<T> = {
-  status: string;
-  data: T;
-};
-
-export function fetchSimSymbols() {
-  return requestJson<{ status: string; items: SimSymbol[] }>("/api/sim/symbols");
-}
-
-export async function fetchSimState() {
-  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/state");
-  return response.data;
-}
-
-export async function resetSim() {
-  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/reset", {
-    method: "POST",
-  });
-  return response.data;
-}
-
-export async function nextSimStep() {
-  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/next", {
-    method: "POST",
-  });
-  return response.data;
-}
-
-export async function jumpSim(target: { index?: number; target_time?: string }) {
-  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/jump", {
-    method: "POST",
-    body: JSON.stringify(target),
-  });
-  return response.data;
-}
-
-export async function buySim(symbol: string, amountUsdt: number) {
-  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/buy", {
-    method: "POST",
-    body: JSON.stringify({ symbol, amount_usdt: amountUsdt }),
-  });
-  return response.data;
-}
-
-export async function sellSim(symbol: string, quantity: number | "ALL") {
-  const response = await requestJson<SimEnvelope<SimState>>("/api/sim/sell", {
-    method: "POST",
-    body: JSON.stringify({ symbol, quantity }),
-  });
-  return response.data;
-}
-
-export function fetchSimCandles(symbol: string) {
-  return requestJson<{ status: string; symbol: string; items: SimCandle[] }>(
-    `/api/sim/candles?symbol=${encodeURIComponent(symbol)}`
-  );
-}
-
-export function fetchSimEvents(symbol: string) {
-  return requestJson<{ status: string; symbol: string; items: SimRiskEvent[] }>(
-    `/api/sim/events?symbol=${encodeURIComponent(symbol)}`
   );
 }

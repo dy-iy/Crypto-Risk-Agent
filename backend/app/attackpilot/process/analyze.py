@@ -154,7 +154,7 @@ class DAppAnalyze:
 
                         if self.metrics_collector:
                             self.metrics_collector.finalize_case(self.dapp_name, "NO_HYPOTHESIS_GENERATED")
-                        return fail_msg, self.get_analyze_items()
+                        return 'FAILED: ' + fail_msg, self.get_analyze_items()
 
                 if debug_result["reason"] == "READY_FOR_PATCH" or guide_turn == 1:
                     debug_data = debug_result.get("data", [None, None, None])

@@ -8,6 +8,7 @@ from string import Template
 
 from app.attackpilot.settings import LLM_BASE_URL, LLM_API_KEY, LLM_NAME, PROJECT_PATH, PROMPT_PATH
 from app.attackpilot.utils.tokenization import get_token_encoder
+from app.attackpilot.language import CHINESE_OUTPUT_RULES
 
 enc = get_token_encoder("gpt-4o")
 
@@ -46,6 +47,8 @@ MODEL_CONTEXT_WINDOWS = {
 }
 
 MODEL_MAX_OUTPUT_TOKENS = {
+    # Reserve enough context for the workflow's bounded output-length retry.
+    "deepseek-v4-pro": 32768,
     # --- OpenAI ---
     "gpt-4o": 14000,
     "gpt-4o-2024-08-06": 16000,
@@ -97,7 +100,7 @@ def call_llm(system_prompt: str, user_prompt: str) -> (str, int):
         response = client.chat.completions.create(
             model=LLM_NAME,
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": system_prompt + CHINESE_OUTPUT_RULES},
                 {"role": "user", "content": user_prompt},
             ],
             stream=False

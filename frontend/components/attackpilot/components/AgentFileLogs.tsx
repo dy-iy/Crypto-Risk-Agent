@@ -3,6 +3,7 @@ import { App as AntdApp, Button, Empty, Space, Spin, Tag, Typography } from "ant
 import { Copy, FileText, RefreshCcw } from "lucide-react";
 import { getAgentLogFile, listAgentLogFiles } from "../services/api";
 import { AgentLogFileMeta, AgentLogFileResponse } from "../types";
+import { agentDisplayName } from "../utils/presentation";
 
 interface AgentFileLogsProps {
   taskId: string;
@@ -15,7 +16,7 @@ function formatBytes(size: number) {
 }
 
 function getFileLabel(file: AgentLogFileMeta) {
-  return file.name.replace(/\.log$/i, "");
+  return agentDisplayName(file.agent || file.name.replace(/\.log$/i, ""));
 }
 
 const AgentFileLogs: React.FC<AgentFileLogsProps> = ({ taskId }) => {
@@ -119,11 +120,11 @@ const AgentFileLogs: React.FC<AgentFileLogsProps> = ({ taskId }) => {
       <div className="file-log-main">
         <div className="file-log-meta">
           <Space size={6} wrap>
-            <Tag>{selectedFile?.agent ?? "智能体"}</Tag>
+            <Tag>{agentDisplayName(selectedFile?.agent)}</Tag>
             <Tag>{selectedFile ? formatBytes(selectedFile.size) : "暂无"}</Tag>
             {selectedLog?.truncated ? <Tag color="warning">内容已截断</Tag> : null}
           </Space>
-          <Button size="small" icon={<Copy size={13} />} disabled={!selectedLog?.content} onClick={handleCopy}>
+          <Button size="small" icon={<Copy size={13} />} disabled={loadingFile || !selectedLog?.content} onClick={handleCopy}>
             复制
           </Button>
         </div>

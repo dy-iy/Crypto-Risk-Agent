@@ -8062,42 +8062,85 @@
   }
 }
 
-/* CryptoRisk host integration. Keep all layout and theme changes within this module. */
-.attackpilot-root { width: 100%; height: auto; min-width: 0; overflow: visible; border-radius: 12px; background: #f8fafc; font-family: inherit; }
-.attackpilot-root .ap-module-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 16px; border: 1px solid #dbe4f0; border-radius: 12px; background: white; }
-.attackpilot-root .ap-brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; font-weight: 750; color: #1d4ed8; }
-.attackpilot-root .ap-module-nav a { padding: 9px 14px; border-radius: 8px; color: #475569; font-weight: 600; }
-.attackpilot-root .ap-module-nav a[aria-current="page"] { background: #eff6ff; color: #1d4ed8; }
-.attackpilot-root .ap-page { display: flex; flex-direction: column; gap: 20px; padding: 24px 0; }
-.attackpilot-root .ap-intro { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.attackpilot-root .ap-intro h2 { font-size: clamp(22px, 2vw, 30px); font-weight: 750; margin: 6px 0; color: #0f172a; }
-.attackpilot-root .ap-intro p, .attackpilot-root .ap-card > p { color: #64748b; line-height: 1.8; }
-.attackpilot-root .ap-eyebrow { font-size: 12px; font-weight: 650; color: #2563eb !important; letter-spacing: 1px; }
-.attackpilot-root .ap-review-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; }
-.attackpilot-root .ap-card { min-width: 0; padding: 24px; background: white; border: 1px solid #dbe4f0; border-radius: 12px; }
-.attackpilot-root .ap-card h3 { margin: 0 0 14px; font-size: 18px; font-weight: 700; }
-.attackpilot-root .ap-card-heading { display: flex; align-items: baseline; justify-content: space-between; }
-.attackpilot-root .ap-card label:not(.ant-checkbox-wrapper) { display: block; font-weight: 650; margin: 18px 0 8px; }
-.attackpilot-root .ap-card .ant-checkbox-group { gap: 12px; }
-.attackpilot-root .ap-validation { margin: 8px 0; color: #b91c1c; font-size: 13px; }
-.attackpilot-root .ap-method { background: #f8fafc; border-radius: 8px; padding: 18px; margin-top: 24px; }
-.attackpilot-root .ap-method h4 { font-weight: 700; }
-.attackpilot-root .ap-method ol { list-style: decimal; padding-left: 20px; line-height: 2; margin-top: 8px; }
-.attackpilot-root .ap-method p { font-size: 12px; color: #64748b; margin-top: 12px; }
-.attackpilot-root .ap-case-context { margin-top: 16px; }
-.attackpilot-root .ap-candidate-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
-.attackpilot-root .ap-candidate-grid p { margin: 10px 0; overflow-wrap: anywhere; }
-.attackpilot-root .app-shell { min-height: 0; margin-top: 16px; }
-.attackpilot-root .topbar { position: static; height: auto; min-height: 72px; flex-wrap: wrap; padding: 16px; border-radius: 10px; }
-.attackpilot-root .dashboard-layout { height: auto; min-height: 680px; overflow: visible; padding: 16px 0; }
-.attackpilot-root .landing-header { position: static; height: auto; flex-wrap: wrap; }
-.attackpilot-root .ant-table-thead > tr > th { background: #f8fafc !important; }
-.attackpilot-root .ant-table-tbody > tr > td { border-bottom-color: #e2e8f0 !important; }
-.attackpilot-root .ant-drawer-content { background: #fff; color: #0f172a; }
+/* Keep the original application inside the host sidebar's content area. */
+.attackpilot-root {
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  overflow: visible;
+  container: attackpilot / inline-size;
+  background: var(--bg-deep);
+  border-radius: 12px;
+}
+.attackpilot-root .app-root { min-height: 0; }
+.attackpilot-root .ap-module-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+.attackpilot-root .ap-brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; font-weight: 750; color: var(--accent); }
+.attackpilot-root .ap-module-nav a { padding: 9px 12px; border-radius: 8px; color: var(--text-secondary); font-weight: 600; text-decoration: none; }
+.attackpilot-root .ap-module-nav a[aria-current="page"] { background: var(--bg-elevated); color: var(--accent); }
+.attackpilot-root .ap-page-loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 300px; color: var(--text-secondary); }
+.attackpilot-root .app-shell { min-height: 0; }
+.attackpilot-root .topbar { position: static; height: auto; flex-wrap: wrap; border-radius: 10px 10px 0 0; }
+.attackpilot-root .dashboard-layout,
+.attackpilot-root .task-list-page { height: auto; min-height: 680px; overflow: visible; }
+.attackpilot-root .landing-v2-shell { min-height: 0; }
+.attackpilot-root .landing-v2-nav { height: auto; min-height: 72px; flex-wrap: wrap; }
 .attackpilot-root .forensic-assistant-panel { max-width: calc(100vw - 24px); }
-@media (max-width: 900px) {
-  .attackpilot-root .ap-review-grid, .attackpilot-root .ap-candidate-grid { grid-template-columns: minmax(0,1fr); }
-  .attackpilot-root .ap-card { padding: 18px; }
+/* Tailwind preflight resets the browser typography the source app relied on. */
+.attackpilot-root .markdown-content { min-width: 0; overflow-wrap: anywhere; }
+.attackpilot-root .markdown-content :is(h1,h2,h3,h4,h5,h6) { font-weight: 700; }
+.attackpilot-root .markdown-content ul { list-style: disc; }
+.attackpilot-root .markdown-content ol { list-style: decimal; }
+.attackpilot-root .markdown-content ul ul { list-style: circle; }
+.attackpilot-root .markdown-content a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.attackpilot-root .markdown-content hr { margin: 20px 0; border-color: var(--border); }
+.attackpilot-root .markdown-content pre { overflow-wrap: normal; }
+.attackpilot-root .markdown-content :is(table,pre) { max-width: 100%; }
+.attackpilot-root .report-language-toolbar { display: flex; flex-direction: column; gap: 12px; padding: 14px 0; }
+.attackpilot-root .table-toolbar { flex-wrap: wrap; }
+.attackpilot-root .workbench-grid { height: auto; }
+.attackpilot-root .inspector-panel { display: block; min-width: 0; }
+.attackpilot-root[data-appearance="dark"] .analysis-page-heading .ant-typography { color: var(--text-primary) !important; }
+.attackpilot-root[data-appearance="dark"] :is(.analysis-output-card,.analysis-progress-card,.workflow-module-box,.quick-case-wide) {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.attackpilot-root[data-appearance="dark"] .workflow-module-box .ant-checkbox-wrapper { background: var(--bg-card); border-color: var(--border); }
+.attackpilot-root[data-appearance="dark"] :is(.analysis-output-card,.analysis-progress-card,.workflow-module-box,.quick-case-wide) :is(strong,span,li) { color: var(--text-primary); }
+.attackpilot-root[data-appearance="dark"] :is(.workflow-module-box,.quick-case-wide) small { color: var(--text-secondary); }
+.attackpilot-root[data-appearance="dark"] .case-replay-entry-btn { background: var(--bg-elevated) !important; color: var(--accent) !important; }
+@container attackpilot (max-width: 1280px) {
+  .attackpilot-root .workbench-grid { grid-template-columns: 210px minmax(0,1fr); }
+  .attackpilot-root .inspector-panel { grid-column: 1 / -1; }
+}
+@container attackpilot (max-width: 1120px) {
+  .attackpilot-root .app-root:has(.product-overview-page) .product-overview-page.landing-stage {
+    grid-template-columns: minmax(0,1fr) !important;
+    grid-template-areas: "copy" "visual" "panel" !important;
+  }
+  .attackpilot-root .app-root:has(.product-overview-page) .analysis-page-grid { grid-template-columns: minmax(0,1fr) !important; }
+  .attackpilot-root .briefing-two-col { grid-template-columns: minmax(0,1fr); }
+  .attackpilot-root .landing-v2-nav-actions { flex-wrap: wrap; }
+}
+@container attackpilot (max-width: 720px) {
+  .attackpilot-root .workbench-grid { grid-template-columns: minmax(0,1fr); }
   .attackpilot-root .ap-brand { flex-basis: 100%; margin-bottom: 4px; }
+  .attackpilot-root .ap-module-nav { gap: 4px; padding: 12px; }
+  .attackpilot-root .ap-module-nav a { padding: 8px; }
   .attackpilot-root .topbar > .ant-space { flex-wrap: wrap; }
+  .attackpilot-root .app-root:has(.product-overview-page) .stage-metric-list,
+  .attackpilot-root .app-root:has(.product-overview-page) .stage-overview-panel .stage-module-grid { grid-template-columns: minmax(0,1fr) !important; }
+  .attackpilot-root .briefing-card-grid,
+  .attackpilot-root .briefing-pitch { grid-template-columns: minmax(0,1fr); }
+  .attackpilot-root .landing-v2-nav { padding: 14px 18px !important; }
 }

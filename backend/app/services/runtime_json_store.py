@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -33,18 +36,26 @@ def load_runtime_json_or_quarantine(path: Path) -> Any | None:
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (UnicodeDecodeError, json.JSONDecodeError):
         quarantine_invalid_json(path)
         return None
 
 
 def write_runtime_json_atomic(path: Path, payload: Any) -> bool:
+    temp_path = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = path.with_suffix(f"{path.suffix}.tmp")
-        with temp_path.open("w", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=2)
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=f".{path.name}.", suffix=".tmp", delete=False) as file:
+            temp_path = Path(file.name)
+            json.dump(payload, file, ensure_ascii=False, indent=2, allow_nan=False)
+            file.flush()
+            os.fsync(file.fileno())
         temp_path.replace(path)
         return True
-    except OSError:
+    except (OSError, ValueError, TypeError):
+        logging.getLogger(__name__).exception("Failed to persist runtime JSON: %s", path.name)
         return False
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)

@@ -1,0 +1,20 @@
+{
+  "results": [
+    {
+      "width": 1440,
+      "height": 900,
+      "passed": true
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "passed": true
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "passed": true
+    }
+  ],
+  "errors": []
+}

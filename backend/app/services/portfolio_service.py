@@ -38,6 +38,7 @@ from app.services.ranking_aggregation_service import SOURCE_URL_FIELDS, first_te
 
 
 DEFAULT_USER_ID = "demo_user"
+_watchlist_write_lock = Lock()
 DEFAULT_INTERVAL = "15m"
 DEFAULT_LIMIT = 200
 PORTFOLIO_STATE_PATH = Path(__file__).resolve().parents[1] / "data" / "portfolio_state.json"
@@ -180,73 +181,67 @@ def _watch_items(user_id: str = DEFAULT_USER_ID) -> list[UserWatchlist]:
     return list_watchlist_records(user_id)
 
 
-def add_watchlist_item(payload: UserWatchlistCreate, user_id: str = DEFAULT_USER_ID) -> UserWatchlist:
-    symbol = _normalize_symbol(payload.symbol)
-    now = _now()
-    exposure_bucket = payload.exposure_bucket
-    exposure_mode = payload.exposure_mode
-    if payload.is_holding and exposure_mode == "bucket" and exposure_bucket == "none":
-        exposure_bucket = "medium"
-    _seed_watchlist_store_if_needed()
-    for item in list_watchlist_records(user_id):
-        if item.symbol == symbol:
-            updated = item.model_copy(
-                update={
-                    "is_holding": payload.is_holding,
-                    "is_watched": payload.is_watched or payload.is_holding,
-                    "exposure_mode": exposure_mode,
-                    "exposure_bucket": exposure_bucket,
-                    "custom_exposure_pct": payload.custom_exposure_pct,
-                    "amount": payload.amount,
-                    "avg_buy_price": payload.avg_buy_price,
-                    "alert_threshold": payload.alert_threshold,
-                    "updated_at": now,
-                }
-            )
-            return upsert_watchlist_record(updated)
+def _updated_watchlist(item: UserWatchlist, updates: dict[str, Any], now: str) -> UserWatchlist:
+    values = {**item.model_dump(), **updates, "updated_at": now}
+    if values["is_holding"]:
+        values["is_watched"] = True
+        if values["exposure_mode"] == "bucket" and values["exposure_bucket"] == "none":
+            values["exposure_bucket"] = "medium"
+    return UserWatchlist.model_validate(values)
 
-    created = UserWatchlist(
-        id=f"{user_id}:{symbol}",
-        user_id=user_id,
-        symbol=symbol,
-        base_asset=_base_asset(symbol),
-        is_watched=payload.is_watched or payload.is_holding,
-        is_holding=payload.is_holding,
-        exposure_mode=exposure_mode,
-        exposure_bucket=exposure_bucket,
-        custom_exposure_pct=payload.custom_exposure_pct,
-        amount=payload.amount,
-        avg_buy_price=payload.avg_buy_price,
-        alert_threshold=payload.alert_threshold,
-        created_at=now,
-        updated_at=now,
-    )
-    return upsert_watchlist_record(created)
+
+def add_watchlist_item(payload: UserWatchlistCreate, user_id: str = DEFAULT_USER_ID) -> UserWatchlist:
+    with _watchlist_write_lock:
+        symbol = _normalize_symbol(payload.symbol)
+        now = _now()
+        exposure_bucket = payload.exposure_bucket
+        exposure_mode = payload.exposure_mode
+        if payload.is_holding and exposure_mode == "bucket" and exposure_bucket == "none":
+            exposure_bucket = "medium"
+        _seed_watchlist_store_if_needed()
+        for item in list_watchlist_records(user_id):
+            if item.symbol == symbol:
+                # POST remains an upsert, but omitted fields must preserve saved holdings.
+                updates = payload.model_dump(exclude_unset=True, exclude={"symbol"})
+                return upsert_watchlist_record(_updated_watchlist(item, updates, now))
+
+        created = UserWatchlist(
+            id=f"{user_id}:{symbol}",
+            user_id=user_id,
+            symbol=symbol,
+            base_asset=_base_asset(symbol),
+            is_watched=payload.is_watched or payload.is_holding,
+            is_holding=payload.is_holding,
+            exposure_mode=exposure_mode,
+            exposure_bucket=exposure_bucket,
+            custom_exposure_pct=payload.custom_exposure_pct,
+            amount=payload.amount,
+            avg_buy_price=payload.avg_buy_price,
+            alert_threshold=payload.alert_threshold,
+            created_at=now,
+            updated_at=now,
+        )
+        return upsert_watchlist_record(created)
 
 
 def update_watchlist_item(symbol: str, payload: UserWatchlistUpdate, user_id: str = DEFAULT_USER_ID) -> UserWatchlist:
-    normalized = _normalize_symbol(symbol)
-    now = _now()
-    updates = payload.model_dump(exclude_unset=True)
-    if updates.get("is_holding") is True and updates.get("exposure_mode", "bucket") == "bucket" and updates.get("exposure_bucket", "none") == "none":
-        updates["exposure_bucket"] = "medium"
-    if updates.get("is_holding") is True:
-        updates["is_watched"] = True
-    if updates.get("is_watched") is False and updates.get("is_holding") is not False:
-        updates["is_watched"] = True
-    _seed_watchlist_store_if_needed()
-    for item in list_watchlist_records(user_id):
-        if item.symbol == normalized:
-            updated = item.model_copy(update={**updates, "updated_at": now})
-            return upsert_watchlist_record(updated)
-    raise PortfolioError(f"watchlist symbol not found: {symbol}")
+    with _watchlist_write_lock:
+        normalized = _normalize_symbol(symbol)
+        now = _now()
+        updates = payload.model_dump(exclude_unset=True)
+        _seed_watchlist_store_if_needed()
+        for item in list_watchlist_records(user_id):
+            if item.symbol == normalized:
+                return upsert_watchlist_record(_updated_watchlist(item, updates, now))
+        raise PortfolioError(f"watchlist symbol not found: {symbol}")
 
 
 def delete_watchlist_item(symbol: str, user_id: str = DEFAULT_USER_ID) -> None:
-    normalized = _normalize_symbol(symbol)
-    _seed_watchlist_store_if_needed()
-    if not delete_watchlist_record(user_id, normalized):
-        raise PortfolioError(f"watchlist symbol not found: {symbol}")
+    with _watchlist_write_lock:
+        normalized = _normalize_symbol(symbol)
+        _seed_watchlist_store_if_needed()
+        if not delete_watchlist_record(user_id, normalized):
+            raise PortfolioError(f"watchlist symbol not found: {symbol}")
 
 
 def _candle_key(symbol: str, interval: str) -> str:

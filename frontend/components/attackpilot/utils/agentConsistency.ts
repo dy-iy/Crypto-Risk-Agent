@@ -1,6 +1,63 @@
-import { LogMessage, MacroAnalysisResponse, Task, TaskEvent } from "../types";
+import { LanguageMode, LogMessage, MacroAnalysisResponse, Task, TaskEvent } from "../types";
+import { agentDisplayName } from "./presentation";
 
-export type ConsistencyStatus = "pass" | "warning" | "risk";
+const CONSISTENCY_COPY_ZH: Record<string, string> = {
+  "Macro transaction selection -> Trace debugging": "宏观交易筛选与调用轨迹调试",
+  "Checks whether attack/debug target transactions selected in the macro stage are reused by Trace Debugger or the final report.": "检查宏观阶段筛选出的攻击交易和调试目标是否被后续调试或最终报告引用。",
+  "Checks whether macro-selected attack/debug target transactions are reused by Trace Debugger or final report.": "检查宏观阶段筛选出的攻击交易和调试目标是否被后续调试或最终报告引用。",
+  "Trace/debug stage references at least one macro target.": "调用轨迹调试阶段至少引用了一个宏观分析目标。",
+  "No macro target was found in Trace/debug outputs.": "未在调用轨迹调试输出中找到宏观分析目标。",
+  "No macro debug target is available; fallback uses shared transaction mentions.": "暂无宏观调试目标，当前根据多个智能体共同引用的交易进行检查。",
+  "Make sure Transaction Debugger and final report explicitly cite macro-selected attack transactions.": "请确保交易调试智能体和最终报告明确引用宏观阶段筛选出的攻击交易。",
+  "Require Trace Debugger and final report to cite macro-selected attack transactions.": "要求交易调试智能体和最终报告引用宏观阶段筛选出的攻击交易。",
+  "Attack transaction agreement": "攻击交易一致性",
+  "Checks whether multiple agents cite the same attack transaction instead of drifting to unrelated transactions.": "检查多个智能体是否引用相同的攻击交易，避免分析偏离至无关交易。",
+  "No transaction hash is shared by two or more agents.": "没有交易哈希被两个或更多智能体共同引用。",
+  "Promote transaction hashes into structured outputs so cross-agent agreement can be verified.": "请在结构化输出中明确列出交易哈希，以便核对不同智能体之间的一致性。",
+  "Promote transaction hashes into structured outputs for cross-agent agreement.": "请在结构化输出中明确列出交易哈希，以便核对不同智能体之间的一致性。",
+  "Root cause function -> Patch continuity": "根因函数与补丁连续性",
+  "Checks whether functions mentioned by fault localization/debugging are also referenced by patch or verification outputs.": "检查故障定位或调试阶段提到的函数是否也被补丁或验证结果引用。",
+  "Checks whether functions mentioned by localization/debugging are also referenced by patch or verification outputs.": "检查定位或调试阶段提到的函数是否也被补丁或验证结果引用。",
+  "No root/debug function candidates extracted.": "尚未提取到根因定位或调试阶段的候选函数。",
+  "No patch-stage function candidates extracted.": "尚未提取到补丁阶段的候选函数。",
+  "Require patch reports to cite the same faulty functions and trace indices found by debugging.": "要求补丁报告引用调试阶段发现的同一组缺陷函数和调用轨迹索引。",
+  "Patch verification loop": "补丁验证闭环",
+  "Checks whether patch/fix discussion is followed by verification, replay, success/failure, or judge signals.": "检查补丁或修复讨论之后是否存在验证、回放、成功或失败结果，以及验证智能体的反馈。",
+  "No patch/fix signal detected.": "未发现补丁或修复信号。",
+  "No verification/replay signal detected.": "未发现验证或回放信号。",
+  "Expose patch replay results and success/failure signals in the final report.": "请在最终报告中明确展示补丁回放结果及成功或失败状态。",
+  "Root cause quorum": "根因共识",
+  "Checks whether root-cause language appears across multiple agents instead of only in the final report.": "检查多个智能体是否都提到了漏洞根因，避免根因只出现在最终报告中。",
+  "No root-cause signal detected.": "未发现根因分析信号。",
+  "Ask each major stage to emit a structured root-cause field for easier consistency checking.": "要求各主要分析阶段输出结构化根因字段，以便检查一致性。",
+  "Ask major stages to emit a structured root-cause field.": "要求各主要分析阶段输出结构化根因字段。",
+};
+
+/** Localize generated review explanations, including responses from older backends. */
+export function localizeConsistencyText(value: string, language: LanguageMode = "zh") {
+  if (language !== "zh") return value;
+  if (CONSISTENCY_COPY_ZH[value]) return CONSISTENCY_COPY_ZH[value];
+  const agentList = (names: string) => names.split(", ").map(agentDisplayName).join("、");
+  let match = value.match(/^(\d+) macro debug target\(s\): (.*)$/);
+  if (match) return `${match[1]} 个宏观调试目标：${match[2]}`;
+  match = value.match(/^(.+) shared by (.+)$/);
+  if (match) return `${match[1]} 由以下智能体共同引用：${agentList(match[2])}`;
+  match = value.match(/^(.+) appears in both localization\/debug and patch stages\.$/);
+  if (match) return `${match[1]} 同时出现在定位／调试阶段和补丁阶段。`;
+  match = value.match(/^Root\/debug functions: (.+)$/);
+  if (match) return `根因定位／调试函数：${match[1]}`;
+  match = value.match(/^Patch functions: (.+)$/);
+  if (match) return `补丁函数：${match[1]}`;
+  match = value.match(/^Patch mentioned by: (.+)$/);
+  if (match) return `提到补丁的智能体：${agentList(match[1])}`;
+  match = value.match(/^Verification mentioned by: (.+)$/);
+  if (match) return `提到验证的智能体：${agentList(match[1])}`;
+  match = value.match(/^Root-cause signals found in: (.+)$/);
+  if (match) return `以下智能体包含根因分析信号：${agentList(match[1])}`;
+  return value;
+}
+
+export type ConsistencyStatus = "pass" | "warning" | "risk" | "unavailable";
 
 export interface AgentSignalSummary {
   agent: string;
@@ -23,7 +80,7 @@ export interface ConsistencyCheck {
 }
 
 export interface AgentConsistencySummary {
-  score: number;
+  score: number | null;
   status: ConsistencyStatus;
   checks: ConsistencyCheck[];
   agentSignals: AgentSignalSummary[];
@@ -140,7 +197,13 @@ function makeCheck(
   recommendation?: string,
 ): ConsistencyCheck {
   const status: ConsistencyStatus = score >= 75 ? "pass" : score >= 45 ? "warning" : "risk";
-  return { id, title, description, status, score, evidence, recommendation };
+  return {
+    id, status, score,
+    title: localizeConsistencyText(title),
+    description: localizeConsistencyText(description),
+    evidence: evidence.map(item => localizeConsistencyText(item)),
+    recommendation: recommendation ? localizeConsistencyText(recommendation) : undefined,
+  };
 }
 
 function containsAnyTransaction(signals: AgentSignalSummary[], agents: string[], txs: string[]) {
@@ -159,6 +222,9 @@ export function analyzeAgentConsistency(
   events: TaskEvent[],
   macro: MacroAnalysisResponse | null,
 ): AgentConsistencySummary {
+  if (task?.status !== "completed" || !task.final_report?.trim()) {
+    return { score: null, status: "unavailable", checks: [], agentSignals: [], sharedTransactions: [], sharedFunctions: [] };
+  }
   const agentSignals = buildAgentSignals(events, task);
   const sharedTransactions = sharedValues(agentSignals, "transactions");
   const sharedFunctions = sharedValues(agentSignals, "functions");

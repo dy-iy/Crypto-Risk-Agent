@@ -33,7 +33,7 @@ class RequestSecurityServiceTest(unittest.TestCase):
         headers = {"x-forwarded-for": "203.0.113.10, 10.0.0.2"}
 
         with patch.dict("os.environ", {"TRUST_PROXY_HEADERS": "1"}, clear=False):
-            self.assertEqual(request_client_identity("10.0.0.9", headers), "203.0.113.10")
+            self.assertEqual(request_client_identity("10.0.0.9", headers), "10.0.0.2")
 
         with patch.dict("os.environ", {"TRUST_PROXY_HEADERS": "0"}, clear=False):
             self.assertEqual(request_client_identity("10.0.0.9", headers), "10.0.0.9")

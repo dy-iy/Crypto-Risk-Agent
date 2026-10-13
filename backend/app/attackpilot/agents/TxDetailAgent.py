@@ -27,6 +27,7 @@ class TxDetailAgent(AgentBase):
 
     async def handle(self, tx_list: List[str]) -> tuple[str, Dict[str, Dict], dict[str, list[TokenPropertyItem]]]:
         tx_detail_str = ''
+        self.logger.info(f'正在读取 {len(tx_list)} 笔交易的链上数据与执行轨迹。')
 
         # get token info
         txhash2property = await self._load_token_properties(tx_list)
@@ -51,7 +52,7 @@ class TxDetailAgent(AgentBase):
                 tx_summary = await self.query(TX_SUMMARY_UP.format(
                     tx_detail=tx_json_str,
                     properties=property_str
-                ), _format="str")
+                ), _format="str", thinking=False)
                 # write cache
                 self.write_summary_to_cache(cache_path='summary/tx_detail_summary', file_name=tx,
                                             summary=tx_summary)

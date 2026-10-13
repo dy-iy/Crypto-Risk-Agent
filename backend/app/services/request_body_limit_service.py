@@ -36,7 +36,16 @@ async def request_body_exceeds_limit(request: Any, limit_bytes: int) -> bool:
         return False
     if content_length_exceeds_limit(request.headers, limit_bytes):
         return True
-    if request.headers.get("content-length"):
-        return False
-    body = await request.body()
-    return len(body) > limit_bytes
+    if not hasattr(request, "stream"):
+        return len(await request.body()) > limit_bytes
+    # Measure actual bytes, including chunked requests and misleading headers.
+    parts = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit_bytes:
+            return True
+        parts.append(chunk)
+    # Starlette's middleware forwards this cached body to the downstream route.
+    request._body = b"".join(parts)
+    return False

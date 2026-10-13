@@ -44,6 +44,8 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio-risk-radar"])
 PORTFOLIO_REFRESH_JOBS_PATH = Path(__file__).resolve().parents[1] / "data" / "portfolio_refresh_jobs.json"
 _refresh_jobs: dict[str, PortfolioRefreshJob] = {}
 _refresh_lock = Lock()
+_refresh_start_lock = Lock()
+
 _refresh_jobs_lock = Lock()
 _latest_job_by_user: dict[str, str] = {}
 
@@ -70,8 +72,18 @@ def _load_refresh_jobs() -> None:
             job = PortfolioRefreshJob.model_validate(payload)
         except Exception:
             continue
+        # Worker threads do not survive a process restart. Make interrupted jobs retryable.
+        if job.status in {"queued", "running"}:
+            job = job.model_copy(update={
+                "status": "error", "stage": "error",
+                "message": "服务中断，刷新任务未完成，请重新刷新",
+                "error": "服务中断，刷新任务未完成，请重新刷新",
+                "finished_at": _now_text(),
+            })
         _refresh_jobs[str(job_id)] = job
-        _latest_job_by_user[job.user_id] = job.job_id
+        previous = _refresh_jobs.get(_latest_job_by_user.get(job.user_id, ""))
+        if not previous or _parse_job_time(job.updated_at) >= _parse_job_time(previous.updated_at):
+            _latest_job_by_user[job.user_id] = job.job_id
 
 
 def _persist_refresh_jobs() -> None:
@@ -207,10 +219,13 @@ def _handle_portfolio_error(exc: PortfolioError) -> HTTPException:
 def _resolve_user_id(
     user_id: str | None,
     cryptorisk_session: str | None,
+    *, write: bool = False,
 ) -> str:
+    user = get_user_by_session(cryptorisk_session)
+    if write and not user:
+        raise HTTPException(status_code=401, detail="请先登录后再修改个人资产，游客演示数据仅供查看")
     if user_id and getenv("ALLOW_USER_ID_QUERY_OVERRIDE") == "1":
         return user_id
-    user = get_user_by_session(cryptorisk_session)
     return user.id if user else DEFAULT_USER_ID
 
 
@@ -229,7 +244,7 @@ def create_portfolio_watchlist_item(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     try:
-        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
+        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session, write=True)
         item = add_watchlist_item(payload, resolved_user_id)
         generate_risk_snapshot(item.symbol, resolved_user_id)
         return item
@@ -245,7 +260,7 @@ def patch_portfolio_watchlist_item(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     try:
-        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
+        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session, write=True)
         item = update_watchlist_item(symbol, payload, resolved_user_id)
         generate_risk_snapshot(item.symbol, resolved_user_id)
         return item
@@ -260,7 +275,7 @@ def remove_portfolio_watchlist_item(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     try:
-        delete_watchlist_item(symbol, _resolve_user_id(user_id, cryptorisk_session))
+        delete_watchlist_item(symbol, _resolve_user_id(user_id, cryptorisk_session, write=True))
         return {"status": "success", "message": "watchlist item deleted"}
     except PortfolioError as exc:
         raise _handle_portfolio_error(exc) from exc
@@ -320,7 +335,7 @@ def refresh_portfolio_risk(
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
     try:
-        return refresh_portfolio(_resolve_user_id(user_id, cryptorisk_session))
+        return refresh_portfolio(_resolve_user_id(user_id, cryptorisk_session, write=True))
     except PortfolioError as exc:
         raise _handle_portfolio_error(exc) from exc
 
@@ -330,31 +345,32 @@ def start_portfolio_refresh_job(
     user_id: str | None = Query(default=None),
     cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ):
-    resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
-    existing = _active_refresh_job(resolved_user_id)
-    if existing:
-        return existing
-    job = PortfolioRefreshJob(
-        job_id=f"portfolio-{uuid.uuid4().hex}",
-        user_id=resolved_user_id,
-        status="queued",
-        stage="queued",
-        message="刷新任务已创建",
-        started_at=_now_text(),
-        updated_at=_now_text(),
-    )
-    _store_refresh_job(job)
-    record_task_event(
-        job_kind="portfolio_refresh",
-        job_id=job.job_id,
-        event_type="created",
-        status=job.status,
-        stage=job.stage,
-        message=job.message,
-        user_id=job.user_id,
-    )
-    Thread(target=_run_refresh_job, args=(job.job_id, resolved_user_id), daemon=True).start()
-    return job
+    with _refresh_start_lock:
+        resolved_user_id = _resolve_user_id(user_id, cryptorisk_session, write=True)
+        existing = _active_refresh_job(resolved_user_id)
+        if existing:
+            return existing
+        job = PortfolioRefreshJob(
+            job_id=f"portfolio-{uuid.uuid4().hex}",
+            user_id=resolved_user_id,
+            status="queued",
+            stage="queued",
+            message="刷新任务已创建",
+            started_at=_now_text(),
+            updated_at=_now_text(),
+        )
+        _store_refresh_job(job)
+        record_task_event(
+            job_kind="portfolio_refresh",
+            job_id=job.job_id,
+            event_type="created",
+            status=job.status,
+            stage=job.stage,
+            message=job.message,
+            user_id=job.user_id,
+        )
+        Thread(target=_run_refresh_job, args=(job.job_id, resolved_user_id), daemon=True).start()
+        return job
 
 
 @router.get("/refresh/jobs/current", response_model=PortfolioRefreshJob)
@@ -372,9 +388,14 @@ def current_portfolio_refresh_job(
 
 
 @router.get("/refresh/jobs/{job_id}", response_model=PortfolioRefreshJob)
-def get_portfolio_refresh_job(job_id: str):
+def get_portfolio_refresh_job(
+    job_id: str,
+    user_id: str | None = Query(default=None),
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    resolved_user_id = _resolve_user_id(user_id, cryptorisk_session)
     with _refresh_jobs_lock:
         job = _refresh_jobs.get(job_id)
-    if not job:
+    if not job or job.user_id != resolved_user_id:
         raise HTTPException(status_code=404, detail="Portfolio refresh job not found")
     return job

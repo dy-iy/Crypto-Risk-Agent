@@ -1,0 +1,19 @@
+{
+  "checks": [
+    "/market 1920x1080",
+    "/market 1440x900",
+    "/market 1366x768",
+    "/market 768x1024",
+    "/market 390x844",
+    "/market 320x700",
+    "/sim 1920x1080",
+    "/sim 1440x900",
+    "/sim 1366x768",
+    "/sim 768x1024",
+    "/sim 390x844",
+    "/sim 320x700"
+  ],
+  "errors": [],
+  "missing": [],
+  "requests": 84
+}

@@ -8,7 +8,6 @@ async def run(task_id: str):
     task = store.get_task(task_id)
     if not task or task["status"] != "running":
         return
-    from .workflow import WorkFlow
 
     def log(message):
         store.append_log(task_id, redact(message.model_dump(mode="json")))
@@ -18,12 +17,13 @@ async def run(task_id: str):
         current = store.get_task(task_id)
         return not current or current["status"] in store.TERMINAL
 
-    workflow = WorkFlow(log_callback=log, cancellation_checker=cancelled, use_report_cache=False, write_report_cache=False)
     try:
+        from .workflow import WorkFlow
+        workflow = WorkFlow(log_callback=log, cancellation_checker=cancelled, use_report_cache=False, write_report_cache=False)
         outcome = await workflow.process_single_dapp(task["payload"], processed_path=str(settings.WORK_ROOT / "processed.json"), report_path=str(settings.WORK_ROOT / "report.json"))
         report = outcome[1] if isinstance(outcome, (tuple, list)) and len(outcome) > 1 else outcome
         if not report or isinstance(report, str) and report.startswith(("RUNTIME_ERROR:", "ERROR", "FAILED:", "empty attack transaction!")):
-            raise RuntimeError("分析未生成有效报告，请查看 Agent 日志。")
+            raise RuntimeError(getattr(workflow, 'last_error', None) or "分析未生成有效报告，请查看任务文件日志。")
         result = getattr(workflow, "last_result", None) or {"report": report, "verification": {"status": "not_run"}}
         store.transition(task_id, "completed", result=redact(result))
     except asyncio.CancelledError:

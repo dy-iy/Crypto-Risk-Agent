@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { safeInternalPath } from "@/lib/safe-url";
+import { legacyPortfolioTarget } from "@/lib/market-symbols";
+
+import { getAccountScope, subscribeAccountScope, sessionStore } from "@/lib/browser-storage";
+
+
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { LoadingDots } from "@/components/ui/loading-states";
-import { CoinRankingItem, fetchCoinDetail, readCachedCoinDetail } from "@/lib/api";
+import { changeFollow, useFollows } from "@/lib/follows";
+import { ApiRequestError, fetchCurrentUser, CoinRankingItem, fetchCoinDetail, readCachedCoinDetail } from "@/lib/api";
 
 const coinDescriptions: Record<string, string> = {
   BTC: "Bitcoin 是最早的去中心化加密资产，常被视为加密市场的基准资产。其风险监测重点通常包括价格剧烈波动、杠杆清算、交易所资金流入流出和宏观流动性变化。",
@@ -22,27 +29,45 @@ const coinDescriptions: Record<string, string> = {
   CRV: "Curve 是稳定币和同类资产交易协议相关代币，风险监测重点包括池子流动性、坏账传导、创始人仓位和 DeFi 连锁清算。",
 };
 
-export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: string; symbol: string }) {
+function CoinDetailContent({ returnTo = "", symbol }: { returnTo?: string; symbol: string }) {
+  const follows = useFollows();
   const normalizedSymbol = symbol.toUpperCase();
-  const safeReturnTo = safeInternalPath(returnTo);
+  const followSymbol = normalizedSymbol.endsWith("USDT") ? normalizedSymbol : normalizedSymbol + "USDT";
+  const followed = follows.items.some(item => item.symbol === followSymbol);
+  const originalReturnTo = safeInternalPath(returnTo);
+  const oldQuery = new URLSearchParams(originalReturnTo.split("?")[1] || "");
+  const safeReturnTo = originalReturnTo.split("?")[0] === "/portfolio" ? legacyPortfolioTarget(oldQuery.get("asset") || oldQuery.get("symbol")) : originalReturnTo;
   const detailRange = readRankingRangeFromPath(safeReturnTo, "coin");
   const [item, setItem] = useState<CoinRankingItem | null>(() => readCachedCoinDetail(normalizedSymbol, detailRange));
   const [loading, setLoading] = useState(() => !readCachedCoinDetail(normalizedSymbol, detailRange));
   const [error, setError] = useState("");
-  const backHref = ensureRankingState(safeReturnTo || "/coins", "coin");
+  const [missing, setMissing] = useState(false);
+  const [identityReady, setIdentityReady] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const fromFollows = safeReturnTo.startsWith("/my");
+  const fromMarket = safeReturnTo.startsWith("/market");
+  const backHref = fromFollows || fromMarket ? safeReturnTo : ensureRankingState(safeReturnTo || "/coins", "coin");
 
   useEffect(() => {
     let ignore = false;
 
     async function loadCoinDetail() {
-      if (!readCachedCoinDetail(normalizedSymbol, detailRange)) setLoading(true);
+      const cached = readCachedCoinDetail(normalizedSymbol, detailRange);
+      setItem(cached);
+      setLoading(!cached);
       setError("");
+      setMissing(false);
       try {
+        await fetchCurrentUser();
+        if (ignore) return;
+        setIdentityReady(true);
         const data = await fetchCoinDetail(normalizedSymbol, detailRange);
         if (!ignore) setItem(data);
       } catch (detailError) {
-        console.error(detailError);
-        if (!ignore) setError("币种详情暂时无法加载，请稍后重试。");
+        if (!ignore) {
+          if (detailError instanceof ApiRequestError && detailError.status === 404) setMissing(true);
+          else { console.error(detailError); setError("币种详情暂时无法加载，请稍后重试。"); }
+        }
       } finally {
         if (!ignore) setLoading(false);
       }
@@ -52,7 +77,7 @@ export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: s
     return () => {
       ignore = true;
     };
-  }, [detailRange, normalizedSymbol]);
+  }, [detailRange, normalizedSymbol, retry]);
 
   const description = useMemo(() => {
     if (!item) return "";
@@ -68,9 +93,11 @@ export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: s
             className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
           >
             <ChevronLeftIcon />
-            返回币种榜
+            {fromFollows ? "返回我的关注" : fromMarket ? "返回行情看盘" : "返回币种榜"}
           </Link>
+          <button className="rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 disabled:opacity-50" disabled={!identityReady || follows.loading || !follows.loaded || follows.pending.includes(followSymbol)} onClick={() => void changeFollow(followSymbol, followed ? "remove" : "add")}>{followed ? "取消关注" : "关注币种"}</button>
         </div>
+        {follows.error && <p role="alert" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{follows.error}</p>}
 
         {loading && (
           <section className="risk-card rounded-lg p-8">
@@ -80,10 +107,11 @@ export default function CoinDetailPage({ returnTo = "", symbol }: { returnTo?: s
 
         {error && !loading && (
           <section className="rounded-lg border border-rose-100 bg-rose-50 p-5 text-sm font-semibold text-rose-700">
-            {error}
+            {error}<button className="ml-2 underline" onClick={() => setRetry(value => value + 1)}>重试</button>
           </section>
         )}
 
+        {missing && !loading && <section className="risk-card rounded-lg p-6"><h1 className="text-xl font-bold">{normalizedSymbol} 风险信息</h1><p className="mt-3 text-sm text-slate-600">暂无收录的币种风险信息。可以保留关注，后续日报会分析新收录的相关事件。</p></section>}
         {item && !loading && (
           <article
             className="space-y-5"
@@ -211,18 +239,14 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value || 0)));
 }
 
-function safeInternalPath(value: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
-  return value;
-}
 
 function ensureRankingState(path: string, scope: "news" | "coin") {
   if (typeof window === "undefined") return path;
   const [pathname, search = ""] = path.split("?");
   const searchParams = new URLSearchParams(search);
-  const storedFilter = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:filter`);
-  const storedSort = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:sort`);
-  const storedRange = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:range`);
+  const storedFilter = sessionStore.getItem(`cryptorisk.ranking:${scope}:filter`);
+  const storedSort = sessionStore.getItem(`cryptorisk.ranking:${scope}:sort`);
+  const storedRange = sessionStore.getItem(`cryptorisk.ranking:${scope}:range`);
   if (!searchParams.get("filter") && storedFilter) searchParams.set("filter", storedFilter);
   if (!searchParams.get("sort") && storedSort) searchParams.set("sort", storedSort);
   if (!searchParams.get("range") && storedRange && isRankingRange(storedRange)) searchParams.set("range", storedRange);
@@ -235,7 +259,7 @@ function readRankingRangeFromPath(path: string, scope: "news" | "coin") {
   const [, search = ""] = path.split("?");
   const value = new URLSearchParams(search).get("range");
   if (value && isRankingRange(value)) return value;
-  const storedRange = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:range`);
+  const storedRange = sessionStore.getItem(`cryptorisk.ranking:${scope}:range`);
   return storedRange && isRankingRange(storedRange) ? storedRange : "24h";
 }
 
@@ -254,3 +278,8 @@ function IconSvg({ children }: { children: ReactNode }) {
 function ChevronLeftIcon() { return <IconSvg><path d="m15 18-6-6 6-6" /></IconSvg>; }
 function FileIcon() { return <IconSvg><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /><path d="M9 13h6" /><path d="M9 17h6" /></IconSvg>; }
 function ShieldIcon() { return <IconSvg><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z" /><path d="m9 12 2 2 4-5" /></IconSvg>; }
+
+export default function CoinDetailPage(props: Parameters<typeof CoinDetailContent>[0]) {
+  const scope = useSyncExternalStore(subscribeAccountScope, getAccountScope, () => "guest");
+  return <CoinDetailContent key={`${scope}:${props.symbol}`} {...props} />;
+}

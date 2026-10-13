@@ -35,6 +35,7 @@ def load_system_api_with_fastapi_stub():
 
             return decorator
 
+    _APIRouter.patch = _APIRouter.post
     fastapi_stub.APIRouter = _APIRouter
     fastapi_stub.Cookie = lambda *args, **kwargs: None
     fastapi_stub.HTTPException = _HTTPException

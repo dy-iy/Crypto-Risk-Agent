@@ -6,7 +6,8 @@ import asyncio
 from typing import Any, Dict, List, Optional, Callable
 
 from app.attackpilot.settings import LLM_NAME, CACHE_DIR
-from app.attackpilot.utils.agent_helpers import AgentLogger, TokenManager, ResponseParser
+from app.attackpilot.utils.agent_helpers import AgentLogger, TokenManager, ResponseParser, JSONParsingError
+from app.attackpilot.utils.llm import MODEL_MAX_OUTPUT_TOKENS
 from app.attackpilot.utils.llm_client import LLMClient
 from app.attackpilot.web.models import LogMessage
 
@@ -60,23 +61,25 @@ class AgentBase:
             lines.append(f"[{i:<5}] | {role.upper():<12} | {tokens:<8} | {snippet}")
         return "\n".join(lines)
 
-    async def query(self, user_message: str, temperature=1.0, _format='json'):
+    async def query(self, user_message: str, temperature=1.0, _format='json', *, thinking=True):
         self._check_cancelled()
         self.logger.display_start("Query", user_message)
-        result = await self._send_message(user_message, temperature)
+        result = await self._send_message(user_message, temperature, thinking=thinking)
         self._check_cancelled()
         if _format == 'str':
             return result
 
         try:
-            return self.parser.process_response(result, _format)
-        except Exception:
-            try:
-                return self.parser.process_response(result, _format)
-            except Exception:
-                return result
+            return self.parser.process_response(result, _format, strict=True)
+        except JSONParsingError:
+            self.logger.warning('模型输出格式不正确，正在进行一次格式纠正。')
+            corrected = await self._send_message(
+                user_message + '\n\nReturn only a valid JSON object matching the requested schema. Preserve the evidence; do not invent missing facts.',
+                temperature, thinking=thinking,
+            )
+            return self.parser.process_response(corrected, _format, strict=True)
 
-    async def _send_message(self, user_message: str, temperature=1.0) -> str:
+    async def _send_message(self, user_message: str, temperature=1.0, *, thinking=True) -> str:
         try:
             self._check_cancelled()
             truncated_user_msg = self.tm.truncate_prompt(user_message)
@@ -86,13 +89,17 @@ class AgentBase:
             chat_completion = await self.llm_client.create_chat_completion(
                 messages=self.tm.truncate_history(self.memory, self.max_turns),
                 model=self.model,
-                temperature=temperature
+                temperature=temperature,
+                extra_body={"thinking": {"type": "enabled" if thinking else "disabled"}},
+                on_progress=self.logger.info,
             )
             elapsed_time = time.time() - start_time
             self._check_cancelled()
 
             reply = chat_completion.choices[0].message.content
-            usage_token = int(chat_completion.usage.total_tokens)
+            usage_token = int(chat_completion.usage.total_tokens) if chat_completion.usage else 0
+            if not chat_completion.usage:
+                self.logger.warning('模型未返回用量统计，本轮 token 用量未知。')
 
             self.times.append(elapsed_time)
             self.token += usage_token
@@ -106,7 +113,7 @@ class AgentBase:
         except Exception as e:
             self._handle_error(e)
 
-    async def query_with_tools(self, user_message: str, temperature=1.0):
+    async def query_with_tools(self, user_message: str, temperature=1.0, *, _retry_without_tools=True):
         self._check_cancelled()
         self.logger.display_start("QueryWithTools", user_message)
         try:
@@ -114,7 +121,7 @@ class AgentBase:
             truncated_user_msg = self.tm.truncate_prompt(user_message)
             self.memory.append({"role": "user", "content": truncated_user_msg})
             from app.attackpilot.model_history import tool_history
-            final_messages = tool_history(self.memory, self.tm.context_limit - 10000, self.tm.count_tokens)
+            final_messages = tool_history(self.memory, self.tm.context_limit - MODEL_MAX_OUTPUT_TOKENS.get(self.model, 32768) - 1000, self.tm.count_tokens)
 
             tools = await self._get_openai_tools() if self.mcp_client else None
             self._check_cancelled()
@@ -123,15 +130,19 @@ class AgentBase:
                 model=self.model,
                 messages=final_messages,
                 tools=tools,
+                # DeepSeek thinking mode accepts auto, not forced tool choice.
                 tool_choice="auto",
-                temperature=temperature
+                temperature=temperature,
+                on_progress=self.logger.info,
             )
             elapsed_time = time.time() - start_time
             self._check_cancelled()
 
             message = response.choices[0].message
             self.memory.append(message.model_dump(exclude_none=True))
-            usage_token = int(response.usage.total_tokens)
+            usage_token = int(response.usage.total_tokens) if response.usage else 0
+            if not response.usage:
+                self.logger.warning('模型未返回用量统计，本轮 token 用量未知。')
             self.token += usage_token
             self.times.append(elapsed_time)
 
@@ -139,6 +150,15 @@ class AgentBase:
             self.logger.log_full_interaction("QueryWithTools", snapshot, truncated_user_msg, message.content,
                                              message.tool_calls)
             self.logger.display_tool_decision(message.tool_calls)
+
+            if tools and not message.tool_calls:
+                if not _retry_without_tools:
+                    raise RuntimeError('模型两次未选择调试工具，无法继续执行轨迹分析')
+                self.logger.warning('模型尚未选择工具，正在补问一次以继续调试。')
+                return await self.query_with_tools(
+                    user_message + '\n\nSelect and call the next available debugging tool. A prose-only answer does not execute the requested investigation.',
+                    temperature, _retry_without_tools=False,
+                )
 
             return message.tool_calls
         except Exception as e:
@@ -149,7 +169,10 @@ class AgentBase:
         error_type = type(e).__name__
         print(f"\n❌ API Error: {type(e).__name__}\ndetail: {error_str}")
         self.logger.file_logger.error(traceback.format_exc())
-        self.memory.append({"role": "assistant", "content": ''})
+        # A failed call did not produce an assistant turn. Remove its user input
+        # so a caller's bounded retry does not poison subsequent history.
+        if self.memory and self.memory[-1].get('role') == 'user':
+            self.memory.pop()
         raise RuntimeError(f"Agent '{self.name}' API Error: {error_type} - {error_str}") from e
 
     async def _get_openai_tools(self):

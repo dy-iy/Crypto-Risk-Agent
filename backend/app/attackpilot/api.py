@@ -13,6 +13,7 @@ from app.services.auth_service import get_user_by_session
 from . import settings, store
 from .knowledge import get_rag_service, knowledge_owner
 from .privacy import redact, redact_text
+from .report_translation import ensure_translation, translation_view
 from .schemas import CaseTaskInput, TransactionInput, SearchInput, normalize_modules
 from .web import reference_api as reference
 from .web.models import AssistantChatRequest, TaskResponse, TxDetectRequest, TxReviewRequest
@@ -151,6 +152,17 @@ def tasks(include_archived: bool = False, user=Depends(caller)):
 @router.get("/tasks/{task_id}")
 def task_detail(task_id: str, user=Depends(caller)):
     return store.public_task(read_task(task_id, user))
+
+@router.get("/tasks/{task_id}/report-translation")
+def report_translation(task_id: str, user=Depends(caller)):
+    return translation_view(read_task(task_id, user))
+
+@router.post("/tasks/{task_id}/report-translation")
+async def create_report_translation(task_id: str, user=Depends(caller)):
+    task = read_task(task_id, user)
+    require_user(user)
+    # This creates a language derivative; public historical evidence stays read-only.
+    return await ensure_translation(task)
 
 @router.post("/tasks/{task_id}/cancel")
 def cancel(task_id: str, user=Depends(caller)):

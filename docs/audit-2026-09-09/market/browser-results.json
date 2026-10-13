@@ -1,0 +1,28 @@
+{
+  "checks": [
+    "layout 1920x1080",
+    "layout 1440x900",
+    "layout 1366x768",
+    "layout 768x1024",
+    "layout 390x844",
+    "layout 320x700",
+    "simulation controls removed",
+    "symbol search",
+    "watchlist toggle",
+    "chart modes indicators and viewport controls",
+    "expanded chart closes with Escape",
+    "order book and trade tape",
+    "history CSV and screenshot export",
+    "rapid interval changes preserve chart settings",
+    "hidden tab pauses and resumes polling",
+    "source outage retains prior chart with explicit error"
+  ],
+  "errors": [],
+  "requests": 29,
+  "methods": [
+    "GET"
+  ],
+  "candleNodes": 11,
+  "domNodes": 315,
+  "jsBytes": 398456
+}

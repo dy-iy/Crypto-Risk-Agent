@@ -1,0 +1,18 @@
+{
+    "name": "HoppyFrogERC",
+    "cause": "business logic flaw",
+    "platform": "Ethereum",
+    "transaction_hash": [
+        "0x6fb7f8e9eb09d6ae17dbe82b2b42f46f64fb9c3197438b68ecf03e832d5fc791"
+    ],
+    "time": "2024-04-02 21:21:11 UTC",
+    "lost": "~0.3 ETH",
+    "detection": {
+        "time": "2024-04-03 02:35:00 UTC",
+        "link": "['https://x.com/ChainAegis/status/1775351437410918420']"
+    },
+    "root_cause": "_transfer",
+    "report": "The vulnerability lies in the token contract’s _transfer logic, which automatically triggers swapTokensForEth during sell transactions to the Uniswap pair when the contract's token balance exceeds _taxSwapThreshold. Because the contract holds a large token balance, this automatic swap causes significant price slippage and temporarily depresses the token price. An attacker exploits this by using a flashloan to sell tokens, triggering the auto-swap, then buying back tokens at the artificially lowered price, repaying the loan, and profiting from the arbitrage—effectively draining value from the protocol and other users.",
+    "report_link": "https://web3sec.notion.site/Trigger-Auto-Trade-To-Arbitrage-1cd7292741138088be5df08db0177e57?pvs=23",
+    "report_zh": "漏洞在于代币合约的_transfer逻辑，当卖出到Uniswap交易对时，如果合约的代币余额超过_taxSwapThreshold，会自动触发swapTokensForEth。由于合约持有大量代币余额，这种自动兑换导致显著的价格滑点并暂时压低代币价格。攻击者利用闪电贷卖出代币，触发自动兑换，然后在人为压低的价位买回代币，偿还贷款并套利获利，本质上从协议和其他用户那里榨取价值。"
+}

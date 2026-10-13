@@ -1,3 +1,4 @@
+import { sessionStore } from "@/lib/browser-storage";
 import type { NewsRankingItem } from "@/lib/api";
 
 export type PendingNewsAnalysis = {
@@ -21,13 +22,13 @@ export function writePendingNewsAnalysisInput(input: string) {
     input: trimmed,
     createdAt: new Date().toISOString(),
   };
-  window.sessionStorage.setItem(pendingNewsAnalysisStorageKey, JSON.stringify(pending));
+  sessionStore.setItem(pendingNewsAnalysisStorageKey, JSON.stringify(pending));
   return pending;
 }
 
 export function readPendingNewsAnalysisInput() {
   if (typeof window === "undefined") return null;
-  const raw = window.sessionStorage.getItem(pendingNewsAnalysisStorageKey);
+  const raw = sessionStore.getItem(pendingNewsAnalysisStorageKey);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as PendingNewsAnalysis;
@@ -39,5 +40,5 @@ export function readPendingNewsAnalysisInput() {
 
 export function clearPendingNewsAnalysisInput() {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(pendingNewsAnalysisStorageKey);
+  sessionStore.removeItem(pendingNewsAnalysisStorageKey);
 }

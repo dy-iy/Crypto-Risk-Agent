@@ -12,9 +12,9 @@ interface RagKnowledgePanelProps {
 }
 
 const quickPrompts = [
-  { label: "价格操纵", query: "oracle manipulation flash loan price" },
-  { label: "重入提款", query: "reentrancy withdraw callback" },
-  { label: "权限缺陷", query: "access control owner initialize" },
+  { label: "价格操纵", query: "预言机操纵 闪电贷 价格" },
+  { label: "重入提款", query: "重入攻击 提款 回调" },
+  { label: "权限缺陷", query: "权限控制 所有者 初始化" },
 ];
 
 function sourceLabel(source: string) {
@@ -43,13 +43,13 @@ function metadataText(item: RagSearchItem) {
   const dapp = item.metadata?.dapp_name;
   const rootCause = item.metadata?.root_cause;
   const taskId = item.metadata?.task_id;
-  const pieces = [dapp, rootCause, taskId ? `task ${String(taskId).slice(0, 8)}` : ""].filter(
+  const pieces = [dapp, rootCause, taskId ? `任务 ${String(taskId).slice(0, 8)}` : ""].filter(
     (value) => typeof value === "string" && value.trim(),
   );
   return pieces.join(" / ");
 }
 
-const RagKnowledgePanel: React.FC<RagKnowledgePanelProps> = ({
+const RagKnowledgeSearch: React.FC<RagKnowledgePanelProps> = ({
   defaultQuery = "",
   title = "相似案例参考",
   subtitle = "系统会自动召回相似漏洞、历史案例和平台复盘报告，帮助理解当前攻击和修复思路。",
@@ -58,9 +58,9 @@ const RagKnowledgePanel: React.FC<RagKnowledgePanelProps> = ({
   const [query, setQuery] = useState(defaultQuery);
   const [items, setItems] = useState<RagSearchItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(defaultQuery.trim()));
   const [error, setError] = useState("");
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(Boolean(defaultQuery.trim()));
   const [manualOpen, setManualOpen] = useState(!compact);
 
   useEffect(() => {
@@ -216,5 +216,9 @@ const RagKnowledgePanel: React.FC<RagKnowledgePanelProps> = ({
     </section>
   );
 };
+
+const RagKnowledgePanel: React.FC<RagKnowledgePanelProps> = (props) => (
+  <RagKnowledgeSearch {...props} key={`${props.compact ? "compact" : "full"}:${props.defaultQuery || ""}`} />
+);
 
 export default RagKnowledgePanel;

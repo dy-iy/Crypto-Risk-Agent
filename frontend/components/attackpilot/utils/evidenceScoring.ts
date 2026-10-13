@@ -1,4 +1,4 @@
-import { EvidenceItem, LogLevel, MsgType } from "../types";
+import { EvidenceItem, LanguageMode, LogLevel, MsgType } from "../types";
 
 export interface EvidenceScoreResult {
   score: number;
@@ -18,6 +18,11 @@ export interface EvidenceHealthSummary {
   tools: number;
   agents: number;
   risks: string[];
+}
+
+export function evidenceScoreLabel(label: EvidenceScoreResult["label"], language: LanguageMode = "zh") {
+  if (language === "en") return label;
+  return { strong: "强证据", supporting: "辅助证据", weak: "弱证据" }[label];
 }
 
 const SECURITY_KEYWORDS = [
@@ -190,11 +195,11 @@ export function summarizeEvidenceHealth(items: EvidenceItem[]): EvidenceHealthSu
   const score = total ? clamp(enriched.reduce((sum, item) => sum + (item.score ?? 0), 0) / total) : 0;
   const risks: string[] = [];
 
-  if (total === 0) risks.push("no linked evidence");
-  if (transactions === 0) risks.push("no direct transaction hash");
-  if (tools === 0) risks.push("no tool-backed evidence");
-  if (agents < 2 && total > 0) risks.push("single-agent evidence");
-  if (weak > strong + supporting && total > 0) risks.push("mostly weak evidence");
+  if (total === 0) risks.push("暂无关联证据");
+  if (transactions === 0) risks.push("缺少直接交易哈希");
+  if (tools === 0) risks.push("缺少工具证据支撑");
+  if (agents < 2 && total > 0) risks.push("证据来自单一智能体");
+  if (weak > strong + supporting && total > 0) risks.push("多数证据支撑较弱");
 
   return {
     score,

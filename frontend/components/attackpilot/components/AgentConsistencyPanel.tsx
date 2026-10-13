@@ -1,8 +1,8 @@
 ﻿import React, { useMemo } from "react";
-import { Progress, Space, Tag, Typography } from "antd";
+import { Alert, Progress, Space, Tag, Typography } from "antd";
 import { GitCompareArrows, Network, ShieldCheck, TriangleAlert } from "lucide-react";
 import { AutomatedReviewResponse, ConsistencyStatus, LanguageMode, MacroAnalysisResponse, Task, TaskEvent } from "../types";
-import { analyzeAgentConsistency } from "../utils/agentConsistency";
+import { analyzeAgentConsistency, localizeConsistencyText } from "../utils/agentConsistency";
 
 interface AgentConsistencyPanelProps {
   task: Task | null;
@@ -71,6 +71,22 @@ const AgentConsistencyPanel: React.FC<AgentConsistencyPanelProps> = ({
       }
     : localSummary;
 
+  // Also gate older backends which returned fallback scores for failed tasks.
+  if (localSummary.status === "unavailable" || summary.status === "unavailable") {
+    const ended = task?.status === "failed" || task?.status === "cancelled";
+    return (
+      <section className="agent-consistency-card">
+        <Typography.Title level={4}>{isZh ? "多智能体一致性检查" : "Cross-Agent Consistency"}</Typography.Title>
+        <Alert
+          showIcon
+          type={ended ? "warning" : "info"}
+          title={isZh ? (ended ? "分析已终止，无法评估" : "尚未生成有效报告，暂不评分") : "Consistency assessment unavailable"}
+          description={task?.error || (isZh ? "缺少完整分析证据，不能据此判断安全或风险。请查看原始日志与文件日志。" : "A completed report is required. Check the task logs for details.")}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="agent-consistency-card">
       <div className="agent-consistency-head">
@@ -95,7 +111,7 @@ const AgentConsistencyPanel: React.FC<AgentConsistencyPanelProps> = ({
         <div className="agent-consistency-score">
           <Progress
             type="circle"
-            percent={summary.score}
+            percent={summary.score ?? 0}
             size={76}
             status={progressStatus(summary.status)}
           />
@@ -146,8 +162,8 @@ const AgentConsistencyPanel: React.FC<AgentConsistencyPanelProps> = ({
           <article className={`consistency-check-card check-${check.status}`} key={check.id}>
             <div className="consistency-check-title">
               <div>
-                <Typography.Text strong>{CHECK_COPY[check.id]?.title ?? check.title}</Typography.Text>
-                <Typography.Paragraph>{CHECK_COPY[check.id]?.description ?? check.description}</Typography.Paragraph>
+                <Typography.Text strong>{CHECK_COPY[check.id]?.title ?? localizeConsistencyText(check.title, language)}</Typography.Text>
+                <Typography.Paragraph>{CHECK_COPY[check.id]?.description ?? localizeConsistencyText(check.description, language)}</Typography.Paragraph>
               </div>
               <Tag color={statusColor(check.status)}>{check.score}</Tag>
             </div>
@@ -159,13 +175,13 @@ const AgentConsistencyPanel: React.FC<AgentConsistencyPanelProps> = ({
             />
             <ul>
               {check.evidence.slice(0, 3).map((item) => (
-                <li key={item}>{item}</li>
+                <li key={item}>{localizeConsistencyText(item, language)}</li>
               ))}
             </ul>
             {check.recommendation ? (
               <div className="consistency-recommendation">
                 <TriangleAlert size={13} />
-                <span>{check.recommendation}</span>
+                <span>{localizeConsistencyText(check.recommendation, language)}</span>
               </div>
             ) : null}
           </article>

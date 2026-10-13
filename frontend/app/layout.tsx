@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CryptoRisk Agent",
-  description: "Multi-agent crypto financial risk control dashboard",
+  description: "多智能体加密资产风控工作台，提供事件分析、证据报告、个人资产风险监测和链上攻击复盘。",
 };
 
 export default function RootLayout({

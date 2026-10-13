@@ -1,0 +1,280 @@
+{
+  "schema_version": "0.2.0",
+  "generated_at": "2026-06-03",
+  "purpose": "TracePilot 数据集案例到漏洞类型知识库的轻量映射。这里不是重新保存原始案例，而是给 dataset/raw 中的案例补充可检索的漏洞类型、学习用途和人工审查状态。",
+  "data_source": {
+    "kind": "tracepilot_dataset_raw",
+    "path": "dataset/raw/*.json",
+    "raw_fields_used": [
+      "name",
+      "cause",
+      "platform",
+      "time",
+      "lost",
+      "root_cause",
+      "transaction_hash",
+      "report",
+      "report_link",
+      "link"
+    ]
+  },
+  "review_policy": {
+    "needs_manual_review": true,
+    "why": "dataset/raw 提供了案例事实和简短报告，但 cause 字段粒度不统一，例如 Flashloan、FlashLoan、business logic flaw、Logic bug、Manipulate 等。cases.json 的作用是把这些原始标签归一到 vulnerability_types.json 的 8 类漏洞类型，因此需要后续逐个结合 PoC、报告和 trace 校准。",
+    "review_focus": [
+      "vulnerability_type_ids 是否归类准确",
+      "root_cause 是否能对应到具体函数或状态条件",
+      "report_link 是否可靠",
+      "transaction_hash 是否能被 TracePilot 正常分析",
+      "该案例是否适合前端教程或演示"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "raw_apecoin_ape",
+      "name": "ApeCoin (APE)",
+      "dataset_file": "dataset/raw/ApeCoin (APE).json",
+      "vulnerability_type_ids": ["flash_loan_amplifier", "business_logic"],
+      "raw_cause": "Flashloan",
+      "platform": "Ethereum",
+      "time": "2022-03-17 12:13:14 UTC",
+      "loss": "$1.1 million",
+      "root_cause": "claimTokens + flashloan",
+      "transaction_hashes": [
+        "0xeb8c3bebed11e2e4fcd30cbfc2fb3c55c4ca166003c7f7d319e78eaab9747098"
+      ],
+      "report_link": "https://www.freebuf.com/news/328093.html",
+      "why_selected": "演示速度快，单交易，适合做缓存 Demo。核心不是闪电贷本身，而是 claimTokens 只检查当前 NFT 持有状态，业务约束被临时资产绕过。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_sushiswap",
+      "name": "SushiSwap",
+      "dataset_file": "dataset/raw/SushiSwap.json",
+      "vulnerability_type_ids": ["oracle_manipulation", "business_logic"],
+      "raw_cause": "Manipulate",
+      "platform": "Ethereum",
+      "time": "2021/1/25 20:07",
+      "loss": null,
+      "root_cause": "bridgeFor",
+      "transaction_hashes": [
+        "0xa815480589250d649314731d084fb4f58137b5fef70c8b19dc3cadc2ccc0b21f",
+        "0x747088ed3054d66fbd2c2ec6f6e0b077e71c3155dab0d56ccea2b5841903738f",
+        "0xba833487c09f934c7ed77ad415ff4f322d470a1fa508120aacea8a8f0bb656a9"
+      ],
+      "report_link": "https://www.freebuf.com/articles/others-articles/262212.html",
+      "why_selected": "TracePilot 重点演示案例之一。bridgeFor 默认路由和低流动性交易对组合导致极端滑点，适合讲攻击路径图。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_bno",
+      "name": "BNO",
+      "dataset_file": "dataset/raw/BNO.json",
+      "vulnerability_type_ids": ["business_logic"],
+      "raw_cause": "Lack of inspection mechanism",
+      "platform": "BNBChain",
+      "time": "2023/7/18",
+      "loss": null,
+      "root_cause": "emergencyWithdraw",
+      "transaction_hashes": [
+        "0x33fed54de490797b99b2fc7a159e43af57e9e6bdefc2c2d052dc814cfe0096b9"
+      ],
+      "report_link": "https://web3sec.notion.site/Business-Logic-Flow-de73c3842eca4ce7bc65c4b40e5c3646?pvs=23",
+      "why_selected": "适合讲业务逻辑漏洞：emergencyWithdraw 清空 rewardDebt 但没有同步处理 staked NFTs，导致奖励可重复领取。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_euler_finance",
+      "name": "Euler Finance",
+      "dataset_file": "dataset/raw/Euler Finance.json",
+      "vulnerability_type_ids": ["flash_loan_amplifier", "accounting_drift", "business_logic"],
+      "raw_cause": "Flashloan",
+      "platform": "Ethereum",
+      "time": "2023/3/13",
+      "loss": null,
+      "root_cause": "donateToReserves",
+      "transaction_hashes": [],
+      "report_link": "https://medium.com/@numencyberlabs/a-detailed-analysis-of-euler-finances-196-million-flash-loan-attack-81cdef370024",
+      "why_selected": "经典大型 DeFi 攻击，适合把 flashloan 从“资金来源”降级为“放大器”，真正关注 donateToReserves 与账户健康度/会计状态变化。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_cream_finance",
+      "name": "CreamFinance",
+      "dataset_file": "dataset/raw/CreamFinance.json",
+      "vulnerability_type_ids": ["reentrancy"],
+      "raw_cause": "Reentrancy attack",
+      "platform": "Ethereum",
+      "time": "2021/8/30 04:03",
+      "loss": null,
+      "root_cause": "doTransferOut",
+      "transaction_hashes": [],
+      "report_link": "https://rekt.news/cream-rekt",
+      "why_selected": "真实重入攻击案例，可与 Ethernaut Reentrance 的最小模型形成对照。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_revest_finance",
+      "name": "RevestFinance",
+      "dataset_file": "dataset/raw/RevestFinance.json",
+      "vulnerability_type_ids": ["reentrancy", "business_logic"],
+      "raw_cause": "Reentrancy",
+      "platform": "Ethereum",
+      "time": "2022/3/27 1:41",
+      "loss": null,
+      "root_cause": "depositAdditionalToFNFT + mint",
+      "transaction_hashes": [],
+      "report_link": "https://www.freebuf.com/articles/blockchain-articles/326466.html",
+      "why_selected": "适合讲跨函数重入和业务状态被重复消费的问题。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_audius",
+      "name": "Audius",
+      "dataset_file": "dataset/raw/Audius.json",
+      "vulnerability_type_ids": ["access_control", "business_logic"],
+      "raw_cause": "Storage Collision & Malicious Proposal",
+      "platform": "Ethereum",
+      "time": "2022-07-23 23:12:03 UTC",
+      "loss": "704 ETH (~1.08M US$)",
+      "root_cause": "initialize",
+      "transaction_hashes": [],
+      "report_link": "https://medium.com/coinmonks/audios-protocol-hack-analysis-c4d7b96756da",
+      "why_selected": "适合讲代理/初始化/治理提案相关的权限和状态覆盖风险。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_lifi",
+      "name": "LiFi",
+      "dataset_file": "dataset/raw/LiFi.json",
+      "vulnerability_type_ids": ["access_control", "business_logic"],
+      "raw_cause": "swap() function can be called arbitrarily",
+      "platform": "Ethereum",
+      "time": "2022/3/20 02:51",
+      "loss": null,
+      "root_cause": "swapAndStartBridgeTokensViaCBridge",
+      "transaction_hashes": [],
+      "report_link": "https://blocksec.com/zh/blog/li-fi-attack-a-cross-chain-bridge-vulnerability-no-it-s-due-to-unchecked-external-call",
+      "why_selected": "适合讲 arbitrary external call / unchecked external call，以及跨链桥场景中函数可任意调用的风险。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_uranium_finance",
+      "name": "UraniumFinance",
+      "dataset_file": "dataset/raw/UraniumFinance.json",
+      "vulnerability_type_ids": ["precision_rounding", "business_logic"],
+      "raw_cause": "Precision processing error",
+      "platform": "BNBChain",
+      "time": "2021/4/28 3:02",
+      "loss": null,
+      "root_cause": "swap",
+      "transaction_hashes": [],
+      "report_link": "https://web3sec.notion.site/Incorrect-calculation-10000-vs-1000-5382319195184d1d85ab70b193b7d444?pvs=23",
+      "why_selected": "经典精度/常数配置错误案例，适合讲一个数量级错误如何导致兑换逻辑崩掉。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_balancer",
+      "name": "Balancer",
+      "dataset_file": "dataset/raw/Balancer.json",
+      "vulnerability_type_ids": ["precision_rounding", "business_logic"],
+      "raw_cause": "Rounding Error && Business Logic Flaw",
+      "platform": "Ethereum",
+      "time": "2023/8/27",
+      "loss": null,
+      "root_cause": "onSwap",
+      "transaction_hashes": [],
+      "report_link": "https://slowmist.medium.com/review-and-recommendations-of-balancer-incident-d2b31b5bd863",
+      "why_selected": "适合讲 rounding error 和业务逻辑组合导致的大额损失。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_kyberswap",
+      "name": "KyberSwap",
+      "dataset_file": "dataset/raw/KyberSwap.json",
+      "vulnerability_type_ids": ["precision_rounding", "business_logic"],
+      "raw_cause": "precision loss",
+      "platform": "Ethereum",
+      "time": "2023-11-22 22:55:11 UTC",
+      "loss": "~$48M",
+      "root_cause": "estimateIncrementalLiquidity",
+      "transaction_hashes": [],
+      "report_link": "https://blocksec.com/blog/kyberswap-incident-masterful-exploitation-of-rounding-errors-with-exceedingly-subtle-calculations",
+      "why_selected": "适合进阶讲非常细微的 rounding/precision loss 如何被组合利用。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_wise_lending",
+      "name": "WiseLending",
+      "dataset_file": "dataset/raw/WiseLending.json",
+      "vulnerability_type_ids": ["precision_rounding", "accounting_drift"],
+      "raw_cause": "Bad HealthFactor Check",
+      "platform": "Ethereum",
+      "time": "2024-01-12 19:29:23 UTC",
+      "loss": "~464K",
+      "root_cause": "_calculateShares",
+      "transaction_hashes": [],
+      "report_link": "https://web3sec.notion.site/Precision-Loss-Vulnerability-in-Share-Accounting-4e0231af7958498385f39b5a13cab362?pvs=23",
+      "why_selected": "适合把 precision loss 和 share accounting 联系起来讲。",
+      "manual_review_status": "needs_trace_review"
+    },
+    {
+      "case_id": "raw_onyx_protocol",
+      "name": "OnyxProtocol",
+      "dataset_file": "dataset/raw/OnyxProtocol.json",
+      "vulnerability_type_ids": ["precision_rounding", "accounting_drift"],
+      "raw_cause": "Precision loss",
+      "platform": "Ethereum",
+      "time": "2023/11/1",
+      "loss": null,
+      "root_cause": "redeemUnderlying",
+      "transaction_hashes": [],
+      "report_link": "https://web3sec.notion.site/CompoundV2-Fork-Precision-Loss-fa5ea1b0967c4d3cbf60b11bf9270f46",
+      "why_selected": "CompoundV2 fork precision loss 的典型入口，适合和 WiseLending 对照。",
+      "manual_review_status": "needs_trace_review"
+    }
+  ],
+  "external_classic_cases": [
+    {
+      "case_id": "external_parity_wallet_multisig_2017",
+      "name": "Parity Wallet MultiSig Hack",
+      "source_kind": "external_learning_case",
+      "dataset_file": null,
+      "vulnerability_type_ids": ["delegatecall_misuse", "access_control"],
+      "platform": "Ethereum",
+      "time": "2017-07-19",
+      "loss": "153,037 ETH (~$30M)",
+      "root_cause": "Wallet fallback used catch-all delegatecall to WalletLibrary; public initWallet could be called after deployment and rewrote multisig ownership.",
+      "transaction_hashes": [],
+      "attacker_address": "0xb3764761e297d6f121e79c32a65829cd1ddb4d32",
+      "report_link": "https://www.openzeppelin.com/news/on-the-parity-wallet-multisig-hack-405a8c12e8f7",
+      "learning_summary": "攻击者对每个受影响钱包发起两笔交易：先调用 WalletLibrary.initWallet，通过 delegatecall 在钱包本体 storage 中把 m_owners 改成只包含攻击者且 required=1；随后调用 execute，把钱包资金转出。",
+      "attack_path": [
+        "钱包 fallback 将未知 calldata delegatecall 到 WalletLibrary",
+        "WalletLibrary.initWallet 是 public，且缺少已初始化保护",
+        "攻击者构造 initWallet(owner=attacker, required=1) 改写钱包本体 owner 状态",
+        "攻击者作为唯一 owner 调用 execute 转走资金"
+      ],
+      "patch_lessons": [
+        "不要把构造函数初始化逻辑暴露成可被 delegatecall 命中的 public 函数",
+        "不要使用 catch-all delegatecall 作为通用外部转发机制",
+        "显式定义钱包合约允许外部调用的库函数 selector",
+        "initializer 必须只能执行一次，并保护 owner/admin 等关键 storage 写入"
+      ],
+      "tracepilot_learning_value": "适合作为 Ethernaut Delegation 的真实世界案例，用来训练 Agent 识别 delegatecall 的 storage context、初始化函数暴露和权限状态改写。",
+      "manual_review_status": "external_reference_reviewed"
+    }
+  ],
+  "external_learning_sources": [
+    {
+      "name": "SunWeb3Sec/DeFiHackLabs",
+      "url": "https://github.com/SunWeb3Sec/DeFiHackLabs",
+      "use": "后续补 PoC、攻击脚本和更多真实案例时使用。"
+    },
+    {
+      "name": "OpenZeppelin Ethernaut",
+      "url": "https://ethernaut.openzeppelin.com/",
+      "use": "新手练习 Solidity/EVM 漏洞最小模型时使用。"
+    }
+  ]
+}

@@ -1,8 +1,24 @@
 # AttackPilot 迁入与交接
 
+## 2026-09-12 页面与功能恢复
+
+以 `链上交易复盘源代码/frontend/src` 为参照恢复 `LandingWarRoom`、`TaskList`、`Briefing`，替换此前精简工作台；保留原版宣传区、交易输入区、案例弹窗、任务统计/筛选及详情工作区。五类分析模块、单笔审查、批量候选、选择网络、深度分析、任务管理、知识学习、证据/日志、取证助手均使用现有 `/api/attackpilot`。公开案例入口读取真实已导入任务，不提供伪造的前端任务快照。
+
+主题切换、原标志、Ant Design 中文语言包已恢复，所有主题选择器限定在子页面内。修复主站 Tailwind 对 Markdown 标题和列表的样式重置；窄屏把 Agent 详情/文件日志放到报告下方，避免隐藏功能。主站通用 AI 悬浮入口在本模块内交由原取证助手承担。
+
+新报告默认要求简体中文，函数名、代码、哈希和工具协议保持原样。历史最终报告保留原文，通过 `GET /tasks/{id}/report-translation` 读取缓存、`POST` 同路径创建中文派生译文；GET 不调用模型，POST 需要登录，私有报告仍检查任务归属。缓存按任务/原文哈希/语言保存，翻译保护代码、链接、哈希和数字，失败不会用不完整结果覆盖缓存。页面默认中文，支持原文切换、失败重试；中文报告导出同时保留原文和原始证据。
+
+报告章节提取现在保留子章节与编号证据。补丁面板只按后端 `result.verification` 显示实际执行结果，历史案例明确标为当前未验证。
+
+已在当前会话完整翻译并导入 14 份历史记录（截图私有报告 1 份、公共历史记录 13 份），原文与代码/哈希/数字多重集合一致。9 份原文为错误终止记录，译文同样保留失败事实。模型字段标记 `assistant-translation`。公共部分打包在 `data/report-translations.zh-CN.json`，启动时幂等导入；私有截图仅存运行数据库。
+
+验证结果：后端 58 项回归、前端 18 项回归、全量 TypeScript 和模块 ESLint 通过。离线浏览器以主站侧边栏宽度及真实 Tailwind 样式运行，检查桌面 1440px / 手机 390px 五个页面、明暗切换、中文/原文切换、实际中文缓存、登录草稿衔接、上游模块取消及下游依赖、单笔/批量检测、BNB 网络参数、任务导航、助手和 SSE 终态；无浏览器异常或未处理 API，所有写请求带共享 CSRF 头。真实模型/链上分析未在本轮调用，不能把离线通过当作线上端到端通过。
+
+本次未运行站点开发服务、生产构建或进程管理命令；已有运行进程是否载入新代码须按现有发布流程确认。
+
 ## 当前交付
 
-现有桌面侧边栏和移动导航新增“链上攻击复盘”。页面复用 CryptoRisk 外壳、账号弹窗与请求封装，入口 `/attackpilot`，任务库 `/attackpilot/tasks`，详情 `/attackpilot/tasks/[taskId]`，知识库 `/attackpilot/knowledge`。原业务组件迁入 `frontend/components/attackpilot`，Ant Design 6 局部主题及 CSS 均限定在模块内，详情和知识页按需加载。
+现有桌面侧边栏和移动导航新增“链上攻击复盘”。页面复用 CryptoRisk 外壳、账号弹窗与请求封装，入口 `/attackpilot`，任务库 `/attackpilot/tasks`，详情 `/attackpilot/tasks/[taskId]`，知识库 `/attackpilot/knowledge`（兼容 `/attackpilot/learning`），项目介绍 `/attackpilot/briefing`。原业务组件迁入 `frontend/components/attackpilot`，Ant Design 6 局部主题及 CSS 均限定在模块内，详情和知识页按需加载。
 
 后端独立包为 `backend/app/attackpilot`，由现有 `backend/main.py` 注册路由和调度生命周期。原 Agent、提示词、链上取证、补丁和编译逻辑保留，并修正包导入、任务目录、模型消息、补丁验证开关及错误标记。模型固定为 `deepseek-v4-pro`。
 
@@ -45,7 +61,7 @@ PYTHONPATH=backend backend/.venv/bin/python -m app.attackpilot.prepare --import-
 
 | 配置 | 用途 / 默认值 |
 | --- | --- |
-| `DEEPSEEK_API_KEY` | 必填，当前缺少有效值 |
+| `DEEPSEEK_API_KEY` | 从 `.env` 读取，用于新分析和按需翻译 |
 | `DEEPSEEK_MODEL` | `deepseek-v4-pro` |
 | `DEEPSEEK_BASE_URL` / `DEEPSEEK_TIMEOUT` | 复用现有模型配置 |
 | `ATTACKPILOT_RPC_URLS` | JSON：Ethereum、BNBChain 的 RPC URL 数组 |
@@ -67,7 +83,7 @@ PYTHONPATH=backend backend/.venv/bin/python -m app.attackpilot.prepare --import-
 - 访客只能浏览公共示例与公共知识。新审查、深度任务及助手需要登录；任务、日志正文、Agent 文件、交易关系、一致性报告、SSE、助手上下文和生成报告检索均检查归属。公共示例只读，公共索引重建仅管理员可用。
 - 每项深度任务使用独立子进程、模型客户端与 `runtime/attackpilot/tasks/<UUID>`。队列默认逐项执行；取消或超时按任务标识终止所属进程组，包括 MCP 另建的进程组与编译工具。重启后清理中断任务的工具进程，并将原 pending/running 任务标记失败，可重新创建。
 - 公共 RAG 采用原项目本地哈希向量与关键词检索。私有生成报告按当前账号实时检索，不写入共享公共索引。账号导出包含私有任务、报告、日志和事件；删除账号同步移除这些记录与任务目录。
-- 助手对话只保存在当前页面内存，不写浏览器持久存储；切换账号或任务后重新建立上下文。
+- 登录后的取证助手对话按账号、页面范围、链和任务/交易隔离保存在浏览器；可清空历史，删除账号时同步清理。访客不持久化，切换账号或上下文后不会复用其他会话。交易输入草稿同样按账号隔离。
 - “完成”表示工作流已输出报告。补丁结果单独保存在 `result.verification`：`verified`、`failed`、`skipped`、`not_run`。生成但未回放的补丁会明确标注未验证；历史结果单独标注归档来源。
 
 ## 路由与代理
@@ -87,11 +103,11 @@ PYTHONPATH=backend backend/.venv/bin/python -m app.attackpilot.prepare --import-
 
 沿用现有 session cookie、CSRF 请求头、限流与错误响应中间件。SSE 支持 `Last-Event-ID` 和 `after_id`，事件编号持久化，每 15 秒心跳；浏览器在 SSE 重连时按游标轮询补齐日志，终态关闭连接。
 
-发布时确认现有 Nginx 的 `/` 代理至前端 3000，`/api/` 保留路径代理至后端 8000。SSE 所在 location 应禁用缓冲并允许长连接，示意配置：
+发布时确认现有 Nginx 的 `/` 代理至前端 3000，`/api/` 保留路径代理至后端 8001。SSE 所在 location 应禁用缓冲并允许长连接，示意配置：
 
 ```nginx
 location /api/ {
-    proxy_pass http://127.0.0.1:8000;
+    proxy_pass http://127.0.0.1:8001;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
@@ -139,7 +155,7 @@ node scripts/attackpilot-smoke.mjs /tmp/attackpilot-ui-check
 | 全部 24 个历史任务的报告与日志接口 | 通过 |
 | TypeScript、模块与受影响文件 ESLint | 通过 |
 | 离线组件浏览器验证 | 通过，桌面/移动四个页面、助手模拟回答、公共 RAG、导航、SSE 终态与 CSRF |
-| 真实 Next 路由刷新、登录返回、Nginx SSE | 待发布后验收 |
-| 一个历史案例重新分析 + 一笔真实交易端到端 | 待补齐有效 DeepSeek 密钥后验收 |
+| 真实 Next 路由刷新、登录返回、Nginx SSE | 本轮未启动或重新发布服务，仍待线上验收 |
+| 一个历史案例重新分析 + 一笔真实交易端到端 | 本轮未调用实时模型或链上服务，仍待真实环境验收 |
 
 真实联调时，先查看 capabilities，再登录创建历史案例任务和真实交易任务，确认排队、持续日志、断线补发、报告来源与独立验证状态；分别测试生成但不验证、验证失败/跳过，并检查另一账号无法读取这些私有任务。保留服务失败原因，不将未完成验证记为通过。

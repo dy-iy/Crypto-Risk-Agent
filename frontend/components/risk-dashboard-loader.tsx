@@ -10,7 +10,7 @@ type ActiveView =
   | "news"
   | "coin"
   | "daily"
-  | "portfolio"
+
   | "sim"
   | "reports"
   | "favoriteNews"

@@ -2,10 +2,11 @@ import React, { useMemo } from "react";
 import { Empty, Progress, Space, Tag, Typography } from "antd";
 import { AlertTriangle, Bot, CheckCircle2, FileText, MessageSquareText, Wrench } from "lucide-react";
 import { AGENT_NAMES } from "../constants/agents";
-import { LogLevel, LogMessage, MsgType, TaskEvent } from "../types";
+import { LogLevel, LogMessage, MsgType, Task, TaskEvent } from "../types";
 import { agentDisplayName } from "../utils/presentation";
 
 interface AgentInsightsProps {
+  taskStatus?: Task["status"];
   events: TaskEvent[];
   selectedAgent: string | "all";
   onSelectAgent: (agent: string | "all") => void;
@@ -50,7 +51,8 @@ function getHealthTag(health: ReturnType<typeof getHealth>) {
   return <Tag>等待中</Tag>;
 }
 
-const AgentInsights: React.FC<AgentInsightsProps> = ({ events, selectedAgent, onSelectAgent, onSelectLog }) => {
+const AgentInsights: React.FC<AgentInsightsProps> = ({ taskStatus, events, selectedAgent, onSelectAgent, onSelectLog }) => {
+  const ended = taskStatus === "failed" || taskStatus === "cancelled" || taskStatus === "completed";
   const insights = useMemo<Insight[]>(() => {
     const map = new Map<string, Insight>();
     AGENT_NAMES.forEach((name) => {
@@ -136,7 +138,7 @@ const AgentInsights: React.FC<AgentInsightsProps> = ({ events, selectedAgent, on
                     <Bot size={15} />
                     <Typography.Text strong>{agentDisplayName(insight.name)}</Typography.Text>
                   </Space>
-                  {getHealthTag(health)}
+                  {health === "idle" && ended ? <Tag>未执行</Tag> : getHealthTag(health)}
                 </div>
 
                 <Progress
@@ -188,7 +190,7 @@ const AgentInsights: React.FC<AgentInsightsProps> = ({ events, selectedAgent, on
                     <Typography.Paragraph ellipsis={{ rows: 2 }}>{compactText(insight.lastLog.message)}</Typography.Paragraph>
                   </div>
                 ) : (
-                  <Typography.Text type="secondary">等待智能体输出。</Typography.Text>
+                  <Typography.Text type="secondary">{ended ? "任务已结束，此智能体没有输出。" : "等待智能体输出。"}</Typography.Text>
                 )}
               </div>
             );

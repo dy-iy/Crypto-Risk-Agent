@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Button, Progress, Space, Tag, Typography } from "antd";
 import { Activity, Database, SearchCheck, ShieldCheck, TriangleAlert, Wrench } from "lucide-react";
 import { EvidenceItem, LanguageMode, ReportSectionKey } from "../types";
-import { enrichEvidenceItems, summarizeEvidenceHealth } from "../utils/evidenceScoring";
+import { enrichEvidenceItems, evidenceScoreLabel, summarizeEvidenceHealth } from "../utils/evidenceScoring";
 import EvidenceDrawer from "./EvidenceDrawer";
 
 interface EvidenceSection {
@@ -66,7 +66,7 @@ const EvidenceIntelligencePanel: React.FC<EvidenceIntelligencePanelProps> = ({ s
             status={health.label === "weak" ? "exception" : "normal"}
           />
           <div>
-            <Tag color={scoreColor(health.label)}>{health.label}</Tag>
+            <Tag color={scoreColor(health.label)}>{evidenceScoreLabel(health.label, language)}</Tag>
             <Typography.Text type="secondary">
               {isZh ? "整体证据支撑度" : "Overall evidence support"}
             </Typography.Text>
@@ -75,19 +75,19 @@ const EvidenceIntelligencePanel: React.FC<EvidenceIntelligencePanelProps> = ({ s
         <div className="evidence-metric-strip">
           <span>
             <ShieldCheck size={14} />
-            {health.strong} strong
+            {health.strong} {isZh ? "条强证据" : "strong"}
           </span>
           <span>
             <Activity size={14} />
-            {health.supporting} supporting
+            {health.supporting} {isZh ? "条辅助证据" : "supporting"}
           </span>
           <span>
             <Database size={14} />
-            {health.transactions} tx
+            {health.transactions} {isZh ? "条交易证据" : "tx"}
           </span>
           <span>
             <Wrench size={14} />
-            {health.tools} tool
+            {health.tools} {isZh ? "条工具证据" : "tool"}
           </span>
         </div>
       </div>
@@ -98,8 +98,8 @@ const EvidenceIntelligencePanel: React.FC<EvidenceIntelligencePanelProps> = ({ s
             <div className="evidence-section-bar-head">
               <Typography.Text strong>{section.title}</Typography.Text>
               <Space size={4} wrap className="evidence-section-tags">
-                <Tag color={scoreColor(section.health.label)}>{section.health.label}</Tag>
-                <Tag>{section.health.total} evidence</Tag>
+                <Tag color={scoreColor(section.health.label)}>{evidenceScoreLabel(section.health.label, language)}</Tag>
+                <Tag>{section.health.total} {isZh ? "条证据" : "evidence"}</Tag>
               </Space>
             </div>
             <Progress

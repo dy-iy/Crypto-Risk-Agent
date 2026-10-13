@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { safeInternalPath, safeHttpUrl } from "@/lib/safe-url";
+import { legacyPortfolioTarget } from "@/lib/market-symbols";
+
+import { getAccountScope, subscribeAccountScope, sessionStore } from "@/lib/browser-storage";
+
+
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { LoadingDots } from "@/components/ui/loading-states";
@@ -15,7 +21,7 @@ import {
   readCachedNewsDetail,
 } from "@/lib/api";
 
-export default function NewsDetailPage({
+function NewsDetailContent({
   fromCoin = "",
   newsId,
   returnTo = "",
@@ -24,7 +30,9 @@ export default function NewsDetailPage({
   newsId: string;
   returnTo?: string;
 }) {
-  const safeReturnTo = safeInternalPath(returnTo);
+  const originalReturnTo = safeInternalPath(returnTo);
+  const oldQuery = new URLSearchParams(originalReturnTo.split("?")[1] || "");
+  const safeReturnTo = originalReturnTo.split("?")[0] === "/portfolio" ? legacyPortfolioTarget(oldQuery.get("asset") || oldQuery.get("symbol")) : originalReturnTo;
   const detailRange = readRankingRangeFromPath(safeReturnTo, "news");
   const [item, setItem] = useState<NewsRankingItem | null>(() => readCachedNewsDetail(newsId, detailRange));
   const [loading, setLoading] = useState(() => !readCachedNewsDetail(newsId, detailRange));
@@ -37,13 +45,17 @@ export default function NewsDetailPage({
   const coinReturnHref = coinSymbol
     ? (safeReturnTo.startsWith(coinPath) ? safeReturnTo : coinPath)
     : "";
-  const newsBackHref = safeReturnTo.startsWith("/news") ? ensureRankingState(safeReturnTo, "news") : ensureRankingState("/news", "news");
+  const fromMarket = safeReturnTo.startsWith("/market") || safeReturnTo.startsWith("/sim");
+  const fromFollows = safeReturnTo.startsWith("/my");
+  const newsBackHref = fromMarket || fromFollows ? safeReturnTo : safeReturnTo.startsWith("/news") ? ensureRankingState(safeReturnTo, "news") : ensureRankingState("/news", "news");
 
   useEffect(() => {
     let ignore = false;
 
     async function loadNewsDetail() {
-      if (!readCachedNewsDetail(newsId, detailRange)) setLoading(true);
+      const cached = readCachedNewsDetail(newsId, detailRange);
+      setItem(cached);
+      setLoading(!cached);
       setError("");
       try {
         const data = await fetchNewsDetail(newsId, detailRange);
@@ -90,7 +102,7 @@ export default function NewsDetailPage({
 
   const sourceHref = useMemo(() => {
     if (!item) return "";
-    return item.source_url || `https://www.google.com/search?q=${encodeURIComponent(item.title)}`;
+    return safeHttpUrl(item.source_url) || `https://www.google.com/search?q=${encodeURIComponent(item.title)}`;
   }, [item]);
 
   async function handleToggleFavorite() {
@@ -100,7 +112,7 @@ export default function NewsDetailPage({
     try {
       const user = await fetchCurrentUser();
       if (!user) {
-        setFavoriteMessage("请先在右上角登录后再收藏新闻。");
+        setFavoriteMessage("请先前往“我的账户”登录后再收藏新闻。");
         return;
       }
       if (isFavorite) {
@@ -172,7 +184,7 @@ export default function NewsDetailPage({
               className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition-colors duration-200 hover:bg-blue-50 sm:w-auto"
             >
               <ChevronLeftIcon />
-              返回新闻榜
+              {fromMarket ? "返回行情看盘" : fromFollows ? "返回我的关注" : "返回新闻榜"}
             </Link>
             {coinReturnHref && (
               <Link
@@ -223,6 +235,7 @@ export default function NewsDetailPage({
         {favoriteMessage && (
           <div className="mb-5 rounded-lg border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">
             {favoriteMessage}
+            {favoriteMessage.includes("登录") && <Link className="ml-3 underline" href="/my">前往我的账户</Link>}
           </div>
         )}
 
@@ -346,18 +359,14 @@ function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value || 0)));
 }
 
-function safeInternalPath(value: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
-  return value;
-}
 
 function ensureRankingState(path: string, scope: "news" | "coin") {
   if (typeof window === "undefined") return path;
   const [pathname, search = ""] = path.split("?");
   const searchParams = new URLSearchParams(search);
-  const storedFilter = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:filter`);
-  const storedSort = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:sort`);
-  const storedRange = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:range`);
+  const storedFilter = sessionStore.getItem(`cryptorisk.ranking:${scope}:filter`);
+  const storedSort = sessionStore.getItem(`cryptorisk.ranking:${scope}:sort`);
+  const storedRange = sessionStore.getItem(`cryptorisk.ranking:${scope}:range`);
   if (!searchParams.get("filter") && storedFilter) searchParams.set("filter", storedFilter);
   if (!searchParams.get("sort") && storedSort) searchParams.set("sort", storedSort);
   if (!searchParams.get("range") && storedRange && isRankingRange(storedRange)) searchParams.set("range", storedRange);
@@ -370,7 +379,7 @@ function readRankingRangeFromPath(path: string, scope: "news" | "coin") {
   const [, search = ""] = path.split("?");
   const value = new URLSearchParams(search).get("range");
   if (value && isRankingRange(value)) return value;
-  const storedRange = window.sessionStorage.getItem(`cryptorisk.ranking:${scope}:range`);
+  const storedRange = sessionStore.getItem(`cryptorisk.ranking:${scope}:range`);
   return storedRange && isRankingRange(storedRange) ? storedRange : "24h";
 }
 
@@ -398,4 +407,9 @@ function StarIcon({ filled = false }: { filled?: boolean }) {
       <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z" />
     </svg>
   );
+}
+
+export default function NewsDetailPage(props: Parameters<typeof NewsDetailContent>[0]) {
+  const scope = useSyncExternalStore(subscribeAccountScope, getAccountScope, () => "guest");
+  return <NewsDetailContent key={`${scope}:${props.newsId}`} {...props} />;
 }

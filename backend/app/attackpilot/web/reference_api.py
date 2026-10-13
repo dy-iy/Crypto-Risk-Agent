@@ -1345,6 +1345,7 @@ async def _call_assistant_llm(messages: List[Dict[str, str]]) -> str:
             messages=messages,
             temperature=0.2,
             max_tokens=1200,
+            extra_body={"thinking": {"type": "disabled"}},
         ),
         timeout=ASSISTANT_RESPONSE_TIMEOUT,
     )

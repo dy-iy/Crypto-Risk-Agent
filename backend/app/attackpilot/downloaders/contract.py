@@ -62,8 +62,13 @@ class ContractSourceDownloader(EtherscanDownloader):
             return json.load(f)
 
     async def _process(self, result: str, **kwargs):
-        result = json.loads(result)
-        result = result['result'][0]
+        payload = json.loads(result)
+        items = payload.get('result') if isinstance(payload, dict) else None
+        if not isinstance(items, list) or not items or not isinstance(items[0], dict):
+            # Explorer quota/auth errors can be HTTP 200 with a string result.
+            # Do not cache the first character of that error as contract data.
+            raise ValueError('区块浏览器未返回有效合约源码数据，请检查授权与配额')
+        result = items[0]
 
         # cache data
         contract_address = kwargs['contract_address']

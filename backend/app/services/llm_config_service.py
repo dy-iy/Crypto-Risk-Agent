@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from os import getenv
 
 
@@ -27,7 +28,7 @@ def _parse_timeout(raw: str) -> tuple[float, bool]:
         value = float(raw)
     except ValueError:
         return DEFAULT_DEEPSEEK_TIMEOUT, False
-    if value < MIN_DEEPSEEK_TIMEOUT or value > MAX_DEEPSEEK_TIMEOUT:
+    if not isfinite(value) or value < MIN_DEEPSEEK_TIMEOUT or value > MAX_DEEPSEEK_TIMEOUT:
         return DEFAULT_DEEPSEEK_TIMEOUT, False
     return value, True
 

@@ -121,7 +121,7 @@ const EvidenceDrawer: React.FC<EvidenceDrawerProps> = ({ title, open, evidence, 
                       {item.message_type ? <Descriptions.Item label="类型">{messageTypeLabel(item.message_type)}</Descriptions.Item> : null}
                       {item.timestamp ? <Descriptions.Item label="时间">{item.timestamp}</Descriptions.Item> : null}
                       {item.log_id ? (
-                        <Descriptions.Item label="Log ID">
+                        <Descriptions.Item label="日志 ID">
                           <Typography.Text copyable className="text-mono">
                             {item.log_id}
                           </Typography.Text>

@@ -1,12 +1,14 @@
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from queue import Queue
 from threading import Thread
 
 from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -21,7 +23,9 @@ from app.api.feishu import router as feishu_router
 from app.agents.chat_agent import run_chat_agent, run_chat_agent_with_progress
 from app.api.portfolio import router as portfolio_router
 from app.api.risk_ranking import router as risk_ranking_router
-from app.api.sim import router as sim_router
+from app.api.market import router as market_router
+from app.api.follows import router as follows_router
+from app.services.market_data_service import close_market_client
 from app.api.system import router as system_router
 from app.api.user_assets import router as user_assets_router
 from app.schemas import (
@@ -59,6 +63,16 @@ from app.services.report_response_service import sanitize_risk_report_for_public
 logger = logging.getLogger("cryptorisk.api")
 app = FastAPI(title="CryptoRisk Agent Backend")
 
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    # Pydantic's raw input may contain non-JSON floats or sensitive form fields.
+    # Preserve the usual detail list without echoing input or exception objects.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(error["loc"]), "msg": error["msg"], "type": error["type"]}
+        for error in exc.errors()
+    ]})
+
 DEFAULT_CORS_ORIGINS = [
     "https://crypto.kassa-wiki.top",
     "https://kassa-wiki.top",
@@ -89,7 +103,8 @@ app.add_middleware(
 
 @app.middleware("http")
 async def operational_headers_middleware(request: Request, call_next):
-    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    candidate_id = request.headers.get("x-request-id", "")
+    request_id = candidate_id if re.fullmatch(r"[A-Za-z0-9._-]{1,128}", candidate_id) else uuid.uuid4().hex
     start = time.perf_counter()
     max_body_bytes = max_request_body_bytes()
     if await request_body_exceeds_limit(request, max_body_bytes):
@@ -145,6 +160,8 @@ async def operational_headers_middleware(request: Request, call_next):
     duration_ms = (time.perf_counter() - start) * 1000
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Process-Time-Ms"] = f"{duration_ms:.1f}"
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -193,7 +210,8 @@ def _public_chat_response(report: dict[str, object]) -> ChatResponse:
 app.include_router(risk_ranking_router)
 app.include_router(analysis_reports_router)
 app.include_router(coin_library_router)
-app.include_router(sim_router)
+app.include_router(market_router)
+app.include_router(follows_router)
 app.include_router(system_router)
 app.include_router(portfolio_router)
 app.include_router(auth_router)
@@ -228,6 +246,7 @@ def start_background_services() -> None:
 
 @app.on_event("shutdown")
 def stop_background_services() -> None:
+    close_market_client()
     stop_daily_scheduler_thread()
 
 

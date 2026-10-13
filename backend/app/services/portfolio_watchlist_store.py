@@ -173,7 +173,7 @@ def _row_to_watchlist(row: sqlite3.Row) -> UserWatchlist:
         custom_exposure_pct=row["custom_exposure_pct"],
         amount=float(row["amount"] or 0),
         avg_buy_price=float(row["avg_buy_price"] or 0),
-        alert_threshold=int(row["alert_threshold"] or 70),
+        alert_threshold=int(row["alert_threshold"] if row["alert_threshold"] is not None else 70),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
     )

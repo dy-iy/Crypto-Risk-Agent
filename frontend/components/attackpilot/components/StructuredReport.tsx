@@ -25,6 +25,8 @@ import { taskStatusLabel } from "../utils/presentation";
 
 interface StructuredReportProps {
   task: Task | null;
+  originalTask?: Task | null;
+  translated?: boolean;
   events: TaskEvent[];
   mode?: ProductViewMode;
   macroAnalysis?: MacroAnalysisResponse | null;
@@ -114,7 +116,8 @@ function compactText(value: string, limit = 260) {
 function normalizeHeading(value: string) {
   return value
     .replace(/^#+\s*/, "")
-    .replace(/^\d+[.)、]\s*/, "")
+    .replace(/^\*{1,2}|\*{1,2}$/g, "")
+    .replace(/^\d+(?:\.\d+)*[.)、]?\s+/, "")
     .replace(/[:：]\s*$/, "")
     .trim()
     .toLowerCase();
@@ -122,24 +125,32 @@ function normalizeHeading(value: string) {
 
 function extractHeadingSections(report: string) {
   const lines = report.split(/\r?\n/);
-  const sections: Array<{ heading: string; content: string }> = [];
-  let currentHeading = "";
-  let currentLines: string[] = [];
-
-  for (const line of lines) {
-    const headingMatch = line.match(/^\s{0,3}(#{1,4}\s+.+|\d+[.)、]\s+.+)$/);
-    if (headingMatch) {
-      if (currentHeading) sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
-      currentHeading = normalizeHeading(headingMatch[1]);
-      currentLines = [];
-      continue;
+  const headings: Array<{ heading: string; level: number; line: number }> = [];
+  let fence: { marker: string; length: number } | null = null;
+  lines.forEach((line, index) => {
+    const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fenceMatch) {
+      if (!fence) fence = { marker: fenceMatch[1][0], length: fenceMatch[1].length };
+      else if (fence.marker === fenceMatch[1][0] && fenceMatch[1].length >= fence.length) fence = null;
+      return;
     }
-
-    if (currentHeading) currentLines.push(line);
-  }
-
-  if (currentHeading) sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
-  return sections;
+    if (fence) return;
+    const markdown = line.match(/^\s{0,3}(#{1,6})\s+(.+)$/);
+    if (markdown) {
+      headings.push({ heading: normalizeHeading(markdown[2]), level: markdown[1].length, line: index });
+      return;
+    }
+    // Recognize plain report headings without mistaking numbered evidence lists for sections.
+    const numbered = line.match(/^(?:\*{1,2})?(\d+(?:\.\d+)*[.)、]?)\s+(.+?)(?:\*{1,2})?$/);
+    if (numbered && SECTION_DEFS.some(definition => definition.patterns.some(pattern =>
+      normalizeHeading(numbered[2]).includes(pattern.toLowerCase())))) {
+      headings.push({ heading: normalizeHeading(numbered[2]), level: 2 + (numbered[1].match(/\.\d/g)?.length || 0), line: index });
+    }
+  });
+  return headings.map((heading, index) => {
+    const end = headings.slice(index + 1).find(next => next.level <= heading.level)?.line ?? lines.length;
+    return { heading: heading.heading, content: lines.slice(heading.line + 1, end).join("\n").trim() };
+  });
 }
 
 function findSectionByHeading(report: string, patterns: string[]) {
@@ -240,7 +251,7 @@ function safeName(value?: string) {
   return (value || "attackpilot").replace(/[\\/:*?"<>|\s]+/g, "_");
 }
 
-function buildMarkdownExport(task: Task, sections: ReportSection[], agentSummaries: AgentExportSummary[]) {
+function buildMarkdownExport(task: Task, sections: ReportSection[], agentSummaries: AgentExportSummary[], originalTask: Task, translated: boolean) {
   const lines = [
     `# AttackPilot 攻击复盘报告 - ${task.dapp_name}`,
     "",
@@ -262,15 +273,18 @@ function buildMarkdownExport(task: Task, sections: ReportSection[], agentSummari
         `| ${agent.agent} | ${agent.total} | ${agent.tool_calls} | ${agent.results} | ${agent.errors} | ${agent.warnings} |`,
     ),
     "",
-    "## 原始最终报告",
+    translated ? "## 完整中文译文" : "## 模型原始报告",
     "",
     task.final_report || "暂无",
+    ...(translated ? ["", "## 模型原始报告", "", originalTask.final_report || "暂无"] : []),
   ];
   return lines.join("\n");
 }
 
 const StructuredReport: React.FC<StructuredReportProps> = ({
   task,
+  originalTask,
+  translated = false,
   events,
   mode = "report",
   macroAnalysis,
@@ -288,7 +302,7 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
     if (!task) return;
     downloadText(
       `${safeName(task.dapp_name)}_${task.task_id.slice(0, 8)}_audit_report.md`,
-      buildMarkdownExport(task, sections, agentSummaries),
+      buildMarkdownExport(task, sections, agentSummaries, originalTask ?? task, translated),
       "text/markdown;charset=utf-8",
     );
     message.success("Markdown 报告已导出");
@@ -298,7 +312,8 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
     if (!task) return;
     const payload = {
       exported_at: new Date().toISOString(),
-      task,
+      task: originalTask ?? task,
+      ...(translated ? { translated_report: finalReport, report_language: "zh-CN" } : {}),
       report_sections: sections.map((section) => ({
         key: section.key,
         title: section.title,
@@ -349,12 +364,12 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
       <div className="report-section-list">
         <div className="product-summary-grid">
           <KeyTransactionCards task={task} events={events} macroAnalysis={macroAnalysis} language={language} />
-          <PatchVerificationPanel task={task} events={events} />
+          <PatchVerificationPanel task={originalTask ?? task} events={events} />
         </div>
 
         <EvidenceIntelligencePanel sections={sections} language={language} />
         <AgentConsistencyPanel
-          task={task}
+          task={originalTask ?? task}
           events={events}
           macro={macroAnalysis ?? null}
           review={automatedReview}
@@ -393,8 +408,8 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
               <CheckCircle2 size={16} />
             </span>
             <div>
-              <Typography.Text strong>原始报告</Typography.Text>
-              <Typography.Text type="secondary">完整原始报告，保留模型输出上下文。</Typography.Text>
+              <Typography.Text strong>{translated ? "完整中文报告" : "完整原始报告"}</Typography.Text>
+              <Typography.Text type="secondary">{translated ? "保留完整结构与技术标识，可在报告语言中切换原文核对。" : "完整原始报告，保留模型输出上下文。"}</Typography.Text>
             </div>
           </div>
           <MarkdownRenderer content={finalReport} compact />

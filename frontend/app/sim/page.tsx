@@ -1,5 +1,5 @@
-import RiskDashboardLoader from "@/components/risk-dashboard-loader";
+import MarketPage from "../market/page";
 
-export default function SimPage() {
-  return <RiskDashboardLoader initialView="sim" />;
-}
+// Preserve existing bookmarks while presenting the read-only market terminal.
+export { metadata } from "../market/page";
+export default MarketPage;

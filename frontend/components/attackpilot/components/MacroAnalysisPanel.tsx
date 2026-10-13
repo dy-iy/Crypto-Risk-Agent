@@ -85,7 +85,7 @@ function flattenRoles(macro: MacroAnalysisResponse): TransactionRoleEvidence[] {
   return Array.from(merged.values());
 }
 
-const MacroAnalysisPanel: React.FC<MacroAnalysisPanelProps> = ({ macro, language = "en" }) => {
+const MacroAnalysisPanel: React.FC<MacroAnalysisPanelProps> = ({ macro, language = "zh" }) => {
   if (!macro) {
     return (
       <section className="macro-panel">
@@ -144,7 +144,7 @@ const MacroAnalysisPanel: React.FC<MacroAnalysisPanelProps> = ({ macro, language
           <section className="macro-card">
             <div className="macro-section-title">
               <Typography.Text strong>{t(language, "transactionClasses")}</Typography.Text>
-              <Tag>{macro.transactions.length} tx</Tag>
+              <Tag>{macro.transactions.length} 笔交易</Tag>
             </div>
             <div className="macro-tx-list">
               {macro.transactions.map((tx) => (

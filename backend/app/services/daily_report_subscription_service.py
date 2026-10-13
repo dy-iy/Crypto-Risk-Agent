@@ -32,7 +32,8 @@ def _load_store() -> dict[str, dict[str, Any]]:
 
 
 def _write_store(store: dict[str, dict[str, Any]]) -> None:
-    write_runtime_json_atomic(SUBSCRIPTIONS_PATH, store)
+    if not write_runtime_json_atomic(SUBSCRIPTIONS_PATH, store):
+        raise OSError("无法保存设置，请稍后重试")
 
 
 def get_daily_report_subscription(user_id: str) -> dict[str, Any]:

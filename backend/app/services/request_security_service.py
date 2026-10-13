@@ -21,8 +21,9 @@ def request_uses_https(scheme: str, headers: Mapping[str, str]) -> bool:
 def request_client_identity(client_host: str | None, headers: Mapping[str, str]) -> str:
     if trust_proxy_headers_enabled():
         forwarded_for = str(headers.get("x-forwarded-for") or "")
+        # The edge Nginx appends the real client; the leftmost value is client-controlled.
         if forwarded_for:
-            return forwarded_for.split(",", 1)[0].strip()[:128] or "unknown"
+            return forwarded_for.rsplit(",", 1)[-1].strip()[:128] or "unknown"
     return str(client_host or "")[:128] or "unknown"
 
 

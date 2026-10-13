@@ -19,6 +19,13 @@ const AGENT_LABELS: Record<string, string> = {
   "Code Patcher": "补丁生成智能体",
   "Transaction Judge": "交易验证智能体",
   "Final Report": "最终报告",
+  Workflow: "分析工作流",
+  MacroAnalysis: "宏观分析",
+  AgentBase: "基础智能体",
+  TraceAgent: "交易调试智能体",
+  FilterAgent: "交易筛选智能体",
+  PatchAgent: "补丁生成智能体",
+  JudgeAgent: "交易验证智能体",
 };
 
 const LOG_LEVEL_LABELS: Record<LogLevel, string> = {
@@ -41,7 +48,7 @@ export function taskStatusLabel(status?: TaskStatus | null) {
 
 export function agentDisplayName(agent?: string | null) {
   if (!agent) return "智能体";
-  return AGENT_LABELS[agent] ?? agent;
+  return AGENT_LABELS[agent] ?? AGENT_LABELS[agent.replace(/_/g, " ")] ?? agent;
 }
 
 export function logLevelLabel(level: LogLevel) {

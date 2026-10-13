@@ -48,12 +48,14 @@ class TraceAgent(AgentBase):
             "dapp": self.dapp,
         })
         self._check_cancelled()
-
-        tx2init = result
-        if isinstance(result, dict) and "session_id" in result:
-            self.session_id = result["session_id"]
-            tx2init = result.get("tx2init", {})
-            print(f"[{self.name}] Session initialized with ID: {self.session_id}")
+        if not isinstance(result, dict) or not result.get('session_id') or not isinstance(result.get('tx2init'), dict):
+            self.logger.error('执行轨迹初始化失败，调试工具未返回有效会话与轨迹。')
+            raise RuntimeError('执行轨迹初始化失败，请检查 RPC/Tenderly 与调试工具文件日志')
+        self.session_id = result['session_id']
+        tx2init = result['tx2init']
+        if not tx2init:
+            raise RuntimeError('执行轨迹为空，无法进行根因定位')
+        print(f"[{self.name}] Session initialized with ID: {self.session_id}")
 
         return tx2init
 

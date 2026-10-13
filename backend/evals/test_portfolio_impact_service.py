@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from app.schemas_portfolio import EventAssetRelation, PortfolioWatchlistItem
@@ -77,7 +78,7 @@ class PortfolioImpactServiceTest(unittest.TestCase):
                 "news_id": "event-1",
                 "title": "Solana 生态协议出现异常",
                 "risk_score": 80,
-                "published_at": "2026-05-30 00:00:00",
+                "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             }]),
             patch("app.services.portfolio_impact_service._write_impact_cache"),
         ):
@@ -125,7 +126,7 @@ class PortfolioImpactServiceTest(unittest.TestCase):
                 "news_id": "event-1",
                 "title": "Solana 生态协议出现异常",
                 "risk_score": 80,
-                "published_at": "2026-05-30 00:00:00",
+                "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             }]),
             patch("app.services.portfolio_impact_service._write_impact_cache"),
         ):

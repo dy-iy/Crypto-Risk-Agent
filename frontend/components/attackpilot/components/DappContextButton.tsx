@@ -16,8 +16,10 @@ interface Props {
   autoOpenKey?: string | number | null;
 }
 
-const DappContextButton: React.FC<Props> = ({ dappName, size = "small", type = "default", disabled }) => {
+const DappContextButton: React.FC<Props> = ({ dappName, size = "small", type = "default", disabled, autoOpenKey }) => {
   const [open, setOpen] = useState(false);
+  const [dismissedAutoOpenKey, setDismissedAutoOpenKey] = useState<Props["autoOpenKey"]>(null);
+  const autoOpen = Boolean(dappName && autoOpenKey && autoOpenKey !== dismissedAutoOpenKey);
   const metadata = useMemo(() => getDappMetadata(dappName), [dappName]);
   const title = metadata?.name ?? dappName ?? "DApp";
   const cause = metadata?.cause_zh ?? metadata?.cause;
@@ -47,8 +49,8 @@ const DappContextButton: React.FC<Props> = ({ dappName, size = "small", type = "
       <Drawer
         getContainer={() => document.querySelector<HTMLElement>(".attackpilot-root") || document.body}
         title={`${title} 背景知识`}
-        open={open}
-        onClose={() => setOpen(false)}
+        open={open || autoOpen}
+        onClose={() => { setOpen(false); setDismissedAutoOpenKey(autoOpenKey); }}
         size="large"
         extra={
           <Space>
@@ -114,7 +116,7 @@ const DappContextButton: React.FC<Props> = ({ dappName, size = "small", type = "
               <List
                 size="small"
                 dataSource={metadata.transaction_hash ?? []}
-                locale={{ emptyText: "暂无交易 Hash" }}
+                locale={{ emptyText: "暂无交易哈希" }}
                 renderItem={(hash) => (
                   <List.Item>
                     <Typography.Text copyable={{ text: hash }} className="text-mono">

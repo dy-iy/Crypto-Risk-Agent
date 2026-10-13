@@ -55,7 +55,8 @@ def _load_bindings() -> dict[str, dict[str, Any]]:
 
 
 def _write_bindings(bindings: dict[str, dict[str, Any]]) -> None:
-    write_runtime_json_atomic(FEISHU_BINDINGS_PATH, bindings)
+    if not write_runtime_json_atomic(FEISHU_BINDINGS_PATH, bindings):
+        raise OSError("无法保存设置，请稍后重试")
 
 
 def _public_binding(record: dict[str, Any] | None, user_id: str) -> dict[str, Any]:
@@ -161,7 +162,8 @@ def _load_states() -> dict[str, dict[str, Any]]:
 
 
 def _write_states(states: dict[str, dict[str, Any]]) -> None:
-    write_runtime_json_atomic(FEISHU_OAUTH_STATES_PATH, states)
+    if not write_runtime_json_atomic(FEISHU_OAUTH_STATES_PATH, states):
+        raise OSError("无法保存设置，请稍后重试")
 
 
 def _prune_expired_states(states: dict[str, dict[str, Any]], now: datetime | None = None) -> dict[str, dict[str, Any]]:

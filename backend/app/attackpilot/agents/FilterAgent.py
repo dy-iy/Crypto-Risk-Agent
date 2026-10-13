@@ -52,14 +52,14 @@ class FilterAgent(AgentBase):
 
         parsed_txs = self._parse_llm_output(result)
 
+        if parsed_txs is None:
+            self.logger.warning('交易筛选输出无法解析，保留全部候选交易继续核查。')
+            return candidate_txs
+
         valid_txs = [tx for tx in parsed_txs if tx in candidate_txs]
 
         if not valid_txs and parsed_txs:
             print(f"[{self.name}] LLM returned transactions verify failed (hallucination?). Output: {parsed_txs}")
-            return []
-
-        if parsed_txs is None:
-            print(f"[{self.name}] Parsing failed, applying Fail-Open strategy.")
             return candidate_txs
 
         return valid_txs

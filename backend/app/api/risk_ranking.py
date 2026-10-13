@@ -4,7 +4,10 @@ from pathlib import Path
 from threading import Lock, Thread
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Cookie, HTTPException, Query
+
+from app.api.auth import SESSION_COOKIE_NAME
+from app.services.auth_service import get_user_by_session
 
 from app.agents.ranking_agent.graph import run_ranking_agent
 from app.data.update_news import update_news_dataset
@@ -19,6 +22,7 @@ from app.tools.ranking_tools import attach_coin_entities
 router = APIRouter(prefix="/api/rankings", tags=["ranking-agent"])
 UPDATE_JOBS_PATH = Path(__file__).resolve().parents[1] / "data" / "update_jobs.json"
 _update_lock = Lock()
+_job_start_lock = Lock()
 _jobs_lock = Lock()
 _scored_write_lock = Lock()
 _update_jobs: dict[str, dict[str, object]] = {}
@@ -39,11 +43,18 @@ def _load_update_jobs() -> None:
     raw = load_runtime_json_or_quarantine(UPDATE_JOBS_PATH)
     if not isinstance(raw, dict):
         return
-    _update_jobs.update({
-        str(job_id): job
-        for job_id, job in raw.items()
-        if isinstance(job, dict)
-    })
+    for job_id, payload in raw.items():
+        if not isinstance(payload, dict):
+            continue
+        job = deepcopy(payload)
+        if job.get("status") in {"queued", "running"}:
+            job.update({
+                "status": "error", "stage": "error",
+                "message": "服务中断，新闻更新未完成，请重新发起更新",
+                "error": "服务中断，新闻更新未完成，请重新发起更新",
+                "finished_at": _now_text(),
+            })
+        _update_jobs[str(job_id)] = job
 
 
 def _persist_update_jobs() -> None:
@@ -541,8 +552,19 @@ def ranking_overview(date: str | None = Query(default=None)):
     return _compact_overview_response(_overview(date))
 
 
+def _require_update_admin(token: str | None) -> None:
+    user = get_user_by_session(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="请先登录后再更新公共新闻")
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="公共新闻采集和评分更新仅限管理员操作")
+
+
 @router.post("/update-news")
-def update_today_news():
+def update_today_news(
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    _require_update_admin(cryptorisk_session)
     if not _update_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="News update is already running")
 
@@ -576,29 +598,33 @@ def update_today_news():
 
 
 @router.post("/update-news/jobs")
-def start_update_today_news_job():
-    current_job = _get_current_update_job()
-    if current_job and current_job.get("status") in {"queued", "running"}:
-        return current_job
+def start_update_today_news_job(
+    cryptorisk_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+):
+    _require_update_admin(cryptorisk_session)
+    with _job_start_lock:
+        current_job = _get_current_update_job()
+        if current_job and current_job.get("status") in {"queued", "running"}:
+            return current_job
 
-    job = _new_update_job()
-    job_id = str(job["job_id"])
-    with _jobs_lock:
-        _update_jobs[job_id] = job
-        _persist_update_jobs()
-    record_task_event(
-        job_kind="news_update",
-        job_id=job_id,
-        event_type="created",
-        status=str(job.get("status") or "queued"),
-        stage=str(job.get("stage") or "queued"),
-        message=str(job.get("message") or ""),
-        payload={"crawler": job.get("crawler"), "agent": job.get("agent"), "ranking": job.get("ranking")},
-    )
+        job = _new_update_job()
+        job_id = str(job["job_id"])
+        with _jobs_lock:
+            _update_jobs[job_id] = job
+            _persist_update_jobs()
+        record_task_event(
+            job_kind="news_update",
+            job_id=job_id,
+            event_type="created",
+            status=str(job.get("status") or "queued"),
+            stage=str(job.get("stage") or "queued"),
+            message=str(job.get("message") or ""),
+            payload={"crawler": job.get("crawler"), "agent": job.get("agent"), "ranking": job.get("ranking")},
+        )
 
-    thread = Thread(target=_run_update_job, args=(job_id,), daemon=True)
-    thread.start()
-    return _get_job(job_id)
+        thread = Thread(target=_run_update_job, args=(job_id,), daemon=True)
+        thread.start()
+        return _get_job(job_id)
 
 
 @router.get("/update-news/jobs/current")

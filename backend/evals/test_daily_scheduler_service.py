@@ -62,6 +62,7 @@ class DailySchedulerServiceTest(unittest.TestCase):
             state_path = Path(tmpdir) / "daily_scheduler_state.json"
             with (
                 patch.object(scheduler, "SCHEDULER_STATE_PATH", state_path),
+                patch.object(scheduler, "follow_snapshot", return_value={"items": [{"symbol": "BTCUSDT"}]}),
                 patch.object(scheduler, "list_subscribed_daily_report_user_ids", return_value=["user-1"]),
                 patch.object(scheduler, "get_user_by_id", return_value=_User()),
                 patch.object(scheduler, "save_daily_report", side_effect=lambda user_id, report: saved_reports.append((user_id, report)) or {"report_id": "r1"}),
@@ -97,6 +98,7 @@ class DailySchedulerServiceTest(unittest.TestCase):
             state_path = Path(tmpdir) / "daily_scheduler_state.json"
             with (
                 patch.object(scheduler, "SCHEDULER_STATE_PATH", state_path),
+                patch.object(scheduler, "follow_snapshot", return_value={"items": [{"symbol": "BTCUSDT"}]}),
                 patch.object(scheduler, "list_subscribed_daily_report_user_ids", return_value=["user-1", "user-2"]),
                 patch.object(scheduler, "get_user_by_id", return_value=_User()),
                 patch.object(scheduler, "save_daily_report", side_effect=lambda _user_id, report: {"report_id": "r1", **report}),
@@ -111,6 +113,22 @@ class DailySchedulerServiceTest(unittest.TestCase):
         self.assertEqual(result["last_result"]["feishu_sent_count"], 1)
         self.assertEqual(result["last_result"]["feishu_skipped_count"], 1)
         self.assertEqual(result["last_result"]["feishu_error_count"], 0)
+
+    def test_no_follows_skips_generation_and_delivery_without_disabling_subscription(self):
+        scheduler = load_scheduler_service_with_stubs()
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(scheduler, "SCHEDULER_STATE_PATH", Path(directory) / "state.json"), \
+             patch.object(scheduler, "follow_snapshot", return_value={"items": []}), \
+             patch.object(scheduler, "list_subscribed_daily_report_user_ids", return_value=["user-1"]), \
+             patch.object(scheduler, "get_user_by_id", return_value=types.SimpleNamespace(display_name="Alice")), \
+             patch.object(scheduler, "run_daily_report_agent") as generate, \
+             patch.object(scheduler, "save_daily_report") as save, \
+             patch.object(scheduler, "send_daily_report_to_feishu") as send:
+            scheduler.set_daily_scheduler_enabled(True)
+            result = scheduler.run_daily_scheduler_if_due(datetime(2026, 6, 11, 8, 0))
+            generate.assert_not_called(); save.assert_not_called(); send.assert_not_called()
+            self.assertEqual(result["last_result"]["skipped_no_follows_count"], 1)
+            self.assertEqual(result["last_result"]["subscribed_user_count"], 1)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,8 @@ from app.attackpilot.settings import PROJECT_PATH, WORK_ROOT, SCAN_APIKEYS, JSON
 from app.attackpilot.utils.bucket import AsyncItemBucket
 from app.attackpilot.utils.patch_quality_metrics import PatchQualityMetrics
 from app.attackpilot.web.models import LogMessage
+from app.attackpilot.errors import failure_message
+from app.attackpilot.privacy import redact_text
 
 DEFAULT_ENABLED_MODULES = {
     "attack_detection",
@@ -31,21 +33,21 @@ def build_macro_only_report(dapp_name: str, processed_data: dict, enabled_module
     txs = processed_data.get("transaction_hash_list") or processed_data.get("transactions_need_analyze") or []
     attack_txs = processed_data.get("attack_transactions") or []
     auxiliary_txs = processed_data.get("auxiliary_transactions") or []
-    bug_summary = processed_data.get("bug_summary") or "No macro bug summary generated."
+    bug_summary = processed_data.get("bug_summary") or "尚未生成宏观漏洞摘要。"
     rag_context = processed_data.get("rag_context") or {}
     rag_items = rag_context.get("items") if isinstance(rag_context, dict) else []
     return "\n".join([
-        f"# {dapp_name} Macro Review",
+        f"# {dapp_name} 宏观交易复盘",
         "",
-        "Fault localization module was disabled, so AttackPilot stopped after macro transaction analysis.",
+        "当前未启用漏洞定位模块，AttackPilot 已完成宏观交易分析。",
         "",
-        f"- Enabled modules: {', '.join(sorted(enabled_modules)) or 'none'}",
-        f"- Transactions collected: {len(txs)}",
-        f"- Attack candidates: {len(attack_txs)}",
-        f"- Auxiliary candidates: {len(auxiliary_txs)}",
-        f"- RAG context chunks: {len(rag_items) if isinstance(rag_items, list) else 0}",
+        f"- 已启用模块：{', '.join({'attack_detection': '攻击检测', 'fault_localization': '漏洞定位', 'rag_retrieval': '知识检索', 'patch_generation': '补丁生成', 'patch_verification': '补丁验证'}.get(module, module) for module in sorted(enabled_modules)) or '无'}",
+        f"- 已收集交易：{len(txs)}",
+        f"- 候选攻击交易：{len(attack_txs)}",
+        f"- 候选辅助交易：{len(auxiliary_txs)}",
+        f"- 检索知识片段：{len(rag_items) if isinstance(rag_items, list) else 0}",
         "",
-        "## Macro Findings",
+        "## 宏观分析结果",
         str(bug_summary),
     ])
 
@@ -62,6 +64,7 @@ class WorkFlow:
         self.dapp2processed = {}
         self.dapp2report = {}
         self.last_result = None
+        self.last_error = None
         self._net2rpc_bucket = {
             net: AsyncItemBucket(items=_rpc_urls, qps=1)
             for net, _rpc_urls in JSONRPCS.items()
@@ -85,7 +88,7 @@ class WorkFlow:
     def _log(self, agent: str, level: str, message: str):
         """统一的日志输出方法"""
         if self.log_callback:
-            self.log_callback(agent, level, message)
+            self.log_callback(LogMessage(agent=agent, level=level, message_type="text", message=message))
         else:
             print(message)
 
@@ -124,6 +127,8 @@ class WorkFlow:
             enabled_modules = normalize_enabled_modules(dapp)
             local_mcp_client = MCPClient(MCP_SERVER_PATH)
             fault_report = ""
+            self.last_error = None
+            stage = '初始化分析工具'
             try:
                 self._check_cancelled()
                 await local_mcp_client.connect()
@@ -144,6 +149,7 @@ class WorkFlow:
                     transaction_debugger = await self.reload_debugger(processed_data, local_mcp_client)
                 else:
                     # Macro Analysis (Process)
+                    stage = '读取交易数据与宏观分析'
                     print(f"🚀 Start processing: {dapp_name}")
                     self._check_cancelled()
                     processed_data, transaction_debugger = await DAppProcess(
@@ -179,6 +185,7 @@ class WorkFlow:
 
                 # Micro Analysis (Analyze)
                 if processed_data and transaction_debugger:
+                    stage = '根因定位与补丁分析'
                     start_time = time.time()
                     self._check_cancelled()
                     fault_report, analyze_items = await DAppAnalyze(
@@ -235,17 +242,19 @@ class WorkFlow:
                 error_stack = traceback.format_exc()
                 error_log_dir = os.path.join(str(WORK_ROOT), "experiment_result", 'pilot_report', 'errors')
                 os.makedirs(error_log_dir, exist_ok=True)
-                error_file_path = os.path.join(error_log_dir, f"{dapp_name}_error.log")
+                error_file_path = os.path.join(error_log_dir, f"{self._safe_cache_name(dapp_name)}_error.log")
 
                 with open(error_file_path, 'w', encoding='utf-8') as f:
                     f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
                     f.write(f"Error processing {dapp_name}:\n")
-                    f.write(error_stack)
+                    f.write(redact_text(error_stack))
 
                 print(f"❌ [FAILED] {dapp_name} - Log saved to {error_file_path}")
                 if self.metrics_collector:
                     self.metrics_collector.finalize_case(dapp_name, "ERROR")
-                return dapp_name, f"RUNTIME_ERROR: See log at {error_file_path}\nDetails: {str(e)}"
+                self.last_error = failure_message(e, stage)
+                self._log('Workflow', 'error', self.last_error)
+                return dapp_name, f"RUNTIME_ERROR: {self.last_error}"
             finally:
                 if 'transaction_debugger' in locals() and transaction_debugger:
                     try:
@@ -314,4 +323,3 @@ class WorkFlow:
 
 async def main():
     return await WorkFlow(semaphore_num=1).main_workflow()
-

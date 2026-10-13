@@ -15,7 +15,7 @@ class TxDetailDao:
         self.log_analyzer = LogAnalyzer(properties)
 
     async def get_tx_detail(self, transaction_hash: str):
-        result = await self.tenderly_dao.simulate_tx_in_tenderly(transaction_hash)
+        result = await self.tenderly_dao.simulate_tx_in_tenderly(transaction_hash, enrich_contracts=False)
 
         if not result:
             raise Exception(f"Tenderly returned None for tx {transaction_hash}")

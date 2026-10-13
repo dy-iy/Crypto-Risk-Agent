@@ -521,7 +521,7 @@ REQUIRED_SECURITY_CONTROL_MARKERS = [
             "backupManifest",
             "备份清单",
             "pruneGuestSimAccounts",
-            "清理游客模拟",
+            "清理历史游客模拟数据",
             "storageInventory",
             "invalidJsonBackups",
             "损坏 JSON 备份",

@@ -178,9 +178,9 @@ def _top_asset_lines(report: dict[str, Any]) -> list[str]:
 def build_daily_report_card(report: dict[str, Any]) -> dict[str, Any]:
     score = int(report.get("personal_risk_score") or 0)
     alert_level = str(report.get("alert_level") or "未生成")
-    headline = str(report.get("headline") or "资产日报")
+    headline = str(report.get("headline") or "关注日报")
     affected_assets = report.get("affected_assets") if isinstance(report.get("affected_assets"), list) else []
-    summary = str(report.get("summary") or "今日资产日报已生成，请进入网站查看详情。")[:300]
+    summary = str(report.get("summary") or "今日关注日报已生成，请进入网站查看详情。")[:300]
     top_assets = "\n".join(f"- {line}" for line in _top_asset_lines(report))
     return {
         "config": {"wide_screen_mode": True},
@@ -188,7 +188,7 @@ def build_daily_report_card(report: dict[str, Any]) -> dict[str, Any]:
             "template": "red" if score >= 90 else "orange" if score >= 80 else "blue",
             "title": {
                 "tag": "plain_text",
-                "content": f"资产日报｜{alert_level}｜个人风险分 {score}",
+                "content": f"关注日报｜{alert_level}｜个人风险分 {score}",
             },
         },
         "elements": [
