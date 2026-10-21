@@ -4288,7 +4288,7 @@
   position: fixed;
   right: 24px;
   bottom: 84px;
-  z-index: 1200;
+  z-index: 900;
   min-width: 166px;
   min-height: 58px;
   padding: 10px 14px;
@@ -4339,7 +4339,7 @@
   position: fixed;
   right: 24px;
   bottom: 84px;
-  z-index: 1200;
+  z-index: 900;
   max-width: calc(100vw - 40px);
   max-height: calc(100vh - 104px);
   border: 1px solid rgba(148, 163, 184, 0.22);
@@ -4352,6 +4352,7 @@
 }
 
 .attackpilot-root .assistant-floating-header {
+  flex-shrink: 0;
   padding: 12px 14px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: rgba(255, 255, 255, 0.9);
@@ -4392,12 +4393,13 @@
 }
 
 .attackpilot-root .assistant-shell {
+  flex: 1 1 auto;
   min-height: 0;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .attackpilot-root .assistant-context-card.ant-alert {
@@ -4442,7 +4444,8 @@
 }
 
 .attackpilot-root .assistant-scroll-area {
-  min-height: 180px;
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: min(48vh, 520px);
   overflow: auto;
   padding-right: 2px;
@@ -4493,6 +4496,7 @@
 }
 
 .attackpilot-root .assistant-composer {
+  flex-shrink: 0;
   margin: auto -16px -16px;
   padding: 14px 16px 16px;
   border-top: 1px solid rgba(15, 23, 42, 0.08);
@@ -5329,6 +5333,11 @@
   color: #2563eb;
   display: grid !important;
   place-items: center;
+}
+
+.attackpilot-root .tutorial-title > .tutorial-tab-icon {
+  position: static;
+  flex: none;
 }
 
 @media (max-width: 1120px) {
@@ -8131,6 +8140,12 @@
   .attackpilot-root .app-root:has(.product-overview-page) .analysis-page-grid { grid-template-columns: minmax(0,1fr) !important; }
   .attackpilot-root .briefing-two-col { grid-template-columns: minmax(0,1fr); }
   .attackpilot-root .landing-v2-nav-actions { flex-wrap: wrap; }
+  .attackpilot-root .tutorial-board { grid-template-columns: minmax(0,1fr); }
+  .attackpilot-root .tutorial-list {
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+  }
 }
 @container attackpilot (max-width: 720px) {
   .attackpilot-root .workbench-grid { grid-template-columns: minmax(0,1fr); }

@@ -2626,7 +2626,7 @@ function AccountCenterPopover({
 
   return (
     <div
-      className="absolute right-0 top-14 z-50 w-[min(92vw,360px)] overflow-hidden rounded-lg border border-blue-100 bg-white shadow-2xl shadow-slate-900/15"
+      className="absolute right-0 top-14 z-50 max-h-[calc(100dvh-6rem)] w-[min(92vw,360px)] overflow-y-auto overscroll-contain rounded-lg border border-blue-100 bg-white shadow-2xl shadow-slate-900/15"
       role="dialog"
       aria-label="我的风控中心"
     >
@@ -3297,7 +3297,7 @@ function ChatView({
                     </div>
                   )}
                   <div
-                    className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm sm:max-w-[76%] sm:px-5 sm:py-4 ${
+                    className={`min-w-0 max-w-[92%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm [overflow-wrap:anywhere] sm:max-w-[76%] sm:px-5 sm:py-4 ${
                       item.role === "user"
                         ? "rounded-br-md bg-emerald-700 text-white shadow-emerald-100"
                         : "rounded-bl-md border border-blue-100 bg-white/95 text-slate-700 shadow-blue-100/70"
@@ -3414,7 +3414,7 @@ function AnalysisCardsPanel({
         <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{records.length}</span>
       </div>
 
-      <div className="risk-scroll mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className="risk-scroll mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 [overflow-wrap:anywhere]">
         {records.length ? (
           records.map((record) => (
             <Link
@@ -3427,7 +3427,7 @@ function AnalysisCardsPanel({
               className="block rounded-lg border border-blue-100 bg-white p-3 shadow-sm transition-colors duration-200 hover:border-blue-300 hover:bg-blue-50"
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="line-clamp-2 text-sm font-bold leading-6 text-slate-950">{record.title}</p>
+                <p className="min-w-0 line-clamp-2 text-sm font-bold leading-6 text-slate-950">{record.title}</p>
                 <span className="shrink-0 text-xl font-bold text-red-500">{clampScore(record.report.risk_score)}</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -3604,7 +3604,7 @@ function DailyReportView({
   const feishuBound = Boolean(feishuBinding?.bound && feishuBinding.enabled);
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-5 [overflow-wrap:anywhere]">
       {error && <Notice tone="amber" text={error} />}
       {follows.error && <Notice tone="amber" text={follows.error} />}
       {agentReport && agentReport.report_kind !== "follows_v1" && <Notice tone="amber" text="历史版本：此日报按原资产规则生成，原始内容保留。重新生成后将仅分析当前关注币种。" />}
@@ -4153,8 +4153,8 @@ function ReportsView({
   selectedRecord: AnalysisRecord | null;
 }) {
   return (
-    <section className={`risk-card grid min-h-[calc(100vh-168px)] rounded-lg ${collapsed ? "lg:grid-cols-[68px_minmax(0,1fr)]" : "lg:grid-cols-[280px_minmax(0,1fr)]"}`}>
-      <aside className="border-b border-blue-100 bg-slate-50/80 lg:border-b-0 lg:border-r">
+    <section className={`risk-card grid min-h-[calc(100vh-168px)] grid-cols-1 rounded-lg ${collapsed ? "lg:grid-cols-[68px_minmax(0,1fr)]" : "lg:grid-cols-[280px_minmax(0,1fr)]"}`}>
+      <aside className="min-w-0 border-b border-blue-100 bg-slate-50/80 lg:border-b-0 lg:border-r">
         <div className={`flex items-center gap-2 border-b border-blue-100 p-4 ${collapsed ? "justify-center" : ""}`}>
           {!collapsed && (
             <button
@@ -6294,7 +6294,7 @@ function ReportDocument({
 
   return (
     <article
-      className="risk-scroll min-w-0 overflow-y-auto bg-white"
+      className="risk-scroll min-w-0 overflow-y-auto bg-white [overflow-wrap:anywhere]"
       data-ai-context={JSON.stringify({
         type: "risk_report",
         title: record.title,
@@ -7663,8 +7663,11 @@ function MultiLineTrendChart({
       </svg>
       {firstPoint && (
         <div
-          className="pointer-events-none absolute top-4 rounded-lg border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-lg"
-          style={{ left: `${Math.min(78, Math.max(4, (firstPoint.x / width) * 100))}%` }}
+          className="pointer-events-none absolute top-4 max-w-[calc(100%-1.5rem)] rounded-lg border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-lg [overflow-wrap:anywhere]"
+          style={{
+            left: `${(firstPoint.x / width) * 100}%`,
+            transform: firstPoint.x > width / 2 ? "translateX(-100%)" : undefined,
+          }}
         >
           <p className="font-bold text-slate-900">{lineSets[0]?.normalized[activeIndex]?.label || "趋势点"}</p>
           {lineSets.map((set) => (

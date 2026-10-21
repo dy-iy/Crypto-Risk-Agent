@@ -517,24 +517,24 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
         role="dialog"
         aria-label="AI 风控助手"
         inert={!panelOpen}
-        className={`fixed inset-y-0 right-0 z-50 w-full max-w-[420px] transform border-l border-blue-100 bg-white shadow-2xl shadow-slate-900/20 transition-transform duration-300 sm:right-4 sm:top-[108px] sm:bottom-6 sm:h-[calc(100vh-132px)] sm:rounded-lg sm:border ${
+        className={`fixed inset-y-0 right-0 z-50 h-dvh w-full max-w-[420px] transform overflow-y-auto overscroll-contain border-l border-blue-100 bg-white shadow-2xl shadow-slate-900/20 transition-transform duration-300 sm:right-4 sm:top-[108px] sm:bottom-6 sm:h-[calc(100dvh-132px)] sm:rounded-lg sm:border ${
           panelOpen ? "translate-x-0" : "translate-x-full sm:translate-x-[calc(100%+2rem)]"
         }`}
         aria-hidden={!panelOpen}
       >
         <section className="flex h-full flex-col">
-          <div className="flex items-center justify-between border-b border-blue-100 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-blue-100 px-3 py-4 sm:px-5">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 sm:h-11 sm:w-11">
                 <BotIcon />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="font-bold text-slate-950">AI风控助手</p>
                 <p className="text-xs text-slate-500">基于事件报告回答追问</p>
               </div>
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="hidden h-2 w-2 shrink-0 rounded-full bg-emerald-500 sm:block" />
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               <button
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition-colors duration-200 hover:bg-blue-50 hover:text-blue-600"
                 type="button"
@@ -564,7 +564,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
             </div>
           </div>
 
-          <div className="border-b border-blue-100 bg-slate-50 px-4 py-2.5">
+          <div className="shrink-0 border-b border-blue-100 bg-slate-50 px-4 py-2.5">
             <div className="flex items-center">
               <select
                 value={activeSession.id}
@@ -591,7 +591,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
               {messages.map((message) => (
                 <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[88%] rounded-lg px-4 py-3 text-sm leading-7 ${
+                    className={`min-w-0 max-w-[88%] rounded-lg px-4 py-3 text-sm leading-7 [overflow-wrap:anywhere] ${
                       message.role === "user"
                         ? "bg-blue-600 font-semibold text-white"
                         : "border border-blue-100 bg-slate-50 text-slate-700"
@@ -631,7 +631,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="shrink-0 space-y-3">
               {quote && (
                 <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
                   <div className="flex items-center justify-between gap-3">
@@ -647,7 +647,7 @@ export default function AskAIOnSelection({ initialOpenRequest }: { initialOpenRe
                       ×
                     </button>
                   </div>
-                  <p className="mt-2 max-h-20 overflow-hidden text-sm leading-6 text-slate-700">
+                  <p className="mt-2 max-h-20 overflow-y-auto text-sm leading-6 text-slate-700 [overflow-wrap:anywhere]">
                     {compactText(quote.selectedText, 220)}
                   </p>
                 </div>

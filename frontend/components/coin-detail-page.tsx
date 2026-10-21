@@ -136,7 +136,7 @@ function CoinDetailContent({ returnTo = "", symbol }: { returnTo?: string; symbo
                       <p className="mt-1 break-words text-sm font-semibold text-slate-500">{item.name || item.symbol}</p>
                     </div>
                   </div>
-                  <p className="mt-5 max-w-4xl text-sm leading-7 text-slate-700">{description}</p>
+                  <p className="mt-5 max-w-4xl text-sm leading-7 text-slate-700 [overflow-wrap:anywhere]">{description}</p>
                 </div>
                 <div className="w-full rounded-lg border border-rose-100 bg-rose-50 px-5 py-4 text-center sm:w-auto">
                   <p className="text-xs font-bold text-rose-700">综合风险分</p>
@@ -197,21 +197,21 @@ function CoinDetailContent({ returnTo = "", symbol }: { returnTo?: string; symbo
 
 function DetailSection({ children, icon, title }: { children: ReactNode; icon: ReactNode; title: string }) {
   return (
-    <section className="risk-panel rounded-lg p-5">
+    <section className="risk-panel min-w-0 rounded-lg p-5">
       <div className="mb-4 flex items-center gap-2 text-blue-600">
         {icon}
         <h2 className="text-base font-bold text-slate-950">{title}</h2>
       </div>
-      <div className="text-sm leading-7 text-slate-700">{children}</div>
+      <div className="min-w-0 text-sm leading-7 text-slate-700 [overflow-wrap:anywhere]">{children}</div>
     </section>
   );
 }
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="risk-card rounded-lg p-5">
+    <div className="risk-card min-w-0 rounded-lg p-5">
       <p className="text-xs font-bold text-blue-600">{label}</p>
-      <p className="mt-2 text-base font-bold leading-7 text-slate-950">{value}</p>
+      <p className="mt-2 text-base font-bold leading-7 text-slate-950 [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }

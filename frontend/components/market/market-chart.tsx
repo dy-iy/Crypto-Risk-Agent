@@ -96,7 +96,9 @@ const MarketChart = memo(forwardRef<ChartHandle, Props>(function MarketChart({ c
     s.candle.applyOptions({ visible: mode === "candles" }); s.line.applyOptions({ visible: mode === "line" });
     s.ma10.applyOptions({ visible: showMA }); s.ma30.applyOptions({ visible: showMA }); s.ema20.applyOptions({ visible: showEMA });
     s.rsi14.applyOptions({ visible: showRSI });
-    chartRef.current?.panes()[1]?.setHeight(showRSI ? 100 : 1);
+    // A pane has a 30px minimum height; moving the hidden series removes its empty pane.
+    s.rsi14.moveToPane(showRSI ? 1 : 0);
+    if (showRSI) chartRef.current?.panes()[1]?.setHeight(100);
     chartRef.current?.priceScale("right", 0).applyOptions({ mode: logarithmic ? 1 : 0 });
   }, [mode, showMA, showEMA, showRSI, logarithmic]);
   const selected = hover ?? candles.at(-1);

@@ -278,7 +278,7 @@ function NewsDetailContent({
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">CryptoRisk News Detail</p>
                   <h1 className="mt-3 break-words text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">{item.title}</h1>
-                  <p className="mt-3 text-sm text-slate-500">
+                  <p className="mt-3 text-sm text-slate-500 [overflow-wrap:anywhere]">
                     发布时间：{item.published_at || item.date || "--"} · 新闻 ID：{item.news_id}
                   </p>
                 </div>
@@ -329,21 +329,21 @@ function NewsDetailContent({
 
 function DetailSection({ children, icon, title }: { children: ReactNode; icon: ReactNode; title: string }) {
   return (
-    <section className="risk-panel rounded-lg p-5">
+    <section className="risk-panel min-w-0 rounded-lg p-5">
       <div className="mb-4 flex items-center gap-2 text-blue-600">
         {icon}
         <h2 className="text-base font-bold text-slate-950">{title}</h2>
       </div>
-      <div className="text-sm leading-7 text-slate-700">{children}</div>
+      <div className="min-w-0 text-sm leading-7 text-slate-700 [overflow-wrap:anywhere]">{children}</div>
     </section>
   );
 }
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="risk-card rounded-lg p-5">
+    <div className="risk-card min-w-0 rounded-lg p-5">
       <p className="text-xs font-bold text-blue-600">{label}</p>
-      <p className="mt-2 text-base font-bold leading-7 text-slate-950">{value}</p>
+      <p className="mt-2 text-base font-bold leading-7 text-slate-950 [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
 }
