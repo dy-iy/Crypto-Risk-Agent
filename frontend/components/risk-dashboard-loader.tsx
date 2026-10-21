@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import { LoadingDots } from "@/components/ui/loading-states";
 
 type ActiveView =
@@ -28,6 +29,15 @@ export default function RiskDashboardLoader({ initialView = "home" }: { initialV
 }
 
 function DashboardSkeleton() {
+  const pathname = usePathname();
+  if (pathname === "/attackpilot" || pathname.startsWith("/attackpilot/")) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50">
+        <LoadingDots label="加载链上攻击复盘" />
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50">
       <header className="border-b border-blue-100 bg-white px-4 py-4 sm:px-6">

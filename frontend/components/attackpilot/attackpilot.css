@@ -8071,15 +8071,17 @@
   }
 }
 
-/* Keep the original application inside the host sidebar's content area. */
+/* Standalone AttackPilot pages fill the viewport without the host dashboard. */
 .attackpilot-root {
   width: 100%;
   height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
   min-width: 0;
   overflow: visible;
   container: attackpilot / inline-size;
   background: var(--bg-deep);
-  border-radius: 12px;
+  border-radius: 0;
 }
 .attackpilot-root .app-root { min-height: 0; }
 .attackpilot-root .ap-module-nav {
@@ -8088,12 +8090,12 @@
   flex-wrap: wrap;
   gap: 8px;
   padding: 12px 16px;
-  margin-bottom: 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
 }
 .attackpilot-root .ap-brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; font-weight: 750; color: var(--accent); }
+.attackpilot-root .ap-account { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.attackpilot-root .ap-account-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attackpilot-root .ap-module-nav a { padding: 9px 12px; border-radius: 8px; color: var(--text-secondary); font-weight: 600; text-decoration: none; }
 .attackpilot-root .ap-module-nav a[aria-current="page"] { background: var(--bg-elevated); color: var(--accent); }
 .attackpilot-root .ap-page-loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 300px; color: var(--text-secondary); }

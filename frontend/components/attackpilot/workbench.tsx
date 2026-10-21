@@ -35,7 +35,13 @@ const navigation = [
   ["briefing", "/attackpilot/briefing", "项目介绍"],
 ] as const;
 
-export default function AttackPilotWorkbench({ userId, onLogin }: { userId: string | null; onLogin: () => void }) {
+export default function AttackPilotWorkbench({ userId, userName, authLoading = false, onLogin, onLogout }: {
+  userId: string | null;
+  userName?: string;
+  authLoading?: boolean;
+  onLogin: () => void;
+  onLogout?: () => void;
+}) {
   const pathname = usePathname();
   const section = pathname.includes("/tasks") ? "tasks" : pathname.includes("/knowledge") || pathname.includes("/learning") ? "knowledge" : pathname.includes("/briefing") ? "briefing" : "review";
   const detail = /^\/attackpilot\/tasks\/[^/]+/.test(pathname);
@@ -109,6 +115,12 @@ export default function AttackPilotWorkbench({ userId, onLogin }: { userId: stri
                   localStore.setItem(appearanceKey, isDark ? "light" : "dark");
                   window.dispatchEvent(new Event(appearanceEvent));
                 }}>{isDark ? "白天模式" : "黑夜模式"}</Button>
+                <div className="ap-account">
+                  {userId ? <>
+                    <span className="ap-account-name" title={userName}>{userName || "已登录"}</span>
+                    {onLogout && <Button loading={authLoading} onClick={onLogout}>退出登录</Button>}
+                  </> : <Button loading={authLoading} onClick={onLogin}>登录 / 注册</Button>}
+                </div>
               </nav>
               <div key={userId || "guest"}>
                 {detail ? <Dashboard key={pathname} /> : section === "tasks" ? <TaskList /> : section === "knowledge" ? <Knowledge /> : section === "briefing" ? <Briefing /> : <LandingWarRoom />}

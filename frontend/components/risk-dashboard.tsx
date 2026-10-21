@@ -2097,6 +2097,33 @@ function RiskDashboardContent({ initialView = "home" }: { initialView?: ActiveVi
     });
   }
 
+  const authDialog = authModalOpen && (
+    <AuthModal
+      brandName={activeView === "attackpilot" ? "AttackPilot" : "CryptoRisk Agent"}
+      error={authError}
+      loading={authLoading}
+      onClose={() => {
+        if (!authLoading) setAuthModalOpen(false);
+      }}
+      onSubmit={handleAuthSubmit}
+    />
+  );
+
+  if (activeView === "attackpilot") {
+    return (
+      <main className="min-h-screen">
+        <AttackPilotWorkbench
+          userId={authUser?.id || null}
+          userName={authUser?.display_name || authUser?.username}
+          authLoading={authLoading}
+          onLogin={() => { setAuthError(""); setAuthModalOpen(true); }}
+          onLogout={handleLogout}
+        />
+        {authDialog}
+      </main>
+    );
+  }
+
   return (
     <main className="risk-shell min-h-screen bg-[#f4f7fb] text-slate-900">
       <div className="flex min-h-screen">
@@ -2125,7 +2152,7 @@ function RiskDashboardContent({ initialView = "home" }: { initialView?: ActiveVi
                 <RankingDataStatusBar status={rankingDataStatus} />
               )}
 
-              {activeView !== "attackpilot" && activeView !== "chat" && activeView !== "sim" && activeView !== "daily" && activeView !== "reports" && activeView !== "favoriteNews" && activeView !== "favoriteReports" && activeView !== "my" && activeView !== "settings" && (
+              {activeView !== "chat" && activeView !== "sim" && activeView !== "daily" && activeView !== "reports" && activeView !== "favoriteNews" && activeView !== "favoriteReports" && activeView !== "my" && activeView !== "settings" && (
                 <MetricGrid
                   activeView={activeView}
                   coinItems={displayCoins}
@@ -2199,9 +2226,6 @@ function RiskDashboardContent({ initialView = "home" }: { initialView?: ActiveVi
                   subscription={dailyReportSubscription}
                   subscriptionLoading={dailyReportSubscriptionLoading}
                 />
-              )}
-              {activeView === "attackpilot" && (
-                <AttackPilotWorkbench userId={authUser?.id || null} onLogin={() => { setAuthError(""); setAuthModalOpen(true); }} />
               )}
               {activeView === "sim" && (
                 <MarketTerminal key={authUser?.id || "guest"} />
@@ -2316,16 +2340,7 @@ function RiskDashboardContent({ initialView = "home" }: { initialView?: ActiveVi
           </footer>
         </div>
       </div>
-      {authModalOpen && (
-        <AuthModal
-          error={authError}
-          loading={authLoading}
-          onClose={() => {
-            if (!authLoading) setAuthModalOpen(false);
-          }}
-          onSubmit={handleAuthSubmit}
-        />
-      )}
+      {authDialog}
     </main>
   );
 }
@@ -2699,11 +2714,13 @@ function AccountCenterPopover({
 }
 
 function AuthModal({
+  brandName,
   error,
   loading,
   onClose,
   onSubmit,
 }: {
+  brandName: string;
   error: string;
   loading: boolean;
   onClose: () => void;
@@ -2753,7 +2770,7 @@ function AuthModal({
             </div>
             <div>
               <h2 id="auth-dialog-title" className="text-lg font-bold text-slate-950">{mode === "login" ? "用户登录" : "注册账号"}</h2>
-              <p className="text-xs font-semibold text-slate-500">CryptoRisk Agent</p>
+              <p className="text-xs font-semibold text-slate-500">{brandName}</p>
             </div>
           </div>
           <button
