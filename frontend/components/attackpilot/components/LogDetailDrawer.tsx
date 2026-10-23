@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { App as AntdApp, Button, Descriptions, Drawer, Space, Tag, Typography } from "antd";
-import { Copy, ExternalLink } from "lucide-react";
+import { App as AntdApp, Button, Drawer, Segmented, Spin, Tag, Typography } from "antd";
+import { Copy } from "lucide-react";
 import { getFullLog } from "../services/api";
 import { FullLogResponse, LogMessage, MsgType } from "../types";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { agentDisplayName, logLevelLabel, messageTypeLabel } from "../utils/presentation";
+import "../log-detail.css";
 
 interface LogDetailDrawerProps {
   taskId: string;
@@ -13,11 +14,20 @@ interface LogDetailDrawerProps {
   onClose: () => void;
 }
 
+function previewContent(content: string) {
+  const documentFence = content.match(/^\s*(`{3,}|~{3,})(?:markdown|md)[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*\1\s*$/i);
+  return documentFence ? documentFence[2] : content;
+}
+
 const LogDetailDrawer: React.FC<LogDetailDrawerProps> = ({ taskId, log, open, onClose }) => {
   const { message } = AntdApp.useApp();
-  const [fullLog, setFullLog] = useState<(FullLogResponse & { logId: string }) | null>(null);
-  const [settledId, setSettledId] = useState("");
-  const loading = Boolean(open && log?.log_id && settledId !== log.log_id);
+  const [resolvedLog, setResolvedLog] = useState<{ key: string; data?: FullLogResponse } | null>(null);
+  const [view, setView] = useState<{ key: string; mode: "preview" | "source" } | null>(null);
+  const selectedLogKey = JSON.stringify([taskId, log?.log_id ?? log?.timestamp, log?.agent]);
+  const currentFullLog = resolvedLog?.key === selectedLogKey ? resolvedLog : null;
+  const loading = Boolean(open && log?.log_id && !currentFullLog);
+  const unavailable = Boolean(log?.log_id && currentFullLog && !currentFullLog.data);
+  const mode = view?.key === selectedLogKey ? view.mode : "preview";
 
   useEffect(() => {
     let cancelled = false;
@@ -26,25 +36,27 @@ const LogDetailDrawer: React.FC<LogDetailDrawerProps> = ({ taskId, log, open, on
 
     getFullLog(taskId, log.log_id)
       .then((data) => {
-        if (!cancelled) setFullLog({ ...data, logId: log.log_id! });
+        if (!cancelled) setResolvedLog({ key: selectedLogKey, data });
       })
       .catch(() => {
-        if (!cancelled) message.warning("完整日志暂不可用，当前显示实时接收的内容。");
-      })
-      .finally(() => {
-        if (!cancelled) setSettledId(log.log_id!);
+        if (!cancelled) setResolvedLog({ key: selectedLogKey });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [log?.log_id, message, open, taskId]);
+  }, [log?.log_id, open, selectedLogKey, taskId]);
 
-  const content = fullLog?.logId === log?.log_id ? fullLog?.content || "" : log?.message || "";
+  const content = currentFullLog?.data ? currentFullLog.data.content : log?.message || "";
+  const hasPreview = log?.message_type === MsgType.MARKDOWN || log?.message_type === MsgType.RESULT;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(content);
-    message.success("已复制");
+    try {
+      await navigator.clipboard.writeText(content);
+      message.success("已复制");
+    } catch {
+      message.error("复制失败");
+    }
   };
 
   return (
@@ -53,54 +65,66 @@ const LogDetailDrawer: React.FC<LogDetailDrawerProps> = ({ taskId, log, open, on
       title="日志详情"
       open={open}
       onClose={onClose}
-      size="large"
+      size="min(1040px, 100vw)"
       className="log-detail-drawer"
       extra={
-        <Space>
-          {fullLog?.source ? <Tag>{fullLog.source}</Tag> : null}
-          <Button icon={<Copy size={14} />} onClick={handleCopy}>
-            复制
-          </Button>
-        </Space>
+        <Button icon={<Copy size={14} />} onClick={handleCopy} disabled={!log || loading}>
+          复制
+        </Button>
       }
     >
       {!log ? null : (
-        <Space orientation="vertical" size={16} style={{ width: "100%" }}>
-          <Descriptions size="small" column={1} bordered>
-            <Descriptions.Item label="智能体">{agentDisplayName(log.agent)}</Descriptions.Item>
-            <Descriptions.Item label="级别">{logLevelLabel(log.level)}</Descriptions.Item>
-            <Descriptions.Item label="类型">{messageTypeLabel(log.message_type)}</Descriptions.Item>
-            <Descriptions.Item label="时间">{log.timestamp}</Descriptions.Item>
-            <Descriptions.Item label="Log ID">
-              {log.log_id ? (
-                <Typography.Text copyable className="text-mono">
-                  {log.log_id}
-                </Typography.Text>
-              ) : (
-                "暂无"
-              )}
-            </Descriptions.Item>
-          </Descriptions>
-
-          {loading ? (
-            <Typography.Text type="secondary">正在加载完整日志...</Typography.Text>
-          ) : (
-            <div className="log-detail-content">
-              {log.message_type === MsgType.MARKDOWN || log.message_type === MsgType.RESULT ? (
-                <MarkdownRenderer content={content} />
-              ) : (
-                <pre>{content}</pre>
-              )}
+        <div className="ap-log-detail-reader">
+          <header className="ap-log-detail-meta">
+            <div className="ap-log-detail-identity">
+              <strong>{agentDisplayName(log.agent)}</strong>
+              <span className="ap-log-detail-tags">
+                <Tag>{logLevelLabel(log.level)}</Tag>
+                <Tag>{messageTypeLabel(log.message_type)}</Tag>
+              </span>
             </div>
-          )}
+            <time className="ap-log-detail-time">{log.timestamp}</time>
+            <div className="ap-log-detail-id">
+              <span>Log ID</span>
+              {log.log_id ? (
+                <Typography.Text copyable className="text-mono">{log.log_id}</Typography.Text>
+              ) : <span>暂无</span>}
+            </div>
+          </header>
 
-          {log.is_truncated ? (
-            <div className="system-note">
-              <ExternalLink size={14} />
-              实时日志内容已截断，系统正在根据日志 ID 获取完整内容。
+          {hasPreview ? (
+            <div className="ap-log-detail-toolbar">
+              <Segmented
+                aria-label="日志展示方式"
+                size="small"
+                value={mode}
+                options={[{ label: "预览", value: "preview" }, { label: "原文", value: "source" }]}
+                onChange={(value) => setView({ key: selectedLogKey, mode: value as "preview" | "source" })}
+              />
             </div>
           ) : null}
-        </Space>
+
+          {loading ? (
+            <div className="ap-log-detail-status" role="status">
+              <Spin size="small" />
+              <span>正在加载完整日志...</span>
+            </div>
+          ) : unavailable ? (
+            <div className="ap-log-detail-status" role="status">
+              完整日志暂不可用，当前显示实时接收的内容。
+            </div>
+          ) : log.is_truncated && !currentFullLog?.data ? (
+            <div className="ap-log-detail-status">实时日志内容已截断。</div>
+          ) : null}
+
+          <div className="ap-log-detail-content">
+            {hasPreview && mode === "preview" ? (
+              <MarkdownRenderer content={previewContent(content)} />
+            ) : (
+              <pre className="ap-log-detail-source">{content}</pre>
+            )}
+          </div>
+        </div>
       )}
     </Drawer>
   );

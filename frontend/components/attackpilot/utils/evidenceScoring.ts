@@ -21,8 +21,8 @@ export interface EvidenceHealthSummary {
 }
 
 export function evidenceScoreLabel(label: EvidenceScoreResult["label"], language: LanguageMode = "zh") {
-  if (language === "en") return label;
-  return { strong: "强证据", supporting: "辅助证据", weak: "弱证据" }[label];
+  if (language === "en") return { strong: "high relevance", supporting: "related", weak: "low relevance" }[label];
+  return { strong: "高相关", supporting: "相关", weak: "低相关" }[label];
 }
 
 const SECURITY_KEYWORDS = [
@@ -68,12 +68,8 @@ export function isToolBackedEvidence(item: EvidenceItem) {
 }
 
 export function inferEvidenceTier(item: EvidenceItem): NonNullable<EvidenceItem["evidence_tier"]> {
-  const haystack = textOf(item);
-  const hasOnChainRef = /0x[a-f0-9]{40,64}/i.test(haystack);
-
-  if (item.source === "transaction" || (isToolBackedEvidence(item) && hasOnChainRef)) {
-    return "verified";
-  }
+  // A hash mention, tool invocation or model result cannot prove an outcome.
+  // These records are indexed for review; verification uses its own bound replay envelope.
   if (isToolBackedEvidence(item) || item.source === "system") {
     return "tool_backed";
   }
@@ -91,10 +87,10 @@ export function scoreEvidenceItem(item: EvidenceItem): EvidenceScoreResult {
 
   if (item.source === "transaction") {
     score += 32;
-    reasons.push("直接交易证据");
+    reasons.push("包含交易引用（未核验）");
   } else if (item.source === "tool") {
     score += 30;
-    reasons.push("工具调用支撑");
+    reasons.push("工具调用记录");
   } else if (item.source === "system") {
     score += 26;
     reasons.push("结构化系统输出");
@@ -116,10 +112,7 @@ export function scoreEvidenceItem(item: EvidenceItem): EvidenceScoreResult {
     score += 5;
   }
 
-  if (tier === "verified") {
-    score += 8;
-    reasons.push("已验证证据层级");
-  } else if (tier === "report_derived") {
+  if (tier === "report_derived") {
     score -= 6;
     reasons.push("仅由报告支撑");
   }
@@ -134,7 +127,7 @@ export function scoreEvidenceItem(item: EvidenceItem): EvidenceScoreResult {
   }
   if (item.level === LogLevel.ERROR || item.level === LogLevel.WARNING) {
     score += 4;
-    reasons.push("包含高信号运行事件");
+    reasons.push("包含告警或失败记录");
   }
   if (/0x[a-f0-9]{40,64}/i.test(haystack)) {
     score += 10;
@@ -180,7 +173,14 @@ export function enrichEvidenceItem(item: EvidenceItem): EvidenceItem {
 }
 
 export function enrichEvidenceItems(items: EvidenceItem[]) {
-  return items.map(enrichEvidenceItem).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const identity = item.log_id ? `log:${item.log_id}`
+      : `${item.source}:${item.agent ?? ""}:${(item.full_content || item.content).trim().toLowerCase()}`;
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  }).map(enrichEvidenceItem).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
 export function summarizeEvidenceHealth(items: EvidenceItem[]): EvidenceHealthSummary {
@@ -195,11 +195,11 @@ export function summarizeEvidenceHealth(items: EvidenceItem[]): EvidenceHealthSu
   const score = total ? clamp(enriched.reduce((sum, item) => sum + (item.score ?? 0), 0) / total) : 0;
   const risks: string[] = [];
 
-  if (total === 0) risks.push("暂无关联证据");
-  if (transactions === 0) risks.push("缺少直接交易哈希");
-  if (tools === 0) risks.push("缺少工具证据支撑");
-  if (agents < 2 && total > 0) risks.push("证据来自单一智能体");
-  if (weak > strong + supporting && total > 0) risks.push("多数证据支撑较弱");
+  if (total === 0) risks.push("暂无相关记录");
+  if (transactions === 0) risks.push("缺少交易引用");
+  if (tools === 0) risks.push("缺少工具调用记录");
+  if (agents < 2 && total > 0) risks.push("缺少多个智能体的交叉记录");
+  if (weak > strong + supporting && total > 0) risks.push("多数记录相关性较低");
 
   return {
     score,

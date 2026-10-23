@@ -1,6 +1,7 @@
 """Single scheduler for this FastAPI instance, with cancellable process groups."""
 import asyncio
 import fcntl
+import logging
 import os
 import signal
 import shutil
@@ -8,6 +9,16 @@ import sys
 from pathlib import Path
 from . import settings, store
 from .privacy import redact_text
+
+
+def _bounded_setting(name, default, minimum, maximum):
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (ValueError, TypeError):
+        logging.getLogger(__name__).warning('%s invalid; using default', name)
+        value = default
+    return max(minimum, min(value, maximum))
+
 
 class TaskManager:
     def __init__(self):
@@ -22,21 +33,58 @@ class TaskManager:
             return
         settings.RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
         self.lock_file = (settings.RUNTIME_ROOT / "scheduler.lock").open("a")
+        self.closing = False
         try:
             fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
+            self.scheduler = asyncio.create_task(self._wait_for_leadership())
+            return
+        try:
+            await self._recover_interrupted()
+        except BaseException:
             self.lock_file.close(); self.lock_file = None
-            return  # Another FastAPI process owns the scheduler; SQLite is shared.
-        for task in store.unfinished():
-            await self._terminate(None, store.task_dir(task["task_id"]))
-            store.transition(task["task_id"], "failed", error="后端进程中断，请重新创建分析任务。")
-        self.closing = False
+            raise
         self.scheduler = asyncio.create_task(self._schedule())
 
-    async def _schedule(self):
+    async def _recover_interrupted(self):
+        for task in store.unfinished():
+            # Queued work has never started and remains safe to execute after a
+            # restart. Only running work may have made non-repeatable calls.
+            if task["status"] != "running":
+                continue
+            await self._terminate(None, store.task_dir(task["task_id"]))
+            store.transition(task["task_id"], "failed", error="后端进程中断，请重新创建分析任务。")
+
+    async def _wait_for_leadership(self):
+        # Another API worker can outlive the process that originally held the
+        # queue lock. Keep competing so pending tasks are not stranded forever.
         while not self.closing:
-            limit = max(1, min(int(os.getenv("ATTACKPILOT_MAX_TASKS", "1")), 4))
-            for task in store.unfinished():
+            await asyncio.sleep(.5)
+            try:
+                fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            try:
+                await self._recover_interrupted()
+            except Exception as exc:
+                fcntl.flock(self.lock_file, fcntl.LOCK_UN)
+                logging.getLogger(__name__).warning('Task queue recovery failed (%s); retrying', type(exc).__name__)
+                continue
+            await self._schedule()
+            return
+
+    async def _schedule(self):
+        limit = _bounded_setting('ATTACKPILOT_MAX_TASKS', 1, 1, 4)
+        while not self.closing:
+            try:
+                unfinished = store.unfinished()
+            except Exception as exc:
+                # A temporary database error must not silently kill the only
+                # scheduler while leaving all later tasks pending forever.
+                logging.getLogger(__name__).warning('Task queue read failed (%s); retrying', type(exc).__name__)
+                await asyncio.sleep(.5)
+                continue
+            for task in unfinished:
                 if len(self.runners) >= limit:
                     break
                 if task["status"] == "pending" and task["task_id"] not in self.runners:
@@ -50,16 +98,17 @@ class TaskManager:
         task_id = task["task_id"]
         if not store.transition(task_id, "running"):
             return
-        work = store.task_dir(task_id); work.mkdir(parents=True, exist_ok=True)
-        env = {**os.environ, "PYTHONPATH": str(settings.BACKEND_ROOT), "ATTACKPILOT_WORK_DIR": str(work), "ATTACKPILOT_OWNER_ID": task["owner_id"], "ATTACKPILOT_DB_PATH": str(settings.DATABASE_PATH), "ATTACKPILOT_RUNTIME_DIR": str(settings.RUNTIME_ROOT)}
+        work = store.task_dir(task_id)
         process = None
         try:
+            work.mkdir(parents=True, exist_ok=True)
+            env = {**os.environ, "PYTHONPATH": str(settings.BACKEND_ROOT), "ATTACKPILOT_WORK_DIR": str(work), "ATTACKPILOT_OWNER_ID": task["owner_id"], "ATTACKPILOT_DB_PATH": str(settings.DATABASE_PATH), "ATTACKPILOT_RUNTIME_DIR": str(settings.RUNTIME_ROOT)}
             # stdout is diagnostic-only; structured logs are written through store.append_log.
             with (work / "worker.log").open("wb") as output:
                 process = await asyncio.create_subprocess_exec(sys.executable, "-m", "app.attackpilot.worker", task_id, cwd=str(settings.PACKAGE_ROOT), env=env, stdout=output, stderr=output, start_new_session=True)
                 self.processes[task_id] = process
                 started = asyncio.get_running_loop().time()
-                deadline = max(30, int(os.getenv("ATTACKPILOT_TASK_TIMEOUT", "3600")))
+                deadline = _bounded_setting('ATTACKPILOT_TASK_TIMEOUT', 3600, 30, 86400)
                 while process.returncode is None:
                     current = store.get_task(task_id)
                     if not current or current["status"] in store.TERMINAL or self.closing:

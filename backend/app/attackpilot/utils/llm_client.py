@@ -9,7 +9,7 @@ from typing import Optional
 import httpx
 from openai import AsyncOpenAI, APIConnectionError, APIStatusError
 from openai.types.chat import ChatCompletion
-from app.attackpilot.settings import LLM_API_KEY, LLM_BASE_URL, LLM_MAX_CONCURRENT
+from app.attackpilot.settings import LLM_API_KEY, LLM_BASE_URL, LLM_MAX_CONCURRENT, LLM_NAME
 from app.attackpilot.errors import ModelDeadlineError
 from app.attackpilot.language import chinese_messages
 
@@ -58,7 +58,7 @@ class LLMClient:
             self._initialized = True
 
     async def create_chat_completion(self, *args, on_progress=None, **kwargs):
-        kwargs['model'] = 'deepseek-v4-pro'
+        kwargs['model'] = LLM_NAME
         kwargs['messages'] = chinese_messages(kwargs.get('messages', []))
         kwargs.setdefault('max_tokens', 16384)
         kwargs['stream'] = True

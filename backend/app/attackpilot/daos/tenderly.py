@@ -1,5 +1,8 @@
 import asyncio
+import copy
+import json
 import logging
+import re
 import sys
 import time
 from typing import List, Optional, Dict, Set
@@ -9,14 +12,39 @@ import httpx
 
 from app.attackpilot.daos.contract import ContractDao
 from app.attackpilot.downloaders.defs import Downloader
+from app.attackpilot.downloaders.trans import TxReceiptDownloader
 from app.attackpilot.downloaders.trace import TenderlyFullSimulationDownloader, TenderlySimulateDownloader, \
-    TenderlyBundleSimulateDownloader
+    TenderlyBundleSimulateDownloader, valid_tenderly_result
+from app.attackpilot.errors import HistoricalReplayContextError, HistoricalReplayValidationError, TenderlyAPIError
 from app.attackpilot.entities.contract import ContractEntity
 from app.attackpilot.entities.trace import MixTraceItem, Log, StorageOp
 from app.attackpilot.settings import PLATFORM_TO_CHAIN_ID
 from app.attackpilot.utils.balance_utils import BalanceAnalyzer, fetch_token_prices
 from app.attackpilot.utils.price import platform_to_chain
+from app.attackpilot.utils.replay_validation import validate_original_transaction, validate_simulated_transaction
 from app.attackpilot.utils.signature import hex_to_int
+
+
+def _historical_transaction_position(transaction: Dict) -> tuple[int, int]:
+    if not isinstance(transaction, dict):
+        raise HistoricalReplayContextError('Historical transaction data is unavailable')
+
+    def position(field: str) -> int:
+        value = transaction.get(field)
+        if type(value) is int:
+            number = value
+        elif isinstance(value, str) and value:
+            try:
+                number = int(value, 16 if value.lower().startswith('0x') else 10)
+            except ValueError:
+                raise HistoricalReplayContextError(f'Invalid historical {field}') from None
+        else:
+            raise HistoricalReplayContextError(f'Missing historical {field}')
+        if number < 0:
+            raise HistoricalReplayContextError(f'Invalid historical {field}')
+        return number
+
+    return position('blockNumber'), position('transactionIndex')
 
 
 class MixTraceTree:
@@ -167,9 +195,13 @@ class TraceSourceEnricher:
 
 
 class TenderlyDao:
-    def __init__(self, _platform, tx_downloader, source_downloader: Downloader, bytecode_downloader, creation_downloader: Downloader, addr2property: Dict):
+    def __init__(self, _platform, tx_downloader, source_downloader: Downloader, bytecode_downloader, creation_downloader: Downloader, addr2property: Dict, *, receipt_downloader: Downloader | None = None):
         self.chain_id = PLATFORM_TO_CHAIN_ID.get(_platform, 1)
         self.tx_downloader = tx_downloader if tx_downloader else None
+        rpc_url = getattr(tx_downloader, 'rpc_url', None)
+        self.receipt_downloader = receipt_downloader
+        if self.receipt_downloader is None and isinstance(rpc_url, str) and rpc_url:
+            self.receipt_downloader = TxReceiptDownloader(rpc_url=rpc_url)
         self.source_downloader = source_downloader
         self.id_downloader = TenderlySimulateDownloader()
         self.result_downloader = TenderlyFullSimulationDownloader()
@@ -179,53 +211,63 @@ class TenderlyDao:
 
     async def send_request(self, payload) -> Dict:
         max_attempts = 3
-        full_result = None
+        simulation_id = None
         for attempt in range(1, max_attempts + 1):
             try:
-                simulation_id = await self.id_downloader.download(payload=payload)
-                if not simulation_id:
-                    raise RuntimeError("Tenderly simulation id is empty")
-
+                if simulation_id is None:
+                    candidate_id = await self.id_downloader.download(payload=payload)
+                    if not isinstance(candidate_id, str) or not candidate_id.strip():
+                        raise TenderlyAPIError('simulate', error_code='invalid_response', retryable=True)
+                    simulation_id = candidate_id
                 full_result = await self.result_downloader.download(simulation_id=simulation_id)
-                if full_result and 'transaction' in full_result and 'contracts' in full_result:
-                    break
-
-                print(
-                    f"Tenderly retry {attempt}/{max_attempts}: incomplete simulation result "
-                    f"for tx {payload.get('transaction_hash')}"
-                )
+                if not valid_tenderly_result(full_result):
+                    raise TenderlyAPIError('simulation_result', error_code='invalid_response', retryable=True)
+                return full_result
+            except TenderlyAPIError as exc:
+                # A failed creation response can still represent a paid server
+                # simulation. Without its ID there is no safe idempotent retry;
+                # keep runtime request budgets tied to actual creation attempts.
+                if simulation_id is None:
+                    raise
+                if exc.operation == 'simulation_result' and exc.status_code == 404:
+                    # Drop only the matching stale ID. Do not automatically create
+                    # several new simulations for a permanent lookup failure.
+                    try:
+                        self.id_downloader.invalidate_cache(payload)
+                    except OSError as cache_error:
+                        logging.getLogger(__name__).warning(
+                            'Tenderly stale ID cache could not be removed: %s', type(cache_error).__name__
+                        )
+                if not exc.retryable or attempt == max_attempts:
+                    raise
+                logging.getLogger(__name__).warning('Tenderly retry %s/%s: %s', attempt, max_attempts, exc)
             except (asyncio.TimeoutError, aiohttp.ClientError) as exc:
-                print(
-                    f"Tenderly retry {attempt}/{max_attempts}: request failed for tx "
-                    f"{payload.get('transaction_hash')}: {type(exc).__name__} - {exc}"
+                if simulation_id is None or attempt == max_attempts:
+                    raise
+                logging.getLogger(__name__).warning(
+                    'Tenderly retry %s/%s: %s', attempt, max_attempts, type(exc).__name__
                 )
-            except Exception as exc:
-                print(
-                    f"Tenderly retry {attempt}/{max_attempts}: simulation failed for tx "
-                    f"{payload.get('transaction_hash')}: {type(exc).__name__} - {exc}"
-                )
-
-            if attempt < max_attempts:
-                await asyncio.sleep(min(2 ** attempt, 8))
-
-        if not full_result or 'transaction' not in full_result or 'contracts' not in full_result:
-            print(f"Error: No data found for payload {payload}")
-            return {}
-        return full_result
+            await asyncio.sleep(min(2 ** attempt, 8))
 
     async def simulate_tx_in_tenderly(self, transaction_hash: str, *, enrich_contracts: bool = True):
         tx_info = await self.tx_downloader.download(transaction_hash=transaction_hash)
+        block_number, transaction_index = _historical_transaction_position(tx_info)
+        if self.receipt_downloader is None:
+            raise HistoricalReplayValidationError('unavailable', 'missing_evidence', details={'field': 'rpc_receipt'})
+        receipt = await self.receipt_downloader.download(transaction_hash=transaction_hash)
+        original_context = validate_original_transaction(transaction_hash, self.chain_id, tx_info, receipt)
 
         payload = {
             "transaction_hash": transaction_hash,
-            "network_id": self.chain_id,
+            "network_id": str(self.chain_id),
             "from": tx_info.get("from", ""),
             "to": tx_info.get("to", ""),
             "input": tx_info.get("input", ""),
             "gas": hex_to_int(tx_info.get("gas", "")),
-            "gas_price": hex_to_int(tx_info.get("gasPrice", "")),
-            "value": hex_to_int(tx_info.get("value", "")),
-            "block_number": hex_to_int(tx_info.get("blockNumber", "")),
+            "gas_price": str(hex_to_int(tx_info.get("gasPrice", ""))),
+            "value": str(hex_to_int(tx_info.get("value", ""))),
+            "block_number": block_number,
+            "transaction_index": transaction_index,
             "save": True,
             "save_if_fails": True,
             "simulation_type": "full",
@@ -233,11 +275,35 @@ class TenderlyDao:
             "generate_visual_trace": True,
             "cache": True
         }
+        if isinstance(tx_info.get('accessList'), list):
+            payload['access_list'] = tx_info['accessList']
         full_result = await self.send_request(payload)
-        if not full_result:
-            return {}, {}, {}
+        try:
+            validation = validate_simulated_transaction(original_context, full_result)
+        except HistoricalReplayValidationError as exc:
+            exc.details.update({
+                'original_transaction_hash': original_context['transaction_hash'],
+                'network_id': str(original_context['chain_id']),
+                'block_number': original_context['block_number'],
+                'transaction_index': original_context['transaction_index'],
+            })
+            # Preserve the raw result for diagnostics, but do not pin future
+            # explicit attempts to a simulation that failed evidence checks.
+            try:
+                self.id_downloader.invalidate_cache(payload)
+            except OSError as cache_error:
+                logging.getLogger(__name__).warning(
+                    'Invalid original replay ID cache could not be removed: %s', type(cache_error).__name__
+                )
+            raise
 
-        transaction = full_result.get('transaction', {})
+        transaction = dict(full_result['transaction'])
+        transaction['original_transaction_hash'] = original_context['transaction_hash']
+        transaction['original_block_hash'] = original_context['block_hash']
+        transaction['original_transaction_index'] = original_context['transaction_index']
+        transaction['baseline_validation'] = validation
+        from app.attackpilot.utils.oracle_evidence import extract_chainlink_observations
+        transaction['oracle_evidence'] = extract_chainlink_observations(transaction, self.chain_id_to_platform())
         contracts = full_result.get('contracts', [])
 
         # Transaction summaries consume only transaction data. Source enrichment is
@@ -246,104 +312,24 @@ class TenderlyDao:
             return transaction, contracts, dict(self.addr2property)
 
         addresses = transaction.get('addresses', [])
-        contracts = await self._supplement_missing_contracts(addresses, contracts)
+        contracts = await self._supplement_missing_contracts(
+            addresses, contracts, block_number=transaction.get('block_number'))
         known_names = {
             c['address'].lower(): c['contract_name'] for c in contracts
             if c.get('address') and c.get('contract_name') and c.get('public') is not False
         }
+        # Source lookup already supplied the name or an explicit failure. Do not
+        # repeat the same failed explorer requests just for optional labels.
+        known_names.update({c['address'].lower(): known_names.get(c['address'].lower(), '')
+                            for c in contracts if c.get('address') and c.get('source_lookup')})
         addr2name = await self._load_contract_name(set(addresses), known_names)
         addr2name.update(self.addr2property)
 
         return transaction, contracts, addr2name
 
-    async def deploy_contracts_on_tenderly(self, _addr: str, _creation_bytecode: str) -> tuple[str, str | None]:
-        # add constructor arguments
-        result = await self.source_downloader.download(contract_address=_addr)
-        constructor_arguments = result.get("ConstructorArguments", "")
-        if constructor_arguments.startswith("0x"):
-            constructor_arguments = constructor_arguments[2:]
-        _creation_bytecode = _creation_bytecode + constructor_arguments
+    def chain_id_to_platform(self):
+        return {1: 'Ethereum', 56: 'BNBChain'}.get(self.chain_id)
 
-        if not _creation_bytecode.startswith("0x"):
-            _creation_bytecode = f"0x{_creation_bytecode}"
-
-        sim_from = "0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38"
-        sim_value = 0
-        sim_gas = 30000000
-        sim_gas_price = 0
-        sim_block_number = None
-
-        try:
-            creation_info = await self.creation_downloader.download(contract_address=_addr)
-
-            if creation_info:
-                creator_address = creation_info.get("creator")
-                tx_hash = creation_info.get("tx_hash")
-
-                if tx_hash:
-                    tx_detail = await self.tx_downloader.download(transaction_hash=tx_hash)
-
-                    if tx_detail:
-                        sim_from = tx_detail.get("from", creator_address)
-                        sim_block_number = hex_to_int(tx_detail.get("blockNumber"))
-                        sim_value = hex_to_int(tx_detail.get("value", "0x0"))
-                        sim_gas = hex_to_int(tx_detail.get("gas", "0x1C9C380"))
-                        sim_gas_price = hex_to_int(tx_detail.get("gasPrice", "0x0"))
-
-                        print(f"[Deploy Context] Found original tx {tx_hash}: Block {sim_block_number}, From {sim_from}, Value {sim_value}")
-        except Exception as e:
-            print(f"[Deploy Context Warning] Failed to fetch original deployment info for {_addr}: {e}. Using defaults.")
-
-        payload = {
-            "network_id": str(self.chain_id),
-            "from": sim_from,
-            "input": _creation_bytecode,
-            "gas": sim_gas,
-            "gas_price": sim_gas_price,
-            "value": sim_value,
-            "simulation_type": "full",
-            "save": True,
-            "save_if_fails": True,
-            "cache": False
-        }
-        if sim_block_number:
-            payload["block_number"] = sim_block_number
-
-        try:
-            full_result = await self.send_request(payload)
-            transaction = full_result.get('transaction', {})
-            status = transaction.get('status', False)
-            tx_info = transaction.get('transaction_info', {})
-
-            if not status:
-                error_msg = transaction.get('error_message', 'Unknown Error')
-                stack_trace_raw = tx_info.get('stack_trace', [])
-                formatted_trace = self._format_tenderly_stack_trace(stack_trace_raw)
-                detailed_error = (
-                    f"[DEPLOY_ERROR] Deployment Simulation Failed for address {_addr}\n"
-                    f"Basic Error: {error_msg}\n"
-                    f"Constructor Args: {constructor_arguments}\n"
-                    f"--- Stack Trace Detail ---\n"
-                    f"{formatted_trace}\n"
-                    f"--------------------------\n"
-                )
-                print(f"Deploy failed for {_addr}: {error_msg}")
-                return _addr, detailed_error
-
-            call_trace = tx_info.get('call_trace', {})
-            runtime_bytecode = call_trace.get('output', "")
-
-            if not runtime_bytecode or runtime_bytecode == "0x":
-                msg = f"[DEPLOY_ERROR] Transaction success but NO Runtime Bytecode generated for {_addr}."
-                print(msg)
-                return _addr, msg
-
-            return _addr, runtime_bytecode
-
-        except Exception as e:
-            error_report = f"[DEPLOY_ERROR] Exception during tenderly deploy simulation for {_addr}: {str(e)}"
-            print(error_report)
-            return _addr, error_report
 
     async def get_micro_data(self, transaction_hash: str) -> MixTraceTree | None:
         res = await self.simulate_tx_in_tenderly(transaction_hash)
@@ -360,121 +346,145 @@ class TenderlyDao:
         mix_trace_tree = MixTraceTree(call_trace, contracts, addr2name)
         return mix_trace_tree
 
-    def _format_tenderly_stack_trace(self, stack_trace: list) -> str:
-        if not stack_trace:
-            return "No stack trace available."
 
-        lines = []
-        for i, frame in enumerate(stack_trace):
-            file_index = frame.get('file_index', '?')
-            line_number = frame.get('line', '?')
-            func_name = frame.get('name', 'constructor/anonymous')
-            error_reason = frame.get('error_reason')  # Revert string
-            error_type = frame.get('error')  # Error type info
-            code_raw = frame.get('code')
-            code_snippet = code_raw.strip() if code_raw else ""
-
-            if error_reason or error_type:
-                marker = ">>> [REVERT HERE]"
-            else:
-                marker = f"[{i}]"
-            frame_str = f"{marker} File:{file_index} Line:{line_number} | Function: {func_name}"
-
-            if error_reason:
-                frame_str += f"\n    REVERT REASON: {error_reason}"
-            if error_type:
-                frame_str += f"\n    ERROR TYPE: {error_type}"
-
-            if code_snippet:
-                preview = code_snippet[:200] + "..." if len(code_snippet) > 200 else code_snippet
-                frame_str += f"\n    CODE: {preview}"
-
-            lines.append(frame_str)
-
-        return "\n".join(lines)
+    @staticmethod
+    def _source_contract(raw_data, addr, existing):
+        raw_source = raw_data['SourceCode'].strip()
+        compiler_settings = {}
+        if raw_source.startswith('{'):
+            parsed = json.loads(raw_source[1:-1] if raw_source.startswith('{{') else raw_source)
+            compiler_settings = copy.deepcopy(parsed.get('settings') or {})
+            source_data = parsed.get('sources', parsed)
+            sources = {path: item['content'] for path, item in source_data.items()
+                       if isinstance(item, dict) and isinstance(item.get('content'), str)}
+        else:
+            sources = {f"{raw_data.get('ContractName') or 'Contract'}.sol": raw_source.replace('\r\n', '\n')}
+        if not sources or not any(source.strip() for source in sources.values()):
+            raise ValueError('Verified source response has no usable source files')
+        optimizer = compiler_settings.setdefault('optimizer', {
+            'enabled': str(raw_data.get('OptimizationUsed')) == '1',
+            'runs': int(raw_data.get('Runs') or 200),
+        })
+        evm_version = raw_data.get('EVMVersion')
+        if evm_version and evm_version != 'Default' and evm_version != 'default':
+            compiler_settings.setdefault('evmVersion', evm_version)
+        libraries = compiler_settings.setdefault('libraries', {})
+        for entry in (raw_data.get('Library') or '').split(','):
+            if not entry.strip():
+                continue
+            name, address = entry.rsplit(':', 1)
+            address = address if address.startswith('0x') else '0x' + address
+            if not re.fullmatch(r'0x[0-9a-fA-F]{40}', address):
+                raise ValueError('Invalid source library address')
+            path, name = name.rsplit(':', 1) if ':' in name else (next(iter(sources)), name)
+            libraries.setdefault(path, {})[name] = address
+        data = copy.deepcopy(existing.get('data') or {})
+        old_ids, used_ids = {}, set()
+        id_paths = {}
+        for item in data.get('contract_info', []) or []:
+            if not isinstance(item, dict) or type(item.get('id')) is not int or item['id'] < 0:
+                continue
+            file_id, path = item['id'], item.get('path')
+            used_ids.add(file_id)
+            if not isinstance(path, str) or not path:
+                continue
+            if ((path in old_ids and old_ids[path] != file_id)
+                    or (file_id in id_paths and id_paths[file_id] != path)):
+                raise ValueError('Existing source file identifiers are ambiguous')
+            old_ids[path], id_paths[file_id] = file_id, path
+        data['contract_info'] = []
+        next_id = 0
+        for path, content in sorted(sources.items()):
+            file_id = old_ids.get(path)
+            if file_id is None:
+                while next_id in used_ids:
+                    next_id += 1
+                file_id = next_id
+                used_ids.add(file_id)
+            data['contract_info'].append({'id': file_id, 'path': path, 'source': content})
+        if not data.get('abi') and raw_data.get('ABI'):
+            try:
+                abi = json.loads(raw_data['ABI'])
+                if isinstance(abi, list):
+                    data['abi'] = abi
+            except (ValueError, TypeError):
+                pass
+        return {**existing, 'id': existing.get('id') or f'ext-{addr}', 'address': addr,
+                'contract_name': raw_data.get('ContractName') or existing.get('contract_name') or 'Unknown',
+                'public': True, 'compiler_version': raw_data.get('CompilerVersion'),
+                'compiler_settings': compiler_settings, 'evm_version': compiler_settings.get('evmVersion'),
+                'optimizations_used': optimizer.get('enabled'), 'optimization_runs': optimizer.get('runs'),
+                'libraries': libraries, 'data': data,
+                'source_lookup': {'status': 'available', 'reason_code': 'source_available', 'retryable': False}}
 
     async def _supplement_missing_contracts(
             self,
             involved_addresses: List[str],
-            existing_contracts: List[Dict]
+            existing_contracts: List[Dict],
+            *, block_number=None,
     ) -> List[Dict]:
-        existing_addrs = {c.get('address', '').lower() for c in existing_contracts}
-
-        missing_addrs = [
-            addr.lower() for addr in involved_addresses
-            if addr.lower() not in existing_addrs
-               and addr.lower() != "0x0000000000000000000000000000000000000000"
-               and not (addr.lower().startswith("0x00000000000000000000000000000000000000") and len(addr) == 42)
-        ]
+        existing_by_address = {c.get('address', '').lower(): c for c in existing_contracts}
+        candidates = dict.fromkeys(addr.lower() for addr in involved_addresses
+                                   if isinstance(addr, str) and re.fullmatch(r'0x[0-9a-fA-F]{40}', addr)
+                                   and int(addr, 16) > 255)
+        missing_addrs = [addr for addr in candidates if not ContractEntity(
+            existing_by_address.get(addr, {})).has_source_code]
 
         if not missing_addrs:
             return existing_contracts
 
-        contract_dao = ContractDao(downloader=self.source_downloader)
-
-        async def fetch_and_format(addr: str) -> Optional[Dict]:
+        async def fetch_and_format(addr: str) -> Dict:
+            existing = existing_by_address.get(addr, {})
+            lookup = {'status': 'unverified', 'reason_code': 'source_not_verified', 'retryable': False}
             try:
                 raw_data = await self.source_downloader.download(contract_address=addr)
-
-                has_source = False
-                if raw_data and isinstance(raw_data, dict):
-                    source_code_field = raw_data.get("SourceCode", "")
-                    if source_code_field and "not verified" not in source_code_field.lower():
-                        has_source = True
-
-                if has_source:
-                    source_map = await contract_dao.get_source_code(addr)
-                    if source_map:
-                        mock_contract_info = []
-                        for i, (path, content) in enumerate(source_map.items()):
-                            mock_contract_info.append({
-                                "id": i,
-                                "path": path if path else f"{raw_data.get('ContractName', 'Contract')}.sol",
-                                "source": content
-                            })
-
-                        return {
-                            "id": f"ext-{addr}",
-                            "address": addr,
-                            "contract_name": raw_data.get("ContractName", "Unknown"),
-                            "public": True,
-                            "compiler_version": raw_data.get("CompilerVersion", ""),
-                            "optimizations_used": raw_data.get("OptimizationUsed") == "1",
-                            "optimization_runs": int(raw_data.get("Runs", 200)),
-                            "data": {
-                                "contract_info": mock_contract_info,
-                                "abi": []
-                            }
-                        }
+                if not isinstance(raw_data, dict) or not isinstance(raw_data.get('SourceCode'), str):
+                    raise ValueError('Invalid source response')
+                if raw_data['SourceCode'].strip():
+                    return self._source_contract(raw_data, addr, existing)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                print(f"Source fetch failed for {addr}. Attempting to fetch bytecode...")
+                retryable = isinstance(e, (httpx.TransportError, TimeoutError)) or (
+                    isinstance(e, httpx.HTTPStatusError) and e.response.status_code in {408, 429, 500, 502, 503, 504})
+                lookup = {'status': 'failed', 'reason_code': 'source_fetch_failed', 'retryable': retryable}
+                logging.getLogger(__name__).warning(
+                    "Source fetch failed for %s (%s); attempting bytecode lookup.",
+                    addr, type(e).__name__,
+                )
 
-            bytecode = await self.bytecode_downloader.download(contract_address=addr)
+            bytecode = existing.get('deployed_bytecode')
+            if not bytecode:
+                try:
+                    kwargs = {'contract_address': addr}
+                    if block_number is not None:
+                        kwargs['quantity'] = block_number
+                    bytecode = await self.bytecode_downloader.download(**kwargs)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logging.getLogger(__name__).warning('Bytecode lookup failed for %s (%s).', addr, type(exc).__name__)
+            return {**existing, 'id': existing.get('id') or f'bytecode-{addr}', 'address': addr,
+                    'contract_name': existing.get('contract_name') or f'Unknown_{addr[:8]}',
+                    'public': False, 'deployed_bytecode': bytecode or '',
+                    'data': copy.deepcopy(existing.get('data') or {'contract_info': [], 'abi': []}),
+                    'source_lookup': lookup}
 
-            if bytecode:
-                # print(f"Successfully fetched bytecode for {addr}", file=sys.stderr)
-                return {
-                    "id": f"bytecode-{addr}",
-                    "address": addr,
-                    "contract_name": f"Unverified_{addr[:8]}",
-                    "public": False,
-                    "deployed_bytecode": bytecode,
-                    "creation_bytecode": "",
-                    "contract_id": f"unverified-{addr}",
-                    "data": {
-                        "contract_info": [],
-                        "abi": []
-                    }
-                }
-
-            print(f"Failed to fetch both source and bytecode for {addr}")
-            return None
-
-        supplemental_data = await asyncio.gather(*(fetch_and_format(a) for a in missing_addrs))
-        valid_supplements = [d for d in supplemental_data if isinstance(d, dict)]
-        return existing_contracts + valid_supplements
+        semaphore = asyncio.Semaphore(3)
+        async def limited(addr):
+            async with semaphore:
+                return await fetch_and_format(addr)
+        tasks = [asyncio.create_task(limited(addr)) for addr in missing_addrs]
+        try:
+            supplemental_data = await asyncio.gather(*tasks)
+        except BaseException:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+        replacements = {item['address']: item for item in supplemental_data}
+        return [replacements.get(item.get('address', '').lower(), item) for item in existing_contracts] + [
+            item for item in supplemental_data if item['address'] not in existing_by_address]
 
     async def _load_contract_name(self, contract_addresses: Set[str], known_names=None) -> Dict[str, str]:
         names = dict(known_names or {})
@@ -503,84 +513,108 @@ class TenderlyDao:
 
 class BundleTenderlyDao:
     def __init__(self, _platform):
+        from app.attackpilot.utils.patch_replay import PatchReplayEvidenceStore
+
+        self.platform = _platform
         self.bundle_downloader = TenderlyBundleSimulateDownloader()
-        self.chain_id = PLATFORM_TO_CHAIN_ID.get(_platform, 1)
-        self.chain_slug = platform_to_chain.get(_platform, "ethereum")
+        self.chain_id = PLATFORM_TO_CHAIN_ID.get(_platform)
+        self.chain_slug = platform_to_chain.get(_platform)
+        self.evidence_store = PatchReplayEvidenceStore()
 
     async def bundle_simulate_txs_in_tenderly(self, transactions, addr2bytecode):
-        payload = self.prepare_bundle_payload(transactions, addr2bytecode)
-        try:
-            simulation_results = await self.bundle_downloader.download(payload=payload)
+        from app.attackpilot.utils.patch_replay import (
+            MAX_REPLAY_REQUESTS, MAX_REPLAY_TRANSACTIONS, execution_summary,
+            historical_payload, public_context, runtime_overrides, validate_patch_context,
+            validate_historical_header, PatchReplayBudgetError,
+        )
 
-            if not simulation_results or not isinstance(simulation_results, list):
-                error_msg = f"Tenderly API returned invalid response: {simulation_results}"
-                return False, error_msg
+        if self.chain_id is None or not isinstance(transactions, list) or not transactions:
+            raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
+        if len(transactions) > MAX_REPLAY_TRANSACTIONS:
+            raise PatchReplayBudgetError(transaction_limit=True)
+        overrides = runtime_overrides(addr2bytecode)
+        patched_addresses = sorted(overrides)
+        originals, seen = [], set()
+        # Resolve every original receipt before any paid simulation is requested.
+        for detail in transactions:
+            if not isinstance(detail, dict):
+                raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
+            original_hash = detail.get('original_transaction_hash') or detail.get('hash')
+            context, raw_transaction = self.evidence_store.original_context(original_hash, self.chain_id)
+            if context['transaction_hash'] in seen:
+                raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
+            seen.add(context['transaction_hash'])
+            originals.append((context, raw_transaction))
 
-            if isinstance(simulation_results, dict) and 'error' in simulation_results:
-                return False, f"Tenderly API Error: {simulation_results.get('error')}"
-        except Exception as e:
-            import traceback
-            return False, f"Tenderly API Exception: {str(e)}\n{traceback.format_exc()}"
-
-        # parse simulate results
-        replay_reports = []
-        for i, simulation_result in enumerate(simulation_results):
-            detail = transactions[i]
-            transaction = simulation_result.get('transaction', {}) or {}
-            simulation = simulation_result.get('simulation', {}) or {}
-
-            status = simulation.get("status", False) or False
-            error_msg = simulation.get("error_message", "No Error")
-
-            # balance change
-            transaction_info = transaction.get("transaction_info", {}) or {}
-            timestamp = detail.get("timestamp", int(time.time()))
-
-            raw_changes, metadata = BalanceAnalyzer.parse_tenderly_data(transaction_info)
-            balance_report = "No balance data."
-
-            if any(raw_changes.values()):
-                involved_tokens = set()
-                for user_bals in raw_changes.values():
-                    involved_tokens.update(user_bals.keys())
-
-                prices = await fetch_token_prices(self.chain_slug, timestamp, involved_tokens)
-                balance_report = BalanceAnalyzer.calculate_usd_values_markdown(raw_changes, metadata, prices)
-
-            report_item = (
-                f"Transaction Index: {i}\n"
-                f"Original Tx Hash: {detail.get('hash')}\n"
-                f"Execution Status: {'SUCCESS' if status else 'REVERT'}\n"
-                f"Error Message: {error_msg}\n"
-                f"{balance_report}\n"
-                f"--------------------------------------------------"
-            )
-            replay_reports.append(report_item)
-        full_report = "\n".join(replay_reports)
-        return True, full_report
-
-    def prepare_bundle_payload(self, attack_txs: List[Dict], addr2bytecode: Dict[str, str]):
-        payload = {"simulations": [], "contracts": []}
-        state_objects = {}
-        for address, bytecode in addr2bytecode.items():
-            if bytecode:
-                state_objects[address.lower()] = {"code": bytecode if bytecode.startswith("0x") else f"0x{bytecode}"}
-
-        for tx in attack_txs:
-            simulation = {
-                "network_id": self.chain_id,
-                "from": tx.get("from"),
-                "to": tx.get("to"),
-                "input": tx.get("input_data"),
-                "value": tx.get("value", {}).get("wei", "0"),
-                "block_number": tx.get("block_number", 0) - 1,
-                "simulation_type": "full",
-                "save": True,
-                "save_if_fails": True,
-                "generate_state_diff": True,
-                "generate_visual_trace": True,
+        report = {
+            'schema_version': 1, 'scope': 'independent_historical_transaction_pairs',
+            'status': 'incomplete', 'control_validation': 'pending',
+            'transaction_count': len(originals), 'patched_addresses': patched_addresses,
+            'transactions': [], 'profit_usd': None,
+            'normal_regression': {'status': 'not_run', 'reason_code': 'not_provided'},
+            'request_budget': {'max_requests_per_task': MAX_REPLAY_REQUESTS,
+                               'max_transactions': MAX_REPLAY_TRANSACTIONS},
+        }
+        for context, raw_transaction in originals:
+            pair = {
+                'original_transaction_hash': context['transaction_hash'],
+                'context': public_context(context, raw_transaction),
+                'patched_addresses': patched_addresses,
             }
-            if state_objects and state_objects != {}:
-                simulation["state_objects"] = state_objects
-            payload["simulations"].append(simulation)
-        return payload
+            report['transactions'].append(pair)
+            current_payload = None
+            try:
+                control_payload = historical_payload(context, raw_transaction)
+                current_payload = control_payload
+                control_result, control_artifact = await self._recorded_single_replay(
+                    control_payload, role='control', original_hash=context['transaction_hash'])
+                pair['control'] = {'artifact': control_artifact}
+                validate_historical_header(context, control_result)
+                baseline = validate_simulated_transaction(context, control_result)
+                control = execution_summary(control_result, control_artifact, patched_addresses)
+                control['baseline_validation'] = baseline
+                control['control_validation'] = 'validated'
+                pair['control'] = control
+
+                # A distinct request starts from the same real historical state;
+                # the control and patch never share a cumulative bundle state.
+                patched_payload = historical_payload(context, raw_transaction, overrides)
+                current_payload = patched_payload
+                patched_result, patched_artifact = await self._recorded_single_replay(
+                    patched_payload, role='patched', original_hash=context['transaction_hash'])
+                pair['patched'] = {'artifact': patched_artifact}
+                validate_historical_header(context, patched_result)
+                validate_patch_context(context, patched_result)
+                patched = execution_summary(patched_result, patched_artifact, patched_addresses,
+                                            runtime_codes={address: item['code'] for address, item in overrides.items()})
+                pair['patched'] = patched
+                pair['comparison'] = {
+                    'attack_transaction_reverted': control['status'] == 'success' and patched['status'] == 'revert',
+                    'logs_changed': control['logs']['ordered_logs_sha256'] != patched['logs']['ordered_logs_sha256'],
+                    'gas_changed': control['gas_used'] != patched['gas_used'],
+                    'profit_usd': None,
+                }
+            except Exception as exc:
+                if current_payload is not None:
+                    self.evidence_store.invalidate_response(current_payload)
+                # The caller can retain references to already completed evidence
+                # even if a later control, patch, or budget check blocks progress.
+                exc.replay_evidence = report
+                raise
+        report['status'] = 'completed'
+        report['control_validation'] = 'validated'
+        return True, report
+
+    async def _recorded_single_replay(self, payload: Dict, *, role: str, original_hash: str):
+        cached = self.evidence_store.cached_response(payload)
+        if cached is not None:
+            return cached
+        # Reservations are task-local and atomic, including across repair retries.
+        # Reusing an identical stored response does not consume another request.
+        self.evidence_store.reserve_request(payload)
+        results = await self.bundle_downloader.download(payload=payload)
+        if not isinstance(results, list) or len(results) != 1 or not isinstance(results[0], dict):
+            raise TenderlyAPIError('simulate_bundle', error_code='invalid_response')
+        result = results[0]
+        artifact = self.evidence_store.persist(payload, result, role=role, original_hash=original_hash)
+        return result, artifact

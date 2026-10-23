@@ -63,7 +63,9 @@ class DebugSimulator:
     def expand_node(self, node_index, n=1):
         node = self.node_map.get(node_index)
         if not node:
-            return f"Node {node_index} not found."
+            raise ValueError(f"Node {node_index} not found.")
+        if type(n) is not int or n < 0:
+            raise ValueError("Expansion depth must be a nonnegative integer.")
 
         def _recursive_expand(_node):
             if _node.depth > max_depth:
@@ -74,8 +76,6 @@ class DebugSimulator:
             for child in _node.children:
                 if self.judge_node_with_role(child):
                     _recursive_expand(child)
-                else:
-                    return
 
         max_depth = node.depth + n
         _recursive_expand(node)
@@ -83,7 +83,7 @@ class DebugSimulator:
     def collapse_node(self, node_index):
         node = self.node_map.get(node_index)
         if not node:
-            return f"Node {node_index} not found."
+            raise ValueError(f"Node {node_index} not found.")
         node.view_expanded = False
 
     def judge_node_with_role(self, node):
@@ -93,21 +93,6 @@ class DebugSimulator:
             return False
         return True
 
-    @property
-    def visible_nodes(self):
-        nodes = []
-        if not self.root_node:
-            return nodes
-
-        def _collect_visible(node):
-            nodes.append(node.index)
-            if getattr(node, 'view_expanded', False):
-                for child in node.children:
-                    _collect_visible(child)
-
-        _collect_visible(self.root_node)
-        return nodes
-
     def _is_precompile(self, address):
         try:
             val = int(address, 16)
@@ -116,31 +101,15 @@ class DebugSimulator:
             return False
 
     def update_comments(self, comments: Dict[str, str]):
-        updated_count = 0
+        updates = []
         for index_str, comment_text in comments.items():
             try:
                 node_index = int(index_str)
-            except ValueError:
-                continue
+            except (ValueError, TypeError):
+                raise ValueError("Comment indexes must identify existing trace nodes.") from None
             node = self.node_map.get(node_index)
-            if node:
-                node.comment = comment_text
-                updated_count += 1
-
-    def get_storage_change(self, index):
-        node = self.node_map.get(index)
-        item = node.mix_trace_item
-        if not node:
-            return f"Node {index} not found."
-        if len(item.storage_ops) == 0:
-            return f"Node {index} has no storage operations."
-        return [str(op) for op in item.storage_ops]
-
-    def get_event_logs(self, index):
-        node = self.node_map.get(index)
-        item = node.mix_trace_item
-        if not node:
-            return f"Node {index} not found."
-        if len(item.events) == 0:
-            return f"Node {index} has no events."
-        return [str(op) for op in item.events]
+            if node is None or not isinstance(comment_text, str):
+                raise ValueError("Comments require an existing node and a string value.")
+            updates.append((node, comment_text))
+        for node, comment_text in updates:
+            node.comment = comment_text

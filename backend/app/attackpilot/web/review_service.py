@@ -1,11 +1,13 @@
+import hashlib
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from .models import TaskResponse
+from app.attackpilot.utils.report_evidence import report_evidence
 
 
-TX_HASH_RE = re.compile(r"0x[a-fA-F0-9]{64}")
+TX_HASH_RE = re.compile(r"(?<![0-9A-Za-z_])0x[a-fA-F0-9]{64}(?![a-fA-F0-9])")
 FUNCTION_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]{2,})\s*\(")
 NOISE_FUNCTIONS = {
     "if",
@@ -167,7 +169,27 @@ def build_automated_review(
             "llm_review_agent_used": False,
         }
     agent_signals = _build_agent_signals(logs, task)
-    shared_transactions = _shared_values(agent_signals, "transactions")
+    result = task.result if isinstance(task.result, dict) else {}
+    verification = result.get('verification')
+    verification = verification if isinstance(verification, dict) else {}
+    machine = report_evidence({'verification': verification, 'verdict': verification.get('judge_verdict')},
+                              result.get('replay_evidence'))
+    patches = result.get('applied_patches')
+    verified = (not task.is_demo and machine['evidence_trusted']
+                and isinstance(patches, str)
+                and hashlib.sha256(patches.encode()).hexdigest() == verification.get('applied_patch_sha256'))
+    baseline = result.get('baseline_validation')
+    known = set(baseline.get('transactions', {})) if isinstance(baseline, dict) and isinstance(baseline.get('transactions'), dict) else set()
+    if isinstance(macro, dict):
+        for key in ('transaction_hash_list', 'transactions_need_analyze', 'attack_transactions', 'auxiliary_transactions'):
+            items = macro.get(key)
+            if isinstance(items, list):
+                known.update(item for item in items if isinstance(item, str))
+    known = {value.lower() for value in known if TX_HASH_RE.fullmatch(value)}
+    # A repeated bytes32 value or report repeating itself is not independent
+    # transaction evidence. Keep only known input hashes and distinct stages.
+    stages = [signal for signal in agent_signals if signal['agent'] != 'Final Report']
+    shared_transactions = [item for item in _shared_values(stages, "transactions") if item['value'] in known]
     shared_functions = _shared_values(agent_signals, "functions")
 
     debug_targets = []
@@ -176,16 +198,16 @@ def build_automated_review(
         debug_targets = macro.get("transactions_need_analyze") or macro.get("attack_transactions") or []
         attack_transactions = macro.get("attack_transactions") or []
 
-    debug_agents = ["Transaction Debugger", "GlobalMemory Administrator", "Final Report"]
-    patch_agents = ["Code Patcher", "Transaction Judge", "Final Report"]
-    root_agents = ["TxFaultAgent", "Task Organizer", "Transaction Debugger", "GlobalMemory Administrator", "Final Report"]
+    debug_agents = ["Transaction Debugger", "GlobalMemory Administrator"]
+    patch_agents = ["Code Patcher", "Transaction Judge"]
+    root_agents = ["TxFaultAgent", "Task Organizer", "Transaction Debugger", "GlobalMemory Administrator"]
 
     if debug_targets:
         covered_count = sum(
             1 for tx in debug_targets if _contains_any_transaction(agent_signals, debug_agents, [tx])
         )
         macro_tx_covered = covered_count > 0
-        macro_score = max(70, round(covered_count / len(debug_targets) * 100)) if macro_tx_covered else 25
+        macro_score = round(covered_count / len(debug_targets) * 100)
         macro_evidence = [
             f"{len(debug_targets)} macro debug target(s): "
             + ", ".join(_short_hash(tx) for tx in debug_targets[:4]),
@@ -202,11 +224,7 @@ def build_automated_review(
     patch_functions = _functions_for_agents(agent_signals, patch_agents)
     overlapping_functions = [name for name in root_functions if name in patch_functions]
 
-    patch_mention_agents = [signal["agent"] for signal in agent_signals if signal.get("mentions_patch")]
-    verification_mention_agents = [
-        signal["agent"] for signal in agent_signals if signal.get("mentions_verification")
-    ]
-    root_cause_agents = [signal["agent"] for signal in agent_signals if signal.get("mentions_root_cause")]
+    root_cause_agents = [signal["agent"] for signal in stages if signal.get("mentions_root_cause")]
 
     checks = [
         _make_check(
@@ -244,13 +262,14 @@ def build_automated_review(
         _make_check(
             "verification-loop",
             "Patch verification loop",
-            "Checks whether patch/fix discussion is followed by verification, replay, success/failure, or judge signals.",
-            86 if patch_mention_agents and verification_mention_agents else 55 if patch_mention_agents else 25,
+            "Uses validated paired replay evidence bound to the applied patch; text mentions cannot establish verification.",
+            100 if verified else 25,
             [
-                f"Patch mentioned by: {', '.join(patch_mention_agents)}" if patch_mention_agents else "No patch/fix signal detected.",
-                f"Verification mentioned by: {', '.join(verification_mention_agents)}" if verification_mention_agents else "No verification/replay signal detected.",
+                "Recorded trigger interception is verified; normal business regression remains untested."
+                if verified else "No trusted patch interception result is available.",
+                f"Verification status: {machine['verification'].get('status', 'not_run')}",
             ],
-            None if patch_mention_agents and verification_mention_agents else "Expose patch replay results and success/failure signals in the final report.",
+            None if verified else "Resolve the recorded verification blocker or missing evidence before claiming patch effectiveness.",
         ),
         _make_check(
             "root-cause-quorum",
@@ -263,6 +282,8 @@ def build_automated_review(
     ]
 
     score = round(sum(check["score"] for check in checks) / len(checks))
+    if not verified:
+        score = min(score, 74)
     if score >= 75:
         status = "pass"
     elif score >= 45:
@@ -275,6 +296,8 @@ def build_automated_review(
         "dapp_name": task.dapp_name,
         "generated_at": datetime.now().isoformat(),
         "review_type": "deterministic_cross_agent_consistency",
+        "score_scope": "text_reference_coverage_only",
+        "evidence_boundary": "文字交叉引用与结构化回放核验分别检查；分数不能证明根因正确、交易安全或正常功能通过。",
         "status": status,
         "score": score,
         "checks": checks,

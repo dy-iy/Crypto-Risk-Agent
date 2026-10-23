@@ -50,23 +50,39 @@ class TaskReader:
         return TaskResponse.model_validate(store.public_task(task))
 
 router = APIRouter(prefix="/api/attackpilot", tags=["attackpilot"])
+MAX_CURSOR_ID = (1 << 63) - 1
 
 def capabilities():
     missing = [name for name in ("web3", "fastmcp", "networkx", "anytree", "aiofiles") if importlib.util.find_spec(name) is None]
     compiler = settings.COMPILER_ROOT.is_dir() and any(settings.COMPILER_ROOT.glob("solc-linux-amd64-*"))
     node = bool(shutil.which(settings.NODE_PATH))
     node_modules = (settings.PACKAGE_ROOT / "node_modules/solc-typed-ast").exists()
+    from .utils.chainlink_config import get_chainlink_config
+    try:
+        config = get_chainlink_config()
+        chainlink = {
+            "enabled": config["enabled"], "configuration_valid": True,
+            "account_required": False, "wallet_required": False,
+            "feeds": {platform: sorted({feed["pair"] for feed in feeds.values()})
+                      for platform, feeds in config["feeds"].items()},
+            "rpc_max_calls_per_quote": config["max_rpc_calls"],
+            "quote_timeout_seconds": config["timeout_seconds"],
+            "historical_reference_only": True,
+        }
+    except ValueError:
+        chainlink = {"configuration_valid": False, "reason_code": "invalid_feed_configuration"}
     return {
         "model": {"name": settings.LLM_NAME, "configured": bool(settings.LLM_API_KEY)},
         "chains": {name: {"rpc": bool(settings.JSONRPCS.get(platform)), "explorer": bool(settings.SCAN_APIKEYS.get(platform))} for name, platform in (("ethereum", "Ethereum"), ("bnbchain", "BNBChain"))},
         "tenderly": bool(settings.TENDERLY_API_KEY and settings.ACCOUNT_SLUG and settings.PROJECT_SLUG),
+        "chainlink_data_feeds": chainlink,
         "compiler": bool(compiler), "node": node, "node_modules": node_modules,
         "missing_dependencies": missing,
         "note": "配置状态不代表远端服务已验证；历史示例可直接浏览。",
     }
 
 def require_capability(chain: str, modules: list[str], deep=False):
-    status = capabilities(); missing = list(status["missing_dependencies"])
+    status = capabilities(); missing = list(status["missing_dependencies"]) if deep else []
     if not status["chains"][chain]["rpc"]: missing.append("链上 RPC")
     if deep:
         if not status["model"]["configured"]: missing.append("DEEPSEEK_API_KEY")
@@ -120,7 +136,7 @@ async def deep_analysis(payload: TransactionInput, user=Depends(caller)):
     modules = normalize_modules(payload.modules)
     require_capability(payload.chain, modules, deep=True)
     data = reference._build_adhoc_dapp_payload(valid[0], payload.chain, valid, modules)
-    return store.public_task(store.create_task(user.id, data))
+    return redact(store.public_task(store.create_task(user.id, data)))
 
 @router.post("/tasks", status_code=201)
 async def create_case(payload: CaseTaskInput, user=Depends(caller)):
@@ -129,29 +145,36 @@ async def create_case(payload: CaseTaskInput, user=Depends(caller)):
     except ValueError as exc: raise HTTPException(422, str(exc)) from exc
     data = None
     for path in (settings.PACKAGE_ROOT / "dataset/raw").glob("*.json"):
-        candidate = json.loads(path.read_text())
-        if candidate.get("name") == payload.dapp_name:
+        try:
+            candidate = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(candidate, dict) and candidate.get("name") == payload.dapp_name:
             data = candidate; break
     if not data:
         raise HTTPException(404, "未找到该案例")
     txs = data.get("transaction_hash") or []
-    if not 1 <= len(txs) <= 50:
+    if not isinstance(txs, list) or not 1 <= len(txs) <= 50:
         raise HTTPException(422, "当前案例须包含 1 至 50 笔交易，可在交易审查中选择交易后分析")
+    valid, invalid = reference._normalize_tx_hashes(txs, max_count=50)
+    if invalid or not valid:
+        raise HTTPException(422, "当前案例包含无效交易 Hash")
+    data["transaction_hash"] = valid
     chain = {"Ethereum": "ethereum", "BNBChain": "bnbchain", "BSC": "bnbchain"}.get(data.get("platform"))
     if not chain:
         raise HTTPException(422, "当前仅支持 Ethereum 和 BNB Chain")
     require_capability(chain, modules, deep=True)
     data["platform"] = "Ethereum" if chain == "ethereum" else "BNBChain"
     data["enabled_modules"] = modules
-    return store.public_task(store.create_task(user.id, data))
+    return redact(store.public_task(store.create_task(user.id, data)))
 
 @router.get("/tasks")
 def tasks(include_archived: bool = False, user=Depends(caller)):
-    return [store.public_task(task) for task in store.list_tasks(user.id if user else None, include_archived)]
+    return redact([store.public_task(task) for task in store.list_tasks(user.id if user else None, include_archived)])
 
 @router.get("/tasks/{task_id}")
 def task_detail(task_id: str, user=Depends(caller)):
-    return store.public_task(read_task(task_id, user))
+    return redact(store.public_task(read_task(task_id, user)))
 
 @router.get("/tasks/{task_id}/report-translation")
 def report_translation(task_id: str, user=Depends(caller)):
@@ -169,7 +192,8 @@ def cancel(task_id: str, user=Depends(caller)):
     task = read_task(task_id, user, True)
     if task["status"] in store.TERMINAL:
         raise HTTPException(409, "任务已经结束")
-    store.transition(task_id, "cancelled", error="用户取消任务")
+    if not store.transition(task_id, "cancelled", error="用户取消任务"):
+        raise HTTPException(409, "任务已经结束")
     return {"status": "cancelled"}
 
 @router.post("/tasks/{task_id}/archive")
@@ -192,7 +216,7 @@ def delete(task_id: str, user=Depends(caller)):
     return {"deleted": True}
 
 @router.get("/tasks/{task_id}/logs")
-def logs(task_id: str, limit: int = Query(200, ge=1, le=1000), before_id: int | None = None, after_id: int | None = None, user=Depends(caller)):
+def logs(task_id: str, limit: int = Query(200, ge=1, le=1000), before_id: int | None = Query(None, ge=0, le=MAX_CURSOR_ID), after_id: int | None = Query(None, ge=0, le=MAX_CURSOR_ID), user=Depends(caller)):
     read_task(task_id, user)
     return redact(store.log_page(task_id, limit, before_id, after_id))
 
@@ -204,9 +228,13 @@ def full_log(task_id: str, log_id: str, user=Depends(caller)):
     return {"content": redact_text(content), "source": "database"}
 
 @router.get("/tasks/{task_id}/events")
-async def events(task_id: str, request: Request, after_id: int = Query(0, ge=0), user=Depends(caller)):
+async def events(task_id: str, request: Request, after_id: int = Query(0, ge=0, le=MAX_CURSOR_ID), user=Depends(caller)):
     task = read_task(task_id, user)
-    try: cursor = max(after_id, int(request.headers.get("last-event-id", "0")))
+    try:
+        previous_id = int(request.headers.get("last-event-id", "0"))
+        if not 0 <= previous_id <= MAX_CURSOR_ID:
+            raise ValueError
+        cursor = max(after_id, previous_id)
     except ValueError: raise HTTPException(400, "无效事件编号")
     session = request.cookies.get(SESSION_COOKIE_NAME)
     async def stream():
@@ -222,7 +250,18 @@ async def events(task_id: str, request: Request, after_id: int = Query(0, ge=0),
             batch = store.events_after(task_id, cursor)
             for event in batch:
                 cursor = event["id"]
-                yield f"id: {cursor}\ndata: {json.dumps(redact(event['payload']), ensure_ascii=False)}\n\n"
+                payload = event['payload']
+                if payload.get("type") == "TASK_FINAL":
+                    # Evidence revisions append another final event. Clients
+                    # close at their first final, so deliver the current saved
+                    # result even when resuming an older event history.
+                    latest = store.get_task(task_id)
+                    if not latest:
+                        return
+                    payload = {"type": "TASK_FINAL", **store.public_task(latest)}
+                    yield f"id: {cursor}\ndata: {json.dumps(redact(payload), ensure_ascii=False)}\n\n"
+                    return
+                yield f"id: {cursor}\ndata: {json.dumps(redact(payload), ensure_ascii=False)}\n\n"
             if current["status"] in store.TERMINAL and not batch:
                 yield "data: " + json.dumps({"type": "TASK_FINAL", **redact(store.public_task(current))}, ensure_ascii=False) + "\n\n"
                 break
@@ -301,6 +340,8 @@ def rebuild(user=Depends(caller)):
 @router.post("/assistant/chat")
 async def assistant(payload: AssistantChatRequest, user=Depends(caller)):
     require_user(user)
+    if not payload.question.strip():
+        raise HTTPException(422, "请输入问题")
     if payload.task_id: read_task(payload.task_id, user)
     if not settings.LLM_API_KEY: raise HTTPException(503, "请在后端 .env 配置 DEEPSEEK_API_KEY")
     return redact((await reference.chat_with_assistant(payload, TaskReader(user))).model_dump())

@@ -14,14 +14,17 @@ import {
   Task,
   TaskEvent,
 } from "../types";
-import { buildEvidenceForSection } from "../utils/evidence";
+import { buildEvidenceForSection, extractTransactionHashes } from "../utils/evidence";
 import AgentConsistencyPanel from "./AgentConsistencyPanel";
 import EvidenceDrawer from "./EvidenceDrawer";
 import EvidenceIntelligencePanel from "./EvidenceIntelligencePanel";
 import KeyTransactionCards from "./KeyTransactionCards";
 import MarkdownRenderer from "./MarkdownRenderer";
 import PatchVerificationPanel from "./PatchVerificationPanel";
+import PriceEvidencePanel, { buildPriceEvidenceMarkdown } from "./PriceEvidencePanel";
 import { taskStatusLabel } from "../utils/presentation";
+import { findNarrativeSummary } from "../utils/reportNarrative";
+import { buildPatchVerificationMarkdown } from "../utils/verification";
 
 interface StructuredReportProps {
   task: Task | null;
@@ -153,11 +156,12 @@ function extractHeadingSections(report: string) {
   });
 }
 
-function findSectionByHeading(report: string, patterns: string[]) {
+function findSectionByHeading(report: string, patterns: string[], sectionKey: ReportSectionKey) {
   const headingSections = extractHeadingSections(report);
   const normalizedPatterns = patterns.map((pattern) => pattern.toLowerCase());
   const match = headingSections.find((section) =>
-    normalizedPatterns.some((pattern) => section.heading.includes(pattern)),
+    !(sectionKey === "patch_suggestions" && /verification|validation|验证/.test(section.heading))
+      && normalizedPatterns.some((pattern) => section.heading.includes(pattern)),
   );
   return match?.content ?? "";
 }
@@ -181,20 +185,22 @@ function extractTransactions(report: string, events: TaskEvent[]) {
     .slice(-300)
     .map((event) => event.message)
     .join("\n");
-  const matches = Array.from(`${report}\n${joinedLogs}`.matchAll(/0x[a-fA-F0-9]{64}/g)).map((item) => item[0]);
-  return Array.from(new Set(matches)).slice(0, 12);
+  return extractTransactionHashes(`${report}\n${joinedLogs}`).slice(0, 12);
 }
 
-function parseReportSections(report: string, events: TaskEvent[]): ReportSection[] {
+function parseReportSections(report: string, events: TaskEvent[], task: Task | null): ReportSection[] {
   const transactions = extractTransactions(report, events);
   return SECTION_DEFS.map((definition) => {
-    const byHeading = findSectionByHeading(report, definition.patterns);
+    const byHeading = findSectionByHeading(report, definition.patterns, definition.key);
     const fallback =
       definition.key === "key_transactions" && transactions.length > 0
         ? transactions.map((hash) => `- \`${hash}\``).join("\n")
-        : findParagraphByKeyword(report, definition.keywords);
+        : ["root_cause", "attack_path"].includes(definition.key)
+          ? findNarrativeSummary(report, definition.keywords, "", 900)
+          : definition.key === "patch_suggestions" ? "" : findParagraphByKeyword(report, definition.keywords);
 
-    const content = byHeading || fallback || "暂未从最终报告中提取到该部分，可查看原始报告获取完整上下文。";
+    const content = definition.key === "verification_results" ? buildPatchVerificationMarkdown(task)
+      : byHeading || fallback || "暂未从最终报告中提取到该部分，可查看原始报告获取完整上下文。";
     return {
       key: definition.key,
       title: definition.title,
@@ -259,11 +265,14 @@ function buildMarkdownExport(task: Task, sections: ReportSection[], agentSummari
     "",
     `- 任务 ID：\`${task.task_id}\``,
     `- 状态：${taskStatusLabel(task.status)}`,
+    `- 数据来源：${task.is_demo ? "历史归档，本次未执行回放" : "当前任务分析记录"}`,
     `- 创建时间：${task.created_at}`,
     `- 完成时间：${task.completed_at ?? "暂无"}`,
     `- 耗时：${task.duration ?? "暂无"} 秒`,
     "",
     ...sections.flatMap((section) => [`## ${section.title}`, "", section.content, ""]),
+    buildPriceEvidenceMarkdown(originalTask),
+    "",
     "## 智能体证据摘要",
     "",
     "| 智能体 | 事件 | 工具调用 | 结果 | 错误 | 警告 |",
@@ -274,6 +283,7 @@ function buildMarkdownExport(task: Task, sections: ReportSection[], agentSummari
     ),
     "",
     translated ? "## 完整中文译文" : "## 模型原始报告",
+    "模型叙述保留供核对；补丁效果以本报告的结构化验证结果为准。",
     "",
     task.final_report || "暂无",
     ...(translated ? ["", "## 模型原始报告", "", originalTask.final_report || "暂无"] : []),
@@ -294,7 +304,8 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
   const { message } = AntdApp.useApp();
   const [selectedSection, setSelectedSection] = useState<ReportSection | null>(null);
   const finalReport = task?.final_report ?? "";
-  const sections = useMemo(() => parseReportSections(finalReport, events), [events, finalReport]);
+  const canonicalTask = originalTask ?? task;
+  const sections = useMemo(() => parseReportSections(finalReport, events, canonicalTask), [events, finalReport, canonicalTask]);
   const agentSummaries = useMemo(() => buildAgentSummaries(events), [events]);
   const logEvents = useMemo(() => events.filter(isLogEvent), [events]);
 
@@ -347,8 +358,8 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
           <Typography.Text strong>结构化复盘报告</Typography.Text>
           <Typography.Text type="secondary">
             {mode === "learn"
-              ? "学习视图按攻击过程解释结论，并关联对应证据。"
-              : `已从最终报告提取 ${sections.length} 个部分，并关联证据。`}
+              ? "学习视图按报告叙述组织攻击过程，并列出相关记录供核对。"
+              : `按 ${sections.length} 个部分整理报告；验证结果以执行记录为准。`}
           </Typography.Text>
         </div>
         <Space size={8} wrap>
@@ -361,23 +372,20 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
         </Space>
       </div>
 
-      <div className="report-section-list">
-        <div className="product-summary-grid">
-          <KeyTransactionCards task={task} events={events} macroAnalysis={macroAnalysis} language={language} />
-          <PatchVerificationPanel task={originalTask ?? task} events={events} />
-        </div>
+      <div className="ap-report-verification">
+        <PatchVerificationPanel task={originalTask ?? task} events={events} />
+      </div>
 
-        <EvidenceIntelligencePanel sections={sections} language={language} />
-        <AgentConsistencyPanel
-          task={originalTask ?? task}
-          events={events}
-          macro={macroAnalysis ?? null}
-          review={automatedReview}
-          language={language}
-        />
+      <PriceEvidencePanel task={originalTask ?? task} />
+
+      <div className="ap-report-document">
+        <nav className="ap-report-index" aria-label="结构化复盘报告">
+          {sections.map((section) => <a key={section.key} href={`#ap-report-section-${section.key}`}>{section.icon}<span>{section.title}</span></a>)}
+        </nav>
+        <div className="report-section-list">
 
         {sections.map((section) => (
-          <section className="report-section-card" key={section.key}>
+          <section className="report-section-card" id={`ap-report-section-${section.key}`} key={section.key}>
             <div className="report-section-head">
               <span className="report-section-icon">{section.icon}</span>
               <div>
@@ -385,8 +393,8 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
                 <Typography.Text type="secondary">{section.description}</Typography.Text>
               </div>
               <Space size={6}>
-                <Tag color={section.evidence.length > 0 ? "cyan" : "default"}>{section.evidence.length} 条证据</Tag>
-                {section.content.startsWith("暂未") ? <Tag>待补充</Tag> : <Tag color="success">已提取</Tag>}
+                <Tag color={section.evidence.length > 0 ? "cyan" : "default"}>{section.evidence.length} 条相关记录</Tag>
+                {section.content.startsWith("暂未") ? <Tag>待补充</Tag> : <Tag>{section.key === "verification_results" ? "执行状态" : "报告提取"}</Tag>}
               </Space>
             </div>
             <MarkdownRenderer content={section.content} compact />
@@ -409,11 +417,27 @@ const StructuredReport: React.FC<StructuredReportProps> = ({
             </span>
             <div>
               <Typography.Text strong>{translated ? "完整中文报告" : "完整原始报告"}</Typography.Text>
-              <Typography.Text type="secondary">{translated ? "保留完整结构与技术标识，可在报告语言中切换原文核对。" : "完整原始报告，保留模型输出上下文。"}</Typography.Text>
+              <Typography.Text type="secondary">{translated ? "保留完整译文供核对；补丁效果以结构化验证结果为准。" : "保留模型输出上下文供核对；补丁效果以结构化验证结果为准。"}</Typography.Text>
             </div>
           </div>
           <MarkdownRenderer content={finalReport} compact />
         </section>
+        </div>
+      </div>
+
+      <div className="ap-report-appendix">
+        <details>
+          <summary>关键交易</summary>
+          <KeyTransactionCards task={task} events={events} macroAnalysis={macroAnalysis} language={language} />
+        </details>
+        <details>
+          <summary>证据智能筛选</summary>
+          <EvidenceIntelligencePanel sections={sections} language={language} />
+        </details>
+        <details>
+          <summary>多智能体一致性检查</summary>
+          <AgentConsistencyPanel task={originalTask ?? task} events={events} macro={macroAnalysis ?? null} review={automatedReview} language={language} />
+        </details>
       </div>
 
       <EvidenceDrawer

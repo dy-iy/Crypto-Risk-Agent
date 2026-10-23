@@ -1,0 +1,56 @@
+.attackpilot-root .ap-price-evidence { min-width: 0; margin: 0 0 32px; padding: 24px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); }
+.attackpilot-root .ap-price-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.attackpilot-root .ap-price-heading h3 { display: flex; align-items: center; gap: 9px; margin: 0; color: var(--text-primary); font-size: 15px; font-weight: 600; }
+.attackpilot-root .ap-price-heading h3 svg { color: var(--accent); }
+.attackpilot-root .ap-price-heading > span { color: var(--text-muted); font-size: 11px; }
+.attackpilot-root .ap-price-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px 20px; }
+.attackpilot-root .ap-price-tabs { display: flex; gap: 24px; }
+.attackpilot-root .ap-price-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 0 0 11px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; }
+.attackpilot-root .ap-price-tabs button[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--text-primary); font-weight: 600; }
+.attackpilot-root .ap-price-tabs button span { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.attackpilot-root .ap-price-toolbar .ant-select { min-width: 160px; max-width: 100%; font-size: 11px; }
+.attackpilot-root .ap-price-scope { margin: 12px 0 18px; color: var(--text-muted); font-size: 11px; line-height: 1.7; }
+.attackpilot-root ul.ap-price-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.attackpilot-root .ap-price-card { min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); }
+.attackpilot-root .ap-price-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.attackpilot-root .ap-price-card-heading strong { min-width: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.attackpilot-root .ap-price-card-heading .ant-tag { flex-shrink: 0; margin: 0; font-size: 10px; }
+.attackpilot-root .ap-price-card-quote { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin: 18px 0 9px; }
+.attackpilot-root .ap-price-amount { min-width: 0; color: var(--text-primary); font-size: 23px; font-weight: 600; line-height: 1.4; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.attackpilot-root .ap-price-unknown { color: var(--text-muted); font-size: 23px; line-height: 1.4; }
+.attackpilot-root .ap-price-status { color: var(--text-muted); font-size: 10px; }
+.attackpilot-root .ap-price-status.is-available { color: var(--green); }
+.attackpilot-root .ap-price-status:is(.is-stale, .is-ambiguous, .is-future, .is-invalid) { color: var(--gold); }
+.attackpilot-root .ap-price-card-time { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 10px; color: var(--text-muted); font-size: 10px; line-height: 1.7; }
+.attackpilot-root .ap-price-card-time time { font-variant-numeric: tabular-nums; }
+.attackpilot-root .ap-price-card-reason { margin: 10px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.7; }
+.attackpilot-root .ap-price-card-meta { display: grid; gap: 7px; margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); }
+.attackpilot-root .ap-price-card-meta > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 0; font-size: 10px; line-height: 1.6; }
+.attackpilot-root .ap-price-card-meta dt { flex-shrink: 0; color: var(--text-muted); }
+.attackpilot-root .ap-price-card-meta dd { min-width: 0; margin: 0; color: var(--text-secondary); font-family: var(--font-mono); text-align: right; overflow-wrap: anywhere; }
+.attackpilot-root .ap-price-detail-button { display: flex; align-items: center; gap: 4px; margin-top: 14px; padding: 3px 0; border: 0; background: transparent; color: var(--accent); font-size: 11px; cursor: pointer; }
+.attackpilot-root .ap-price-empty { margin: 12px 0 0; padding: 8px 0; color: var(--text-muted); font-size: 12px; line-height: 1.8; }
+.attackpilot-root .ap-price-raw-answer { margin-top: 12px; color: var(--text-muted); font-size: 10px; line-height: 1.7; overflow-wrap: anywhere; }
+.attackpilot-root .ap-price-value { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.attackpilot-root .ap-price-raw-answer .ap-price-value { color: var(--text-secondary); font-family: var(--font-mono); }
+.attackpilot-root .ap-price-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 18px; color: var(--text-muted); font-size: 11px; }
+.attackpilot-root .ap-price-pagination > span:first-child { margin-right: auto; }
+.ap-price-drawer .ap-price-details { color: var(--text-primary); }
+.ap-price-drawer .ap-price-detail-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 26px; font-size: 12px; line-height: 1.8; }
+.ap-price-drawer .ap-price-details dl { display: grid; gap: 18px; margin: 0; }
+.ap-price-drawer .ap-price-details dl > div { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 16px; font-size: 12px; line-height: 1.8; }
+.ap-price-drawer .ap-price-details dt { color: var(--text-muted); }
+.ap-price-drawer .ap-price-details dd { min-width: 0; margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
+.ap-price-drawer .ap-price-note, .attackpilot-root .ap-price-note { margin: 20px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.8; }
+.ap-price-drawer .ap-price-source-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 24px; font-size: 12px; }
+.attackpilot-root .ap-price-evidence button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+@media (max-width: 900px) {
+  .attackpilot-root ul.ap-price-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 540px) {
+  .attackpilot-root .ap-price-evidence { padding: 18px 16px; }
+  .attackpilot-root .ap-price-tabs { gap: 20px; }
+  .attackpilot-root .ap-price-card { padding: 16px; }
+  .attackpilot-root .ap-price-amount { font-size: 21px; }
+  .ap-price-drawer .ap-price-details dl > div { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+}

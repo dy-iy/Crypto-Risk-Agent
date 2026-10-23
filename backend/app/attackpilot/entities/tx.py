@@ -53,9 +53,9 @@ class TxDetailItem:
             return 0
 
     def _parse_core_data(self):
-        self.hash = self.tx_core.get("hash")
+        self.hash = self.tx_core.get("original_transaction_hash") or self.tx_core.get("hash")
         self.block_number = self._safe_int(self.tx_core.get("block_number"))
-        self.block_hash = self.tx_core.get("block_hash", "")
+        self.block_hash = self.tx_core.get("original_block_hash") or self.tx_core.get("block_hash", "")
         self.network_id = self.tx_core.get("network_id", "1")
         self.timestamp_str = self.tx_core.get("timestamp", "")
         self.timestamp = self._parse_timestamp(self.timestamp_str)
@@ -65,8 +65,8 @@ class TxDetailItem:
 
         self.value = self._safe_int(self.tx_core.get("value"))
         self.input_data = self.tx_core.get("input", "0x")
-        self.nonce = self._safe_int(self.tx_core.get("nonce"))
-        self.transaction_index = self._safe_int(self.tx_core.get("index"))
+        self.nonce = self._safe_int(self.tx_core.get("original_nonce", self.tx_core.get("nonce")))
+        self.transaction_index = self._safe_int(self.tx_core.get("original_transaction_index", self.tx_core.get("index")))
 
         self.gas_limit = self._safe_int(self.tx_core.get("gas"))
         self.gas_price = self._safe_int(self.tx_core.get("gas_price"))
@@ -132,8 +132,9 @@ class TxDetailItem:
     def _has_transfer_events(self) -> bool:
         transfer_topic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
         for log in self.logs:
-            topics = log.get('topics', [])
-            if topics and topics[0] == transfer_topic:
+            raw = log.get('raw') or log
+            topics = raw.get('topics', [])
+            if topics and topics[0].lower() == transfer_topic:
                 return True
         return False
 
@@ -142,15 +143,17 @@ class TxDetailItem:
         transfer_topic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 
         for log in self.logs:
-            topics = log.get('topics', [])
-            if not topics or topics[0] != transfer_topic:
+            raw = log.get('raw') or log
+            topics = raw.get('topics', [])
+            if not topics or topics[0].lower() != transfer_topic:
                 continue
             parsed = {
-                'address': self._safe_address(log.get('address')),
+                'address': self._safe_address(raw.get('address')),
                 'from': '0x' + topics[1][26:] if len(topics) > 1 else None,
                 'to': '0x' + topics[2][26:] if len(topics) > 2 else None,
-                'value': self._safe_int(log.get('data', '0')),
-                'log_index': self._safe_int(log.get('logIndex') or log.get('index')),
+                'value': 1 if len(topics) == 4 else self._safe_int(raw.get('data', '0')),
+                'token_id': self._safe_int(topics[3]) if len(topics) == 4 else None,
+                'log_index': self._safe_int(raw.get('logIndex', raw.get('index'))),
                 'block_number': self.block_number
             }
             events.append(parsed)
@@ -161,15 +164,16 @@ class TxDetailItem:
         transfer_topic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 
         for log in self.logs:
-            topics = log.get('topics', [])
-            if topics and topics[0] == transfer_topic:
+            raw = log.get('raw') or log
+            topics = raw.get('topics', [])
+            if topics and topics[0].lower() == transfer_topic:
                 continue
 
             events.append({
-                'address': self._safe_address(log.get('address')),
+                'address': self._safe_address(raw.get('address')),
                 'topics': topics,
-                'data': log.get('data'),
-                'log_index': self._safe_int(log.get('logIndex') or log.get('index'))
+                'data': raw.get('data'),
+                'log_index': self._safe_int(raw.get('logIndex', raw.get('index')))
             })
         return events
 
@@ -179,6 +183,10 @@ class TxDetailItem:
             'block_hash': self.block_hash,
             'block_number': self.block_number,
             'transaction_index': self.transaction_index,
+            'simulation_hash': self.tx_core.get("hash"),
+            'simulation_transaction_index': self._safe_int(self.tx_core.get("index")),
+            'baseline_validation': self.tx_core.get("baseline_validation"),
+            'oracle_evidence': self.tx_core.get("oracle_evidence"),
             'timestamp': self.timestamp,
             'from': self.from_address,
             'to': self.to_address,
@@ -220,6 +228,9 @@ class TxDetailItem:
                 'interacted_addresses': self.interacted_addresses,
                 'detailed_logs': self.detailed_logs
             },
+            # Keep receipt-matched raw logs available for exact ERC-20 amounts;
+            # display strings and provider asset_changes can be incomplete.
+            'logs': self.logs,
             'state_diff': self.state_diff,
             'balance_diff': self.balance_diff,
             'balance_changes': self.balance_changes,

@@ -11,6 +11,8 @@ from app.attackpilot.settings import PROJECT_PATH, WORK_ROOT
 from app.attackpilot.utils.llm import MODEL_MAX_OUTPUT_TOKENS, MODEL_CONTEXT_WINDOWS
 from app.attackpilot.utils.tokenization import get_token_encoder
 from app.attackpilot.web.models import LogLevel, MsgType, LogMessage
+from app.attackpilot.errors import AgentContractError
+from app.attackpilot.language import chinese_messages
 
 
 class JSONParsingError(Exception):
@@ -189,101 +191,41 @@ class TokenManager:
         print(f"⚠️ Triggered Truncation! Reduced to {allowed}")
         return self.encoder.decode(token_ids[:allowed])
 
-    def truncate_history(self, history: list, max_turns: int) -> list:
-        system_prompt = history[0]
-        truncated = history[1:][-(max_turns * 2):]
-        if not truncated: truncated = [history[-1]]
-        return [system_prompt] + truncated
+    def truncate_history(self, history: list, max_turns: int, safety_buffer: int = 1000) -> list:
+        """Budget ordinary chat by dropping complete old turns, never new evidence."""
+        if not history or self.get_role(history[-1]) != 'user':
+            raise AgentContractError('agent', 'agent_context_budget_exceeded')
+        system = [message for message in history[:-1] if self.get_role(message) == 'system']
+        latest_user = history[-1]
+        budget = self.context_limit - MODEL_MAX_OUTPUT_TOKENS.get(self.model, 8192) - safety_buffer
 
-    def filter_redundant_messages(self, messages: list, ignore_tools: list) -> list:
-        filtered = []
-        i = 0
-        while i < len(messages):
-            msg = messages[i]
-            role = self.get_role(msg)
-            if role == 'assistant' and hasattr(msg, 'tool_calls') and msg.tool_calls:
-                all_ignorable = all(tc.function.name in ignore_tools for tc in msg.tool_calls)
-                if all_ignorable and i + 1 < len(messages):
-                    i += 1
-                    while i < len(messages) and self.get_role(messages[i]) == 'tool':
-                        i += 1
-                    continue
-            filtered.append(msg)
-            i += 1
-        return filtered
+        def fits(messages):
+            # The transport injects language rules. Include those and every
+            # message field (including reasoning), not just content strings.
+            payload = json.dumps(chinese_messages(messages), ensure_ascii=False, separators=(',', ':'))
+            return self.count_tokens(payload) <= budget
 
-    def compress_messages(self, messages: list, threshold: int = 2000) -> list:
-        compressed = []
-        msg_count = len(messages)
+        if not fits(system + [latest_user]):
+            raise AgentContractError('agent', 'agent_context_budget_exceeded')
 
-        for idx, msg in enumerate(messages):
-            role = self.get_role(msg)
-            content = self.get_content(msg)
-            tokens = self.count_tokens(content)
+        groups, pending_user = [], None
+        for message in history[:-1]:
+            role = self.get_role(message)
+            if role == 'user':
+                pending_user = message
+            elif role == 'assistant' and pending_user is not None:
+                groups.append([pending_user, message])
+                pending_user = None
+            elif role != 'system':
+                pending_user = None
 
-            if tokens > threshold and role in ['tool', 'assistant'] and idx < msg_count - 2:
-                text = str(content)
-                encoded = self.encoder.encode(text)
-                truncated_text = (
-                        self.encoder.decode(encoded[:800]) +
-                        f"\n\n[... 内容过长，此处省略 {tokens - 1000} tokens ...]\n\n" +
-                        self.encoder.decode(encoded[-200:])
-                )
-
-                new_msg = self._clone_msg(msg)
-                self._set_content(new_msg, truncated_text)
-                compressed.append(new_msg)
-            else:
-                compressed.append(msg)
-        return compressed
-
-    def truncate_history_by_token(self, history: list, keep_last_n_user: int = 3, ratio: float = 0.8) -> list:
-        budget = int(self.context_limit * ratio)
-
-        if not history: return []
-
-        system_msg = history[0]
-        user_indices = [i for i, msg in enumerate(history) if self.get_role(msg) == 'user']
-
-        if keep_last_n_user > 0:
-            protected_user_indices = set(user_indices[-keep_last_n_user:])
-        else:
-            protected_user_indices = set()
-
-        processed_history = []
-        for i, msg in enumerate(history):
-            role = self.get_role(msg)
-            if role == 'user' and i not in protected_user_indices:
-                new_msg = msg.copy() if isinstance(msg, dict) else self._clone_msg(msg)
-                self._set_content(new_msg, "[User message omitted to preserve tool context]")
-                processed_history.append(new_msg)
-            else:
-                processed_history.append(msg)
-
-        current_tokens = self.count_tokens(self.get_content(system_msg))
-        kept_body = []
-
-        for msg in reversed(processed_history[1:]):
-            msg_tokens = self.count_tokens(self.get_content(msg))
-            if current_tokens + msg_tokens > budget:
+        kept = []
+        previous_turns = max(0, max_turns - 1)
+        for group in reversed(groups[-previous_turns:] if previous_turns else []):
+            if not fits(system + group + kept + [latest_user]):
                 break
-            kept_body.insert(0, msg)
-            current_tokens += msg_tokens
-
-        while kept_body and self.get_role(kept_body[0]) == 'tool':
-            kept_body.pop(0)
-
-        return [system_msg] + kept_body
-
-    def _clone_msg(self, msg):
-        import copy
-        return copy.copy(msg)
-
-    def _set_content(self, msg, text):
-        if isinstance(msg, dict):
-            msg['content'] = text
-        else:
-            msg.content = text
+            kept = group + kept
+        return system + kept + [latest_user]
 
     def get_role(self, msg):
         return msg.get('role') if isinstance(msg, dict) else getattr(msg, 'role', '')

@@ -4,12 +4,15 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import uuid
 
 from . import settings
+from .demo_catalog import RETIRED_DEMO_TASK_IDS
 
 TERMINAL = {"completed", "failed", "cancelled"}
+SCHEMA_VERSION = 1
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -19,9 +22,14 @@ def connection():
     settings.DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(settings.DATABASE_PATH, timeout=15)
     db.row_factory = sqlite3.Row
-    db.execute("PRAGMA journal_mode=WAL")
-    db.execute("PRAGMA foreign_keys=ON")
-    db.executescript("""
+    try:
+        db.execute("PRAGMA foreign_keys=ON")
+        # Status polling, cancellation checks and log reads open connections
+        # frequently. Schema setup belongs to a versioned initialization, not
+        # every read. SQLite owns the marker across threads and worker processes.
+        if db.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+            db.execute("PRAGMA journal_mode=WAL")
+            db.executescript("""
         CREATE TABLE IF NOT EXISTS tasks (
             task_id TEXT PRIMARY KEY, owner_id TEXT, is_demo INTEGER NOT NULL DEFAULT 0,
             dapp_name TEXT NOT NULL, status TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0,
@@ -49,8 +57,9 @@ def connection():
             translated_report TEXT NOT NULL, model TEXT NOT NULL, translated_at TEXT NOT NULL,
             PRIMARY KEY(task_id, source_hash, language)
         );
-    """)
-    try:
+            """)
+            db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+            db.commit()
         yield db
         db.commit()
     except BaseException:
@@ -80,7 +89,27 @@ def _task(row) -> dict | None:
     return result
 
 def public_task(task: dict) -> dict:
-    return {key: value for key, value in task.items() if key not in {"owner_id", "payload"}}
+    public = {key: value for key, value in task.items() if key not in {"owner_id", "payload"}}
+    result = public.get("result")
+    state = result.get("verification") if isinstance(result, dict) else None
+    if not public.get("is_demo") and isinstance(state, dict):
+        from .utils.report_evidence import report_evidence
+        normalized = report_evidence(
+            {"verification": state, "verdict": state.get("judge_verdict")},
+            result.get("replay_evidence"),
+        )["verification"]
+        patches = result.get("applied_patches")
+        if normalized.get("status") == "verified" and (
+            not isinstance(patches, str)
+            or hashlib.sha256(patches.encode("utf-8")).hexdigest() != normalized.get("applied_patch_sha256")
+        ):
+            normalized.update(status="unverified", evidence_validated=False,
+                              reason_code="applied_patch_evidence_mismatch")
+            normalized["dimensions"]["attack_interception"] = {"status": "unavailable"}
+        # Presentation is recomputed on reads. Preserve the stored historical
+        # report and evidence, including when old verdicts lack current binding.
+        public["result"] = {**result, "verification": normalized}
+    return public
 
 def get_task(task_id: str) -> dict | None:
     with connection() as db:
@@ -158,7 +187,11 @@ def full_log(task_id: str, log_id: str) -> str | None:
 
 def events_after(task_id: str, event_id: int, limit=200) -> list[dict]:
     with connection() as db:
-        return [{"id": row["id"], "payload": json.loads(row["payload"])} for row in db.execute("SELECT id,payload FROM events WHERE task_id=? AND id>? ORDER BY id LIMIT ?", (task_id, event_id, limit))]
+        events = [{"id": row["id"], "payload": json.loads(row["payload"])} for row in db.execute("SELECT id,payload FROM events WHERE task_id=? AND id>? ORDER BY id LIMIT ?", (task_id, event_id, limit))]
+    for event in events:
+        if event["payload"].get("type") in {"TASK_STATUS", "TASK_FINAL"}:
+            event["payload"] = public_task(event["payload"])
+    return events
 
 def unfinished() -> list[dict]:
     with connection() as db:
@@ -177,11 +210,25 @@ def task_dir(task_id: str) -> Path:
     canonical = str(uuid.UUID(task_id))
     return settings.RUNTIME_ROOT / "tasks" / canonical
 
+def remove_retired_demo_tasks() -> list[str]:
+    removed = []
+    with connection() as db:
+        for task_id in sorted(RETIRED_DEMO_TASK_IDS):
+            deleted = db.execute("DELETE FROM tasks WHERE task_id=? AND is_demo=1 AND source='archive'", (task_id,))
+            if deleted.rowcount:
+                removed.append(task_id)
+    for task_id in removed:
+        shutil.rmtree(task_dir(task_id), ignore_errors=True)
+    return removed
+
 def import_seed(seed: dict) -> dict:
+    remove_retired_demo_tasks()
     added = 0
     with connection() as db:
         for task in seed.get("tasks", []):
             task_id = str(uuid.UUID(task["task_id"]))
+            if task_id in RETIRED_DEMO_TASK_IDS:
+                continue
             status = task["status"] if task["status"] in TERMINAL else "failed"
             result = task.get("result")
             if isinstance(result, str):

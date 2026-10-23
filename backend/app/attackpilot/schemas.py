@@ -31,7 +31,28 @@ class CaseTaskInput(BaseModel):
     dapp_name: str = Field(min_length=1, max_length=255)
     modules: list[str] = Field(default_factory=list)
 
+    @field_validator("dapp_name")
+    @classmethod
+    def name_valid(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("请输入案例名称")
+        return value
+
+    @field_validator("modules")
+    @classmethod
+    def modules_valid(cls, value: list[str]) -> list[str]:
+        return normalize_modules(value)
+
 class SearchInput(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     top_k: int = Field(default=5, ge=1, le=20)
     filters: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("query")
+    @classmethod
+    def query_valid(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("请输入检索关键词")
+        return value

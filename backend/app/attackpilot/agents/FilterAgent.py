@@ -6,6 +6,8 @@ from typing import Dict, Any, Union, List
 from app.attackpilot.prompt.filter_prompt import FILTER_SP, FILTER_UP
 
 from app.attackpilot.agents.AgentBase import AgentBase
+from app.attackpilot.errors import AgentContractError
+from app.attackpilot.utils.agent_contracts import hash_list, trace_tree as validate_trace_tree
 
 
 class FilterAgent(AgentBase):
@@ -13,8 +15,11 @@ class FilterAgent(AgentBase):
         super(FilterAgent, self).__init__(name, FILTER_SP, max_turns=1, unique_id=dapp_name,log_callback=log_callback)
 
     async def handle(self, processed_data: Dict[str, Any]) -> List[str]:
+        self.filter_degraded = False
         trace_tree_raw = processed_data.get("trace_tree", {})
         candidate_txs = processed_data.get("attack_transactions", [])
+        candidate_txs = hash_list(candidate_txs, processed_data.get('transaction_hash_list', candidate_txs),
+                                 stage='filter', reason_code='agent_filter_invalid')
 
         if not candidate_txs:
             print(f"[{self.name}] No attack transactions to filter.")
@@ -35,36 +40,46 @@ class FilterAgent(AgentBase):
         for attack_tx in candidate_txs:
             if attack_tx in trace_tree:
                 trace_content = trace_tree[attack_tx]
+                try:
+                    validate_trace_tree(trace_content)
+                except AgentContractError:
+                    continue
                 attack_traces_map[attack_tx] = trace_content
                 trace_str_parts.append(f"\n{attack_tx}: {trace_content}")
 
-        if not trace_str_parts:
-            print(f"[{self.name}] No traces found for candidate transactions. Returning all candidates.")
+        if len(attack_traces_map) != len(candidate_txs):
+            self.filter_degraded = True
+            self.logger.warning('候选交易轨迹不完整，跳过去重并保留全部候选交易。')
             return candidate_txs
 
         trace_str = "".join(trace_str_parts)
 
-        try:
-            result = await self.query(FILTER_UP.format(traces=trace_str), _format="str")
-        except Exception as e:
-            print(f"[{self.name}] LLM query failed: {e}")
-            return candidate_txs
-
-        parsed_txs = self._parse_llm_output(result)
-
-        if parsed_txs is None:
-            self.logger.warning('交易筛选输出无法解析，保留全部候选交易继续核查。')
-            return candidate_txs
-
-        valid_txs = [tx for tx in parsed_txs if tx in candidate_txs]
-
-        if not valid_txs and parsed_txs:
-            print(f"[{self.name}] LLM returned transactions verify failed (hallucination?). Output: {parsed_txs}")
-            return candidate_txs
-
-        return valid_txs
+        prompt = FILTER_UP.format(traces=trace_str)
+        for attempt in range(2):
+            # Provider/transport errors and cancellation must reach the caller.
+            result = await self.query(prompt, _format="str")
+            parsed_txs = self._parse_llm_output(result)
+            try:
+                selected = hash_list(parsed_txs, candidate_txs, stage='filter',
+                                     reason_code='agent_filter_invalid', nonempty=True)
+                omitted = [tx for tx in candidate_txs if tx not in selected]
+                if omitted:
+                    # A model's similar-template judgement is not a proof of
+                    # equivalent execution. Preserve every candidate for deeper
+                    # investigation; the selection may only set its priority.
+                    self.filter_degraded = True
+                    self.logger.warning('模型建议合并部分候选，但缺少执行等价证据；保留全部候选继续分析。')
+                return selected + omitted
+            except AgentContractError:
+                if attempt:
+                    self.filter_degraded = True
+                    self.logger.warning('去重结果仍不可用，保留全部候选交易；未据此认定没有攻击。')
+                    return list(dict.fromkeys(tx.lower() for tx in candidate_txs))
+                prompt += '\nCorrect the format once: return a nonempty list containing only full hashes from the candidates. Deduplication cannot remove every candidate.'
 
     def _parse_llm_output(self, llm_output: str) -> Union[List[str], None]:
+        if not isinstance(llm_output, str):
+            return None
         cleaned = re.sub(r"```[a-zA-Z]*", "", llm_output).replace("```", "").strip()
 
         result_list = None
@@ -84,13 +99,8 @@ class FilterAgent(AgentBase):
             except json.JSONDecodeError:
                 pass
 
-        if result_list is None:
-            matches = re.findall(r"['\"](0x[a-fA-F0-9]+)['\"]", cleaned)
-            if matches:
-                result_list = matches
-
         if result_list is not None:
-            return [str(item) for item in result_list if isinstance(item, (str, bytes))]
+            return result_list
 
         print(f"[{self.name}] Failed to parse output: {llm_output}")
         return None

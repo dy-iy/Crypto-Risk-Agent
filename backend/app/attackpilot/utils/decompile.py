@@ -117,11 +117,16 @@ class HeimdallWrapper:
 
                 try:
                     stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-                except asyncio.TimeoutError:
+                except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
                     try:
                         process.kill()
                     except ProcessLookupError:
                         pass
+                    # communicate drains both pipes and awaits process.wait();
+                    # waiting without draining can hang on buffered child output.
+                    await process.communicate()
+                    if isinstance(exc, asyncio.CancelledError):
+                        raise
                     return False, f"Decompilation timed out after {timeout} seconds."
 
                 found_sol_file = None

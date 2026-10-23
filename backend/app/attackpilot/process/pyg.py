@@ -128,21 +128,27 @@ class DAppProcess:
         processed_data["attack_transactions"] = attack_transactions
         processed_data["auxiliary_transactions"] = auxiliary_transactions
 
-        # filter attack transactions
-        print("filter same attack templates ~ ")
+        # Select investigation targets independently of confirmed attack roles.
+        print("selecting investigation targets ~ ")
         self._check_cancelled()
         attack_filter = None
 
         num_attack_txs = len(attack_transactions)
         num_total_txs = len(sorted_tx_list)
-        if (num_attack_txs == 0 and len(sorted_tx_list) > 0) or (num_total_txs <= TRANSACTION_FILTER_SMALL_SET_THRESHOLD):
-            txs_need_analyze = sorted_tx_list
-            attack_transactions = sorted_tx_list
-            auxiliary_transactions = []
-            processed_data["attack_transactions"] = attack_transactions
-            processed_data["auxiliary_transactions"] = auxiliary_transactions
-        elif not self._module_enabled("attack_detection"):
-            txs_need_analyze = attack_transactions or sorted_tx_list
+        if self._module_enabled("fault_localization") or not self._module_enabled("attack_detection"):
+            # Explicit investigation must not depend on a preliminary model
+            # already proving the fault it is meant to investigate. Preserve
+            # classification separately; an investigation target is not an attack.
+            txs_need_analyze = list(sorted_tx_list)
+            if self._module_enabled("fault_localization"):
+                trace_agent.logger.info(
+                    f"已启用根因深度调查，保留全部 {len(txs_need_analyze)} 笔输入交易；"
+                    "初步角色分类不作为跳过调查或确认攻击的依据。"
+                )
+        elif num_attack_txs == 0:
+            txs_need_analyze = []
+        elif num_total_txs <= TRANSACTION_FILTER_SMALL_SET_THRESHOLD:
+            txs_need_analyze = list(attack_transactions)
         else:
             attack_filter = FilterAgent(dapp_name=dapp_name, log_callback=self.log_callback)
             self._attach_cancel(attack_filter)
@@ -153,13 +159,26 @@ class DAppProcess:
                 txs_need_analyze = attack_transactions
 
         processed_data["transactions_need_analyze"] = txs_need_analyze
+        processed_data['attack_classification'] = {
+            'source': 'model_classification',
+            'status': 'candidates_identified' if attack_transactions else 'no_attack_candidates',
+            'safety_confirmed': False,
+            'filter_degraded': getattr(attack_filter, 'filter_degraded', False),
+        }
+        processed_data['investigation_scope'] = {
+            'source': 'requested_fault_localization' if self._module_enabled("fault_localization")
+            else 'classification_candidates' if self._module_enabled("attack_detection") else 'submitted_transactions',
+            'transaction_hashes': list(txs_need_analyze),
+            'attack_confirmed': False,
+        }
 
         # macro transaction fault
         print("analyzing transaction bug ~ ")
         self._check_cancelled()
         tx_fault_agent = TxFaultAgent(dapp_name=dapp_name,  log_callback=self.log_callback)
         self._attach_cancel(tx_fault_agent)
-        bug_summary = await tx_fault_agent.handle(processed_data)
+        bug_summary = (await tx_fault_agent.handle(processed_data) if txs_need_analyze else
+                       '本次角色分类未筛出攻击候选，尚未确认攻击；未开展故障假设或补丁验证，不代表交易安全。')
         self._check_cancelled()
         processed_data["bug_summary"] = bug_summary
 
@@ -224,9 +243,12 @@ class DAppProcess:
                 "tx_hash": tx,
                 "timestamp": timestamp,
                 "block_number": block_number,
+                "block_hash": detail.get("block_hash"),
                 "index": index,
+                "transaction_index": index,
                 "balance_diff": balance_diff,
-                "asset_changes": asset_changes
+                "asset_changes": asset_changes,
+                "logs": detail.get('logs', []),
             })
         transactions.sort(key=lambda x: (x['block_number'], x['index']))
         sorted_tx_hashes = [tx['tx_hash'] for tx in transactions]

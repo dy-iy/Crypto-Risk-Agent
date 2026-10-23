@@ -1,15 +1,18 @@
 "use client";
 
 import { useMemo, useSyncExternalStore } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
 import { App as AntdApp, Button, ConfigProvider, Spin, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { Moon, ShieldCheck, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { localStore } from "@/lib/browser-storage";
 import { AttackPilotIdentity } from "./context";
 import "./attackpilot.css";
+import "./review.css";
+import "./pages.css";
 
 const loading = () => <div className="ap-page-loading" role="status"><Spin /><span>正在加载复盘页面…</span></div>;
 const LandingWarRoom = dynamic(() => import("./pages/LandingWarRoom"), { loading });
@@ -109,17 +112,30 @@ export default function AttackPilotWorkbench({ userId, userName, authLoading = f
           <AntdApp>
             <div className={`app-root app-theme-${appearance}`}>
               <nav className="ap-module-nav" aria-label="AttackPilot 功能导航">
-                <span className="ap-brand"><ShieldCheck size={21} /> AttackPilot</span>
-                {navigation.map(([key, href, label]) => <Link key={key} href={href} aria-current={section === key ? "page" : undefined}>{label}</Link>)}
-                <Button className="ap-appearance-toggle" icon={isDark ? <Sun size={16} /> : <Moon size={16} />} onClick={() => {
-                  localStore.setItem(appearanceKey, isDark ? "light" : "dark");
-                  window.dispatchEvent(new Event(appearanceEvent));
-                }}>{isDark ? "白天模式" : "黑夜模式"}</Button>
-                <div className="ap-account">
-                  {userId ? <>
-                    <span className="ap-account-name" title={userName}>{userName || "已登录"}</span>
-                    {onLogout && <Button loading={authLoading} onClick={onLogout}>退出登录</Button>}
-                  </> : <Button loading={authLoading} onClick={onLogin}>登录 / 注册</Button>}
+                <Link className="ap-brand" href="/attackpilot">
+                  <Image src="/attackpilot/riskpilot_logo.png" alt="AttackPilot 标志" width={36} height={36} unoptimized />
+                  <span>AttackPilot</span>
+                </Link>
+                <div className="ap-nav-links">
+                  {navigation.map(([key, href, label]) => <Link key={key} href={href} aria-current={section === key ? "page" : undefined}>{label}</Link>)}
+                </div>
+                <div className="ap-nav-tools">
+                  <Button
+                    className="ap-appearance-toggle"
+                    aria-label={isDark ? "白天模式" : "黑夜模式"}
+                    title={isDark ? "白天模式" : "黑夜模式"}
+                    icon={isDark ? <Sun size={16} /> : <Moon size={16} />}
+                    onClick={() => {
+                      localStore.setItem(appearanceKey, isDark ? "light" : "dark");
+                      window.dispatchEvent(new Event(appearanceEvent));
+                    }}
+                  />
+                  <div className="ap-account">
+                    {userId ? <>
+                      <span className="ap-account-name" title={userName}>{userName || "已登录"}</span>
+                      {onLogout && <Button loading={authLoading} onClick={onLogout}>退出登录</Button>}
+                    </> : <Button loading={authLoading} onClick={onLogin}>登录 / 注册</Button>}
+                  </div>
                 </div>
               </nav>
               <div key={userId || "guest"}>

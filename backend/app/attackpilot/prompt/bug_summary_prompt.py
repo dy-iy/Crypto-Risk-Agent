@@ -1,4 +1,11 @@
 BUG_SUMMARY_SP = """
+The transaction set is an investigation input, not proof of an attack or failure.
+Do not invent an exploit when evidence is insufficient; distinguish ordinary
+operations, unresolved suspicions, and observed security-condition violations.
+Attack and auxiliary labels are preliminary model classifications, not proof or
+exclusion of an attack. Review every explicit investigation target even when it
+was classified as auxiliary. Missing source or a shallow trace is a reason to
+request deeper inspection, not evidence that a transaction is ordinary or safe.
 # Role
 You are an expert in analyzing on-chain transaction failures. Based on the basic information of a failed transaction, fund flows, and trace call chains, you can evaluate what went wrong in the transaction and identify the specific failure phenomena that occurred.
 
@@ -22,16 +29,18 @@ II. Failed Transaction Core Operations
 ..."""
 
 BUG_SUMMARY_UP = """
-There are multiple Ethereum failed transactions, with transaction hashes as follows:
+Review the supplied on-chain transactions for anomalies. They can be successful executions or ordinary operations; an attack is not established merely by their submission. Retain the network stated in the evidence. Transaction hashes:
 {tx_hash}
-The list of attack transactions derived from analysis:
+The preliminary attack candidates derived from analysis:
 {attack_list}
-The list of auxiliary transactions:
+The preliminary auxiliary classifications (which may overlap explicit investigation targets):
 {auxiliary_list}
+The transaction hashes requested for deeper investigation:
+{investigation_targets}
+The requested investigation scope (attack_confirmed=false means no attack has been established):
+{investigation_scope}
 The basic information and details for each transaction are as follows:
 {tx_detail}
-The fund flow (token exchange) information for these transactions is as follows:
-{transfer_graph}
 The trace call information for these transactions is as follows:
 {trace_tree}
 The attributes of the tokens involved in these transactions are as follows:
@@ -40,5 +49,9 @@ The transaction role analysis derived from analysis:
 {tx_roles}
 Related vulnerability knowledge and similar historical cases retrieved from the local RAG knowledge base:
 {rag_context}
-Please help me summarize the occurrence process of this Ethereum failure, and analyze the transaction vulnerability and possible causes.
+The fund flow (token exchange) information for these transactions is as follows:
+{transfer_graph}
+Shared price evidence referenced by $ref in the fund flow (each entry retains its original provenance and uncertainty):
+{price_evidence}
+Summarize the observed transaction process and any supported anomalies or possible causes. Clearly distinguish observations, hypotheses, and missing evidence; do not presume that a failure or attack occurred.
 """

@@ -7,15 +7,15 @@ Your output must strictly adhere to a specific format; otherwise, the repair wil
 1. **Analyze Fault Report**: Deeply understand the Root Cause of the DApp malfunction described in the `fault_report`.
 2. **Strategize Modification**: Combining the provided `final_trace` and `fix_report`, and referencing the patch suggestions from the Transaction Debugger, determine exactly where the contract code was exploited by the hacker. Decide which code to modify to achieve the minimal change necessary to protect against the attack.
 3. **Locate Code**: Identify the specific contract files and exact lines of code within the provided `Source Codes`. Note: You may need to modify multiple files or multiple functions.
-4. **Build Patch**: Generate the patch using Aider-style diff blocks. Follow the principle of minimal modification. Ensure the changes prevent the hacker's attack transaction while guaranteeing that normal transactions operate correctly (do not over-defend). The verification process will replay normal transactions to check for over-defense issues.
+4. **Build Patch**: Generate the patch using Aider-style diff blocks. Follow the principle of minimal modification and preserve legitimate supported behavior. Normal-transaction regression is a separate coverage dimension: do not assume the verification process executes normal cases or claim they passed without recorded results. Inspect shared configuration, permissions, sentinel values, and alternative entrypoints before changing them globally; an observed zero fee is not automatically a necessary exploit condition, and token transfer amounts do not inherently need to equal native msg.value.
 5. **Verify Integrity**: After generating the full patch, perform an integrity analysis to ensure the modifications are complete and robust:
     - **Check if the code block in SEARCH matches the source code exactly (comments, code, indentation/newlines).**
     - Check if the new patch uses unimported libraries, check if edge cases are covered, check if logic is robust, and ensure the patched code compiles successfully.
     - Check if original Immutable Values of the contract were modified. Immutable Values must remain exactly as is; no additions, modifications, or deletions allowed.
     - Check all contracts where state variables were added to see if the Patch Head pattern (Unstructured Storage) is used correctly. Specifically:
-        - Does `__ensurePatchInit()` set `initialized` to true after setting initial values?
-        - Do all modified Entry Points call `__ensurePatchInit()` in the very first line?
-        - Is the correct Unstructured Storage implementation mode selected based on the compiler version? [Mode A: Solidity >= 0.6.0 -> Structure Pointer, Mode B: Solidity < 0.6.0 -> Type-Based Utils]
+        - Does `__ensurePatchInit()` initialize only new patch state, leave the guard unlocked, and set `initialized` to true last?
+        - Do all modified state-changing entry points that use patch state initialize it before use?
+        - Is the storage implementation selected using the actual `compiler_version` supplied for this file, rather than only its pragma? [Mode A1: Solidity 0.6.x -> `s_slot := slot`; Mode A2: Solidity >= 0.7.0 -> `s.slot := slot`; Mode B: Solidity < 0.6.0 -> Type-Based Utils]
         If Solidity >= 0.6.0, check:
             - Is `bool initialized;` added to `__PatchState`?
         If Solidity < 0.6.0, check:
@@ -52,19 +52,22 @@ For each file that needs modification, you must strictly follow this structure:
 6. **Constructor Ban & Lazy Init Rule**:
     - **Principle**: We are patching existing contracts. The simulation environment runs Runtime Bytecode and **will not execute the constructor**.
     - **Prohibition**: **Absolutely DO NOT** modify the `constructor`. Any changes to the constructor are invalid during verification. Also, **DO NOT** modify Immutable Values, otherwise the patch contract will fail to deploy.
-    - **Alternative**: All initialization logic (including assigning new variables or **resetting original contract variables**) must be written in the `__ensurePatchInit()` function.
+    - **Alternative**: Initialize only newly added patch state in `__ensurePatchInit()`. Preserve existing owners, balances, limits, fees and other business state. Do not invent thresholds or reset original variables as a generic repair strategy. Any change to existing business state needs explicit fault evidence and a narrowly justified migration; none is implied by these examples.
     - **Implementation**:
         1. Implement `__ensurePatchInit()` in the Patch Head.
         2. Use the `initialized` flag to prevent repeated execution.
-        3. Ensure all `public/external` function entry points call `__ensurePatchInit()` in the first line.
+        3. Ensure modified state-changing `public/external` entry points initialize patch state before using it. Do not insert a state-writing initializer into `view` or `pure` functions.
 7. **Zero-Storage-Collision Rule**:
     1. **Prohibition**: Do not declare new state variables directly at the top level of the contract (e.g., `bool locked;`), as this destroys the original contract storage layout.
-    2. **Must** implement Unstructured Storage (Patch Head) using one of the following two modes based on `pragma solidity` version:
+    2. **Must** implement Unstructured Storage (Patch Head) using the actual compiler version and settings supplied with each source file. A pragma is only a compatibility range; do not infer the deployed compiler, EVM target, or optimizer from it. Preserve the supplied `evm_version` and `optimizer` settings.
 
     ### [Mode A: Solidity >= 0.6.0] -> Use "Structure Pointer"
         - Define an internal struct `struct __PatchState`, a pointer function `function __patchStorage() internal pure returns (__PatchState storage s)`, and an initialization function `function __ensurePatchInit() internal`.
         - Slot calculation formula: `keccak256("patch.<ContractName>.<RandomSeed>")`.
         - All patch states (locks, blacklists, counters, etc.) must be stored in this struct and accessed via `__patchStorage().<var>`.
+        - **Solidity 0.6.x**: assign the pointer with `assembly { s_slot := slot }`.
+        - **Solidity >= 0.7.0**: assign it with `assembly { s.slot := slot }`. The old `s_slot` syntax is invalid in these compilers.
+        - The examples below use version-specific external-call syntax; never copy a newer syntax into an older compiler target.
 
     #### [Mode B: Solidity < 0.6.0] -> Use "Type-Based Utils"
         - **Problem Solved**: Lower versions forbid modifying storage pointers or using `s := slot`. Therefore, **do not** define structs or pointer functions.
@@ -83,11 +86,11 @@ For each file that needs modification, you must strictly follow this structure:
             [Mapping Type Utils]
                 // For mapping(address => uint256)
                 function _pMapSet(bytes32 base, address k, uint256 v) internal {
-                    bytes32 slot = keccak256(abi.encodePacked(k, base));
+                    bytes32 slot = keccak256(abi.encode(k, base));
                     assembly { sstore(slot, v) }
                 }
                 function _pMapGet(bytes32 base, address k) internal view returns (uint256 v) {
-                    bytes32 slot = keccak256(abi.encodePacked(k, base));
+                    bytes32 slot = keccak256(abi.encode(k, base));
                     assembly { v := sload(slot) }
                 }
             [Array Type Utils - Use only when necessary]
@@ -106,128 +109,172 @@ For each file that needs modification, you must strictly follow this structure:
 
     3. **Lazy Initialization**:
             - Regardless of Mode A or B, please implement `function __ensurePatchInit() internal` for lazy loading initialization of state values.
-            - Inside this function use an `if (!s.initialized)` block to set initial values for all patch variables.
-            - At the end of the function block, you must set `s.initialized = true;`.
-    4. **Mandatory Entry Call**: In the first line of all modified `public/external` functions that rely on patch state, `__ensurePatchInit();` must be called.
+            - Mode A: use `if (!s.initialized)`, initialize the new lock to `false`, then set `s.initialized = true` last.
+            - Mode B: use a separate initialization slot; initialize the new lock to `false`, then set the initialization slot to `true` last. Setting the lock to `true` during initialization would reject every first legitimate call.
+            - Do not add arbitrary limits or write existing business variables during initialization.
+    4. **Mandatory Entry Call**: In the first line of modified state-changing `public/external` functions that rely on patch state, call `__ensurePatchInit();`.
 
 ### Examples
-**Scene 1: Solidity >= 0.6.0 (Structure Pointer Mode)**
-Assume `Vault.sol` has a reentrancy risk; we need to add a reentrancy guard but cannot modify the existing variable layout.
+These are complete synthetic examples. Their SEARCH sources are intentionally short enough to show in full. Preserve the original business storage and behavior; the added guard starts unlocked. Use the section matching the actual compiler version.
 
-# File: 0x1234...::src/Vault.sol
+**Scene 1: Solidity 0.6.x (Structure Pointer, legacy assembly name)**
+
+# File: 0x1111111111111111111111111111111111111111::src/Vault06.sol
 <<<<<<< SEARCH
-contract Vault {
+pragma solidity 0.6.12;
+contract Vault06 {
     address public owner;
     mapping(address => uint256) public balances;
+
+    function withdraw(uint256 amount) public {
+        require(balances[msg.sender] >= amount, "Insufficient balance");
+        (bool success, ) = msg.sender.call.value(amount)("");
+        require(success, "Transfer failed");
+        balances[msg.sender] -= amount;
+    }
+}
 =======
-contract Vault {
-    // --- Patch Head Begin ---
+pragma solidity 0.6.12;
+contract Vault06 {
     struct __PatchState {
-        bool initialized; // must be first
+        bool initialized;
         bool locked;
-        uint256 maxWithdrawLimit;
-        mapping(address => uint256) dailyWithdraws;
     }
 
     function __patchStorage() internal pure returns (__PatchState storage s) {
-        bytes32 slot = keccak256("patch.Vault.storage");
-        assembly {
-            s_slot := slot 
-        }
+        bytes32 slot = keccak256("patch.Vault06.reentrancy.v1");
+        assembly { s_slot := slot }
     }
 
-    /**
-     * @dev Sentinel function: Ensure that the patch status is correctly initialized
-     * All the initialization values (initial thresholds, switches, etc.) are all written here together
-     */
     function __ensurePatchInit() internal {
         __PatchState storage s = __patchStorage();
         if (!s.initialized) {
-            s.maxWithdrawLimit = 100 ether; // Patch variables initialization logic here
-            owner = address(0xAdmin...);    // [CRITICAL] Reset original storage here instead of constructor
+            s.locked = false;
             s.initialized = true;
         }
     }
-    // --- Patch Head End ---
 
     address public owner;
     mapping(address => uint256) public balances;
->>>>>>> REPLACE
 
-<<<<<<< SEARCH
     function withdraw(uint256 amount) public {
-        require(balances[msg.sender] >= amount, "Insufficient balance");
-        (bool success, ) = msg.sender.call{value: amount}("");
-        require(success, "Transfer failed");
-        balances[msg.sender] -= amount;
-    }
-=======
-    function withdraw(uint256 amount) public {
-        __ensurePatchInit();    // must be called at the entrance
-
+        __ensurePatchInit();
         __PatchState storage s = __patchStorage();
-        require(!s.locked, "ReentrancyGuard: reentrant call");
+        require(!s.locked, "Reentrant call");
         s.locked = true;
-
         require(balances[msg.sender] >= amount, "Insufficient balance");
         balances[msg.sender] -= amount;
-        (bool success, ) = msg.sender.call{value: amount}("");
+        (bool success, ) = msg.sender.call.value(amount)("");
         require(success, "Transfer failed");
-
         s.locked = false;
     }
+}
 >>>>>>> REPLACE
 
-**Scene 2: Solidity < 0.6.0 (Type-Based Utils Mode)**
-Assume version is 0.5.17, need to add reentrancy guard.
+**Scene 2: Solidity >= 0.7.0 (Structure Pointer, dotted assembly name)**
 
-# File: 0x456...::src/OldBank.sol
+# File: 0x2222222222222222222222222222222222222222::src/VaultModern.sol
 <<<<<<< SEARCH
+pragma solidity >=0.7.0 <0.9.0;
+contract VaultModern {
+    address public owner;
+    mapping(address => uint256) public balances;
+
+    function withdraw(uint256 amount) public {
+        require(balances[msg.sender] >= amount, "Insufficient balance");
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transfer failed");
+        balances[msg.sender] -= amount;
+    }
+}
+=======
+pragma solidity >=0.7.0 <0.9.0;
+contract VaultModern {
+    struct __PatchState {
+        bool initialized;
+        bool locked;
+    }
+
+    function __patchStorage() internal pure returns (__PatchState storage s) {
+        bytes32 slot = keccak256("patch.VaultModern.reentrancy.v1");
+        assembly { s.slot := slot }
+    }
+
+    function __ensurePatchInit() internal {
+        __PatchState storage s = __patchStorage();
+        if (!s.initialized) {
+            s.locked = false;
+            s.initialized = true;
+        }
+    }
+
+    address public owner;
+    mapping(address => uint256) public balances;
+
+    function withdraw(uint256 amount) public {
+        __ensurePatchInit();
+        __PatchState storage s = __patchStorage();
+        require(!s.locked, "Reentrant call");
+        s.locked = true;
+        require(balances[msg.sender] >= amount, "Insufficient balance");
+        balances[msg.sender] -= amount;
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transfer failed");
+        s.locked = false;
+    }
+}
+>>>>>>> REPLACE
+
+**Scene 3: Solidity < 0.6.0 (Type-Based Utils, actual compiler 0.5.17)**
+
+# File: 0x3333333333333333333333333333333333333333::src/OldBank.sol
+<<<<<<< SEARCH
+pragma solidity 0.5.17;
 contract OldBank {
     uint public limit;
     uint256 public totalSupply;
-=======
-contract OldBank {
-    // --- Patch Head (Mode B: <0.6.0) ---
-    // 1. Define Slots
-    // Define a storage slot for every variable.
-    bytes32 constant _SLOT_INIT   = keccak256("patch.OldBank.init");
-    bytes32 constant _SLOT_LOCKED = keccak256("patch.OldBank.locked");
+    mapping(address => uint256) public balances;
 
-    // 2. Generic Utils (Type-Based)    
-    // Each variable type needs to generate _pSetXxx and _pGetXxx functions. Use these utility functions to set or get variable values.
+    function withdraw(uint256 amount) public {
+        require(balances[msg.sender] >= amount, "Insufficient balance");
+        (bool success, ) = msg.sender.call.value(amount)("");
+        require(success, "Transfer failed");
+        balances[msg.sender] -= amount;
+    }
+}
+=======
+pragma solidity 0.5.17;
+contract OldBank {
+    bytes32 constant _SLOT_INIT = keccak256("patch.OldBank.reentrancy.v1.init");
+    bytes32 constant _SLOT_LOCKED = keccak256("patch.OldBank.reentrancy.v1.locked");
+
     function _pSetBool(bytes32 s, bool v) internal { assembly { sstore(s, v) } }
     function _pGetBool(bytes32 s) internal view returns (bool v) { assembly { v := sload(s) } }
 
-    // 3. Init Logic
     function __ensurePatchInit() internal {
         if (!_pGetBool(_SLOT_INIT)) {
+            _pSetBool(_SLOT_LOCKED, false);
             _pSetBool(_SLOT_INIT, true);
-            _pSetBool(_SLOT_LOCKED, true);  // Initialize new state
-            limit = 500;                    // Fix original state if needed
         }
     }
-    // --- End Patch Head ---
 
     uint public limit;
     uint256 public totalSupply;
->>>>>>> REPLACE
+    mapping(address => uint256) public balances;
 
-<<<<<<< SEARCH
-    function transfer(address to, uint256 val) public {
-        _transfer(msg.sender, to, val);
-    }
-=======
-    function transfer(address to, uint256 val) public {
+    function withdraw(uint256 amount) public {
         __ensurePatchInit();
-        require(!_pGetBool(_SLOT_LOCKED), "Reentry");
+        require(!_pGetBool(_SLOT_LOCKED), "Reentrant call");
         _pSetBool(_SLOT_LOCKED, true);
-
-        _transfer(msg.sender, to, val);
-
+        require(balances[msg.sender] >= amount, "Insufficient balance");
+        balances[msg.sender] -= amount;
+        (bool success, ) = msg.sender.call.value(amount)("");
+        require(success, "Transfer failed");
         _pSetBool(_SLOT_LOCKED, false);
     }
+}
 >>>>>>> REPLACE
+
 """
 
 FIX_UP = """

@@ -60,23 +60,31 @@ class TokenPropertyDao:
             return self._create_property_item(contract_address, property_data)
 
         if contract_address in self._pending_requests:
-            await self._pending_requests[contract_address]
-            if contract_address in self._cache:
-                property_data = self._cache[contract_address]
-                return self._create_property_item(contract_address, property_data)
+            # One cancelled waiter must not cancel every consumer's result.
+            property_data = await asyncio.shield(self._pending_requests[contract_address])
+            return self._create_property_item(contract_address, property_data)
 
-        future = asyncio.Future()
+        future = asyncio.get_running_loop().create_future()
         self._pending_requests[contract_address] = future
 
         try:
             property_data = await self.property_downloader.download(contract_address=contract_address)
-            self._cache[contract_address] = property_data
-            future.set_result(property_data)
+            if not isinstance(property_data, dict):
+                raise ValueError('Token metadata is unavailable')
+            if (property_data.get('name') or property_data.get('token_symbol')
+                    or type(property_data.get('decimals')) is int and 0 <= property_data['decimals'] <= 255):
+                self._cache[contract_address] = property_data
+            if not future.done():
+                future.set_result(property_data)
             return self._create_property_item(contract_address, property_data)
 
-        except Exception as e:
-            future.set_exception(e)
+        except asyncio.CancelledError:
+            future.cancel()
+            raise
+        except Exception:
             default_data = {'name': '', 'token_symbol': '', 'decimals': -1, 'total_supply': -1}
+            if not future.done():
+                future.set_result(default_data)
             return self._create_property_item(contract_address, default_data)
 
         finally:

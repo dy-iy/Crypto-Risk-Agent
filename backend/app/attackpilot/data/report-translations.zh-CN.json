@@ -58,14 +58,6 @@
       "translated_at": "2026-09-12T15:44:24.467303+00:00"
     },
     {
-      "task_id": "b38e5109-36c2-43ad-a2aa-cead703697f3",
-      "source_hash": "b5f3e7be0d1c30afa0ee40b4290a912937727418b4a30aa795ba7e163bf7067e",
-      "language": "zh-CN",
-      "translated_report": "运行时错误：请查看日志 /app/experiment_result/pilot_report/errors/SushiSwap_error.log\n详细信息： 全局记忆管理员（GlobalMemory Administrator）智能体 API 错误：APITimeoutError，请求超时。",
-      "model": "assistant-translation",
-      "translated_at": "2026-09-12T15:44:24.469130+00:00"
-    },
-    {
       "task_id": "b965a484-3567-4b0a-96a4-72e237dd3637",
       "source_hash": "c293462017e9c4a78eaca97be7f55e745a8d7b58c66dc193beedefa54ccd43ad",
       "language": "zh-CN",

@@ -1,0 +1,249 @@
+.attackpilot-root .ap-task-page .ap-task-notices {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.attackpilot-root .ap-task-page .ap-task-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 36px;
+  padding: 26px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.attackpilot-root .ap-task-page .ap-task-stats > div {
+  min-width: 0;
+  padding: 0 30px;
+  border-left: 1px solid var(--border);
+}
+
+.attackpilot-root .ap-task-page .ap-task-stats > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.attackpilot-root .ap-task-page .ap-task-stats dt {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.attackpilot-root .ap-task-page .ap-task-stats dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 30px;
+  font-weight: 550;
+  line-height: 1.15;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.attackpilot-root .ap-task-page .ap-task-library {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+
+.attackpilot-root .ap-task-page .ap-task-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+}
+
+.attackpilot-root .ap-task-page .ap-task-toolbar h2 {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.attackpilot-root .ap-task-page .ap-task-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.attackpilot-root .ap-task-page .ap-task-filters .ant-select {
+  min-width: 132px;
+}
+
+.attackpilot-root .ap-task-page .ap-task-filters .ant-select:first-child {
+  min-width: 164px;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table {
+  min-width: 0;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table .ant-table-container {
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table .ant-table-content {
+  overscroll-behavior-x: contain;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table .ant-table-thead > tr > th {
+  padding: 15px 24px;
+  border-bottom-color: var(--border) !important;
+  background: var(--bg-deep) !important;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  white-space: nowrap;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table .ant-table-thead > tr > th::before {
+  display: none;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table .ant-table-tbody > tr > td {
+  padding: 23px 24px;
+  border-bottom: 1px solid var(--border) !important;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table .ant-table-tbody > tr:hover > td {
+  background: var(--bg-deep) !important;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table .ap-task-time {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.attackpilot-root .ap-task-page .ap-task-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.attackpilot-root .ap-task-page .ap-task-name button {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.attackpilot-root .ap-task-page .ap-task-name button:hover {
+  color: var(--accent);
+}
+
+.attackpilot-root .ap-task-page .ap-task-name button:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.attackpilot-root .ap-task-page .ap-task-name > span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.attackpilot-root .ap-task-page .ap-task-row-actions .ant-btn {
+  min-height: 28px;
+  box-shadow: none;
+}
+
+.attackpilot-root .ap-task-page .ap-task-row-actions .ant-typography {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.attackpilot-root .ap-task-page .ap-task-table .ant-table-pagination {
+  margin: 0 !important;
+  padding: 20px 24px;
+}
+
+@media (max-width: 900px) {
+  .attackpilot-root .ap-task-page .ap-task-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-stats > div {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+}
+
+@media (max-width: 600px) {
+  .attackpilot-root .ap-task-page .ap-task-notices {
+    margin-bottom: 24px;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 0;
+    margin-bottom: 28px;
+    padding: 24px 0;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-stats > div:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-stats dt {
+    margin-bottom: 6px;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-stats dd {
+    font-size: 27px;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-toolbar {
+    padding: 20px 16px;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-filters .ant-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-filters .ant-select:first-child {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-table .ant-table-thead > tr > th,
+  .attackpilot-root .ap-task-page .ap-task-table .ant-table-tbody > tr > td {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .attackpilot-root .ap-task-page .ap-task-table .ant-table-pagination {
+    padding: 16px;
+  }
+}

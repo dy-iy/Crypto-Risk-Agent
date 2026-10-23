@@ -66,3 +66,9 @@ export function formatDurationZh(duration?: number | null) {
   const seconds = Math.floor(duration % 60);
   return `${minutes} 分 ${seconds} 秒`;
 }
+
+export function formatUsdDelta(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "未知";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}

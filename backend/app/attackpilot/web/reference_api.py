@@ -8,18 +8,10 @@ import json
 
 
 import logging
-
-
-import os
+import math
 
 
 import re
-
-
-import time
-
-
-from datetime import datetime
 
 
 from pathlib import Path
@@ -28,10 +20,12 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import HTTPException, Query
 
 
 from app.attackpilot.knowledge import get_rag_service
+from app.attackpilot.privacy import redact_text
+from app.attackpilot.schemas import normalize_modules
 
 
 
@@ -50,9 +44,7 @@ from .models import (
     AssistantSource,
     DappCatalogItem,
     DappCatalogResponse,
-    TaskCreateRequest,
     TaskResponse,
-    TaskStatus,
     TxDetectItem,
     TxDetectRequest,
     TxDetectResponse,
@@ -67,16 +59,7 @@ from .review_service import build_automated_review
 logger = logging.getLogger(__name__)
 
 
-AGENT_LOG_ROOT = Path(PROJECT_PATH) / "agents" / "logs"
-
-
-MAX_AGENT_LOG_BYTES = 2_000_000
-
-
 PROCESSED_DATA_ROOT = Path(PROJECT_PATH) / "dataset" / "processed"
-
-
-DISABLE_TASK_DELETE = os.getenv("DISABLE_TASK_DELETE", "true").lower() in {"1", "true", "yes", "on"}
 
 
 RAW_DATA_ROOT = Path(PROJECT_PATH) / "dataset" / "raw"
@@ -86,20 +69,6 @@ KNOWLEDGE_ROOT = Path(PROJECT_PATH) / "data" / "knowledge"
 
 
 TX_HASH_RE = re.compile(r"^0x[a-fA-F0-9]{64}$")
-
-
-DEFAULT_ANALYSIS_MODULES = [
-    "attack_detection",
-    "fault_localization",
-    "rag_retrieval",
-    "patch_generation",
-    "patch_verification",
-]
-
-
-def _normalize_modules(modules):
-    from app.attackpilot.schemas import normalize_modules
-    return normalize_modules(modules)
 
 
 def _b64_encode(value: str) -> str:
@@ -136,8 +105,8 @@ def _load_knowledge_file(file_name: str) -> Dict[str, Any]:
     try:
         return _load_json_file(path)
     except Exception as exc:
-        logger.exception("[Knowledge] Failed to read %s", path)
-        raise HTTPException(status_code=500, detail=f"Failed to load knowledge file: {exc}") from exc
+        logger.warning("[Knowledge] Failed to read knowledge (%s)", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Failed to load knowledge file") from exc
 
 
 def _load_knowledge_cases_payload(source: str) -> Dict[str, Any]:
@@ -253,6 +222,8 @@ def _find_raw_tx_matches(tx_hash: str) -> List[Dict[str, Any]]:
     for raw_file in sorted(RAW_DATA_ROOT.glob("*.json"), key=lambda path: path.stem.lower()):
         try:
             raw_data = _load_json_file(raw_file)
+            if not isinstance(raw_data, dict):
+                continue
         except Exception as exc:
             logger.warning("[TxReview] Skipping unreadable raw file %s: %s", raw_file, exc)
             continue
@@ -280,6 +251,8 @@ def _find_generated_case_matches(tx_hash: str) -> List[Dict[str, Any]]:
 
     try:
         payload = _load_json_file(path)
+        if not isinstance(payload, dict) or not isinstance(payload.get('items', []), list):
+            return []
     except Exception as exc:
         logger.warning("[TxReview] Failed to read generated case index: %s", exc)
         return []
@@ -354,8 +327,8 @@ def _build_adhoc_dapp_payload(tx_hash: str, chain: str, tx_hashes: List[str] | N
     }
 
 
-def _hex_to_int(value: Any, default: int = 0) -> int:
-    if isinstance(value, int):
+def _hex_to_int(value: Any, default: int | None = 0) -> int | None:
+    if type(value) is int:
         return value
     if not isinstance(value, str) or not value:
         return default
@@ -365,11 +338,26 @@ def _hex_to_int(value: Any, default: int = 0) -> int:
         return default
 
 
-async def _download_with_timeout(coro, timeout: float = 8.0):
-    try:
-        return await asyncio.wait_for(coro, timeout=timeout), None
-    except Exception as exc:
-        return None, f"{type(exc).__name__}: {exc}"
+def _flatten_observation_trace(root):
+    """Bound lightweight callTracer parsing and reject incomplete structures."""
+    if root is None:
+        return [], None
+    frames = []
+    stack = [(root, 0)]
+    while stack:
+        node, depth = stack.pop()
+        if (not isinstance(node, dict) or not isinstance(node.get('type'), str)
+                or node['type'].upper() not in {'CALL', 'CALLCODE', 'DELEGATECALL', 'STATICCALL', 'CREATE', 'CREATE2', 'SELFDESTRUCT', 'SUICIDE'}
+                or depth > 128 or len(frames) >= 10_000
+                or node.get('truncated') is True):
+            return [], 'debug_traceTransaction: invalid or incomplete call trace'
+        children = node.get('calls')
+        if children is not None and not isinstance(children, list):
+            return [], 'debug_traceTransaction: invalid or incomplete call trace'
+        frames.append({key: value for key, value in node.items() if key != 'calls'})
+        for child in reversed(children or []):
+            stack.append((child, depth + 1))
+    return frames, None
 
 
 async def _load_tx_observation(tx_hash: str, chain: str) -> Dict[str, Any]:
@@ -388,29 +376,65 @@ async def _load_tx_observation(tx_hash: str, chain: str) -> Dict[str, Any]:
                     response = await client.post(url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
                     response.raise_for_status()
                     payload = response.json()
-                    if payload.get("error"):
-                        raise ValueError(str(payload["error"].get("message", "RPC rejected request")))
-                    if payload.get("result") is None:
-                        return None, f"{method}: transaction not found"
-                    return payload["result"], None
-                except (httpx.HTTPError, ValueError) as exc:
+                    if (not isinstance(payload, dict) or payload.get('jsonrpc') != '2.0'
+                            or type(payload.get('id')) is not int or payload['id'] != 1):
+                        raise ValueError('invalid_response')
+                    if payload.get("error") is not None:
+                        error = payload['error']
+                        code = error.get('code') if isinstance(error, dict) else None
+                        reason = f'{method}: RPC error' + (f' ({code})' if type(code) is int else '')
+                        continue
+                    data = payload.get('result')
+                    if data is None:
+                        reason = f"{method}: transaction not found"
+                        continue
+                    if not isinstance(data, dict):
+                        raise ValueError('invalid_response')
+                    identity = {'eth_getTransactionByHash': 'hash', 'eth_getTransactionReceipt': 'transactionHash'}.get(method)
+                    if identity and (not isinstance(data.get(identity), str) or data[identity].lower() != tx_hash):
+                        raise ValueError('identity_mismatch')
+                    return data, None
+                except (httpx.HTTPError, httpx.InvalidURL, ValueError, RecursionError) as exc:
                     reason = f"{method}: {type(exc).__name__}"
                     if isinstance(exc, httpx.HTTPStatusError): reason += f" (HTTP {exc.response.status_code})"
-                    elif isinstance(exc, ValueError): reason += f" ({str(exc)[:160]})"
             return None, reason
         (tx, tx_error), (receipt, receipt_error), (trace, trace_error) = await asyncio.gather(
             rpc("eth_getTransactionByHash", [tx_hash]),
             rpc("eth_getTransactionReceipt", [tx_hash]),
             rpc("debug_traceTransaction", [tx_hash, {"tracer": "callTracer"}]),
         )
-    def flatten(node):
-        if not isinstance(node, dict): return []
-        return [{key: value for key, value in node.items() if key != "calls"},
-                *[item for child in node.get("calls", []) for item in flatten(child)]]
     errors = [error for error in (tx_error, receipt_error, trace_error) if error]
-    status = "ok" if tx or receipt or trace else "unavailable"
+    if tx and receipt:
+        # Separate providers can disagree during a reorg. Never combine one
+        # transaction's block context with a receipt from a different inclusion.
+        same_block = (isinstance(tx.get('blockHash'), str)
+                      and _try_normalize_tx_hash(tx['blockHash']) is not None
+                      and tx['blockHash'].lower() == str(receipt.get('blockHash') or '').lower())
+        same_position = all(
+            (value := _hex_to_int(tx.get(key), None)) is not None and value >= 0
+            and value == _hex_to_int(receipt.get(key), None)
+            for key in ('blockNumber', 'transactionIndex')
+        )
+        if not same_block or not same_position:
+            errors.append('transaction/receipt: missing or inconsistent block identity')
+            tx = receipt = trace = None
+    if receipt and (_hex_to_int(receipt.get('status'), None) not in (0, 1)
+                    or (gas := _hex_to_int(receipt.get('gasUsed'), None)) is None or gas < 0
+                    or not isinstance(receipt.get('logs'), list)):
+        errors.append('eth_getTransactionReceipt: incomplete execution evidence')
+        receipt = None
+    if tx and trace:
+        fields = ['from', 'input'] + (['to'] if tx.get('to') else [])
+        if (any(str(tx.get(key) or '').lower() != str(trace.get(key) or '').lower() for key in fields)
+                or _hex_to_int(tx.get('value'), None) != _hex_to_int(trace.get('value'), None)):
+            errors.append('debug_traceTransaction: root transaction mismatch')
+            trace = None
+    frames, trace_validation_error = _flatten_observation_trace(trace)
+    if trace_validation_error:
+        errors.append(trace_validation_error)
+    status = "ok" if tx or receipt or frames else "unavailable"
     if status == "ok" and errors: status = "partial"
-    return {"status": status, "platform": platform, "tx": tx or {}, "receipt": receipt or {}, "trace": flatten(trace), "errors": errors}
+    return {"status": status, "platform": platform, "tx": tx or {}, "receipt": receipt or {}, "trace": frames, "errors": errors}
 
 
 def _input_selector(value: Any) -> str:
@@ -497,7 +521,8 @@ def _analyze_tx_observation(observation: Dict[str, Any]) -> tuple[List[Dict[str,
     }
     matched_selectors = [selector_names[item] for item in selectors if item in selector_names]
 
-    status_value = str(receipt.get("status") or "").lower()
+    receipt_status = _hex_to_int(receipt.get("status"), None)
+    status_value = hex(receipt_status) if receipt_status in (0, 1) else None
     gas_used = _hex_to_int(receipt.get("gasUsed"))
     call_count = len(trace)
     contract_count = len({addr for addr in trace_addresses if addr})
@@ -637,7 +662,7 @@ def _risk_from_signals(signals: List[Dict[str, str]], has_match: bool, live_stat
         return "high"
     if score >= 2:
         return "medium"
-    if live_status in {"ok", "partial"}:
+    if live_status == "ok":
         return "low"
     return "unknown"
 
@@ -662,10 +687,10 @@ def _detect_item_summary(classification: str, risk_level: str, signals: List[str
         return "链上轻量检测发现较强攻击信号，建议进入故障定位。"
     if classification == "auxiliary_candidate":
         return "存在资金、池子或权限相关信号，可能是准备交易或辅助交易。"
+    if risk_level == "unknown":
+        return "链上数据不足，当前未形成明确攻击判断。"
     if classification == "needs_review":
         return "存在可疑交互，但证据不足，需要结合上下文继续判断。"
-    if risk_level == "unknown":
-        return "链上数据暂不可用，当前只能给出本地索引检查结果。"
     return "暂未发现明显攻击信号。"
 
 
@@ -721,21 +746,31 @@ def _short_hash(value: str) -> str:
 
 def _summarize_balance_change(tx_hash: str, balance_change: Dict[str, Any]) -> Dict[str, Any]:
     tx_balance = balance_change.get(tx_hash, {}) if isinstance(balance_change, dict) else {}
+    tx_balance = tx_balance if isinstance(tx_balance, dict) else {}
     participants = []
     total_usd_delta = 0.0
+    priced_assets, unpriced_assets = 0, 0
 
     for address, token_changes in tx_balance.items():
         token_summary = []
         address_usd_delta = 0.0
+        address_priced, address_unpriced = 0, 0
         if not isinstance(token_changes, dict):
             continue
         for token_address, change in token_changes.items():
             if not isinstance(change, dict):
                 continue
             usd_value = change.get("usd_value")
-            if isinstance(usd_value, (int, float)):
+            if (type(usd_value) in (int, float) and math.isfinite(usd_value)
+                    and change.get('valuation_status') != 'unavailable'):
                 address_usd_delta += usd_value
                 total_usd_delta += usd_value
+                address_priced += 1
+                priced_assets += 1
+            else:
+                usd_value = None
+                address_unpriced += 1
+                unpriced_assets += 1
             token_summary.append(
                 {
                     "token": change.get("symbol") or token_address,
@@ -748,7 +783,10 @@ def _summarize_balance_change(tx_hash: str, balance_change: Dict[str, Any]) -> D
         participants.append(
             {
                 "address": address,
-                "usd_delta": address_usd_delta,
+                "usd_delta": address_usd_delta if address_priced and not address_unpriced and math.isfinite(address_usd_delta) else None,
+                "valuation_status": 'available' if address_priced and not address_unpriced and math.isfinite(address_usd_delta) else 'unavailable',
+                "priced_asset_count": address_priced,
+                "unpriced_asset_count": address_unpriced,
                 "tokens": token_summary[:8],
             }
         )
@@ -756,7 +794,10 @@ def _summarize_balance_change(tx_hash: str, balance_change: Dict[str, Any]) -> D
     participants.sort(key=lambda item: abs(item.get("usd_delta") or 0), reverse=True)
     return {
         "participant_count": len(participants),
-        "total_usd_delta": total_usd_delta,
+        "total_usd_delta": total_usd_delta if priced_assets and not unpriced_assets and math.isfinite(total_usd_delta) else None,
+        "valuation_status": 'available' if priced_assets and not unpriced_assets and math.isfinite(total_usd_delta) else 'unavailable',
+        "priced_asset_count": priced_assets,
+        "unpriced_asset_count": unpriced_assets,
         "top_participants": participants[:8],
     }
 
@@ -827,9 +868,11 @@ def _load_macro_analysis_payload(task: TaskResponse) -> Dict[str, Any]:
 
     try:
         processed_data = json.loads(processed_file.read_text(encoding="utf-8"))
+        if not isinstance(processed_data, dict):
+            raise ValueError('invalid_processed_data')
     except Exception as exc:
-        logger.exception("[Macro] Failed to read processed data for %s", task.dapp_name)
-        raise HTTPException(status_code=500, detail=f"Failed to load processed macro analysis: {exc}") from exc
+        logger.warning("[Macro] Failed to read processed data (%s)", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Failed to load processed macro analysis") from exc
 
     tx_order = processed_data.get("transaction_hash_list") or (processed_data.get("dapp") or {}).get("transaction_hash") or []
     transaction_summaries = [
@@ -864,6 +907,8 @@ async def list_dapps():
     for raw_file in sorted(RAW_DATA_ROOT.glob("*.json"), key=lambda path: path.stem.lower()):
         try:
             raw_data = _load_json_file(raw_file)
+            if not isinstance(raw_data, dict):
+                continue
         except Exception as exc:
             logger.warning("[DApps] Skipping unreadable raw file %s: %s", raw_file, exc)
             continue
@@ -908,23 +953,10 @@ async def list_dapps():
 async def detect_transaction_set(request: TxDetectRequest):
     chain = (request.chain or "ethereum").strip().lower()
     _chain_to_platform(chain)
-    enabled_modules = _normalize_modules(request.modules)
+    enabled_modules = normalize_modules(request.modules)
     valid_hashes, invalid_hashes = _normalize_tx_hashes(request.tx_hashes, max_count=50)
     if not valid_hashes:
         raise HTTPException(status_code=400, detail="At least one valid transaction hash is required")
-
-    if "attack_detection" not in enabled_modules:
-        return TxDetectResponse(
-            chain=chain,
-            input_count=len(request.tx_hashes),
-            analyzed_count=0,
-            risk_level="unknown",
-            summary="攻击检测模块未启用。本次仅保留输入交易，可直接进入后续复盘模块。",
-            modules=enabled_modules,
-            recommended_tx_hashes=valid_hashes,
-            invalid_hashes=invalid_hashes,
-            deep_analysis_ready=True,
-        )
 
     semaphore = asyncio.Semaphore(4)
 
@@ -952,7 +984,7 @@ async def detect_transaction_set(request: TxDetectRequest):
     if attack_items:
         risk_level = "high"
         summary = f"检测到 {len(attack_items)} 笔高风险/已知攻击候选交易，建议进入故障定位。"
-    elif auxiliary_items:
+    elif any(item.risk_level == "medium" or item.classification == "auxiliary_candidate" for item in auxiliary_items):
         risk_level = "medium"
         summary = f"检测到 {len(auxiliary_items)} 笔可疑辅助交易，建议结合上下文继续分析。"
     elif any(item.risk_level == "unknown" for item in items):
@@ -1141,9 +1173,12 @@ def _safe_load_macro_for_assistant(task: TaskResponse) -> Dict[str, Any] | None:
     try:
         return _load_macro_analysis_payload(task)
     except HTTPException as exc:
-        if exc.status_code == 404:
+        if exc.status_code in {404, 500}:
             return None
         raise
+    except (OSError, ValueError, TypeError, AttributeError):
+        logger.warning('[Assistant] Optional macro context is unavailable')
+        return None
 
 
 def _task_context_for_assistant(task: TaskResponse) -> tuple[str, List[AssistantSource]]:
@@ -1328,12 +1363,12 @@ def _build_assistant_messages(
 
     messages: List[Dict[str, str]] = [
         {"role": "system", "content": system_prompt},
-        {"role": "system", "content": f"当前可用上下文：\n{_truncate_text(context, ASSISTANT_CONTEXT_LIMIT)}"},
+        {"role": "system", "content": f"当前可用上下文：\n{_truncate_text(redact_text(context), ASSISTANT_CONTEXT_LIMIT)}"},
     ]
     for item in request.history[-6:]:
         if item.role in {"user", "assistant"}:
-            messages.append({"role": item.role, "content": _truncate_text(item.content, 1200)})
-    messages.append({"role": "user", "content": request.question.strip()})
+            messages.append({"role": item.role, "content": _truncate_text(redact_text(item.content), 1200)})
+    messages.append({"role": "user", "content": redact_text(request.question.strip())})
     return messages
 
 
@@ -1378,7 +1413,11 @@ async def chat_with_assistant(
         sources.append(_assistant_source("tx_review", "交易轻量审查", f"tx:{tx_review.tx_hash}", tx_review_payload))
         context_parts.extend(["## 交易轻量审查", _compact_json(tx_review_payload, 3800)])
 
-    knowledge_context, knowledge_sources = _knowledge_context_for_assistant(question)
+    try:
+        knowledge_context, knowledge_sources = _knowledge_context_for_assistant(question)
+    except (HTTPException, OSError, ValueError, TypeError, AttributeError):
+        logger.warning('[Assistant] Optional knowledge context is unavailable')
+        knowledge_context, knowledge_sources = '', []
     context_parts.append(knowledge_context)
     sources.extend(knowledge_sources)
 
@@ -1404,7 +1443,7 @@ async def chat_with_assistant(
             used_fallback=False,
         )
     except Exception as exc:
-        logger.exception("[Assistant] Failed to generate answer")
+        logger.warning("[Assistant] Failed to generate answer (%s)", type(exc).__name__)
         fallback = (
             "取证助手暂时无法调用大模型完成回答，但当前上下文已经整理好。"
             "你可以先查看上方交易审查信号、任务报告和漏洞知识卡；"

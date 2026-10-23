@@ -5,6 +5,7 @@ import { chatWithAssistant, errorMessage } from "../services/api";
 import { AssistantChatRequest, AssistantMessage, AssistantSource } from "../types";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { useAttackPilotIdentity } from "../context";
+import { assistantRequestHistory } from "../utils/requestPayloads";
 import { localStore } from "@/lib/browser-storage";
 
 const { TextArea } = Input;
@@ -97,12 +98,13 @@ const ForensicAssistantSession: React.FC<ForensicAssistantDrawerProps & { storag
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [resizing, setResizing] = useState(false);
   const requestRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (storageKey) localStore.setItem(storageKey, JSON.stringify(messages.slice(-40)));
   }, [messages, storageKey]);
 
-  useEffect(() => () => { requestRef.current += 1; }, []);
+  useEffect(() => () => { requestRef.current += 1; controllerRef.current?.abort(); }, []);
 
 
   const prompts = useMemo(() => promptSets[scope] ?? promptSets.general, [scope]);
@@ -129,6 +131,7 @@ const ForensicAssistantSession: React.FC<ForensicAssistantDrawerProps & { storag
 
   const clearHistory = useCallback(() => {
     requestRef.current += 1;
+    controllerRef.current?.abort();
     setMessages([]);
     setError("");
     setLoading(false);
@@ -139,6 +142,9 @@ const ForensicAssistantSession: React.FC<ForensicAssistantDrawerProps & { storag
     const value = question.trim();
     if (!value || loading) return;
     const requestId = ++requestRef.current;
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
 
     const userMessage: LocalMessage = {
       id: `user-${crypto.randomUUID()}`,
@@ -151,10 +157,7 @@ const ForensicAssistantSession: React.FC<ForensicAssistantDrawerProps & { storag
     setLoading(true);
 
     try {
-      const history = messages
-        .filter((item) => item.role === "user" || item.role === "assistant")
-        .slice(-6)
-        .map(({ role, content }) => ({ role, content }));
+      const history = assistantRequestHistory(messages);
       const response = await chatWithAssistant({
         scope,
         task_id: taskId,
@@ -162,7 +165,7 @@ const ForensicAssistantSession: React.FC<ForensicAssistantDrawerProps & { storag
         chain,
         question: value,
         history,
-      });
+      }, controller.signal);
       if (requestId !== requestRef.current) return;
 
       setMessages((current) => [

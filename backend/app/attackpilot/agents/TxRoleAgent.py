@@ -1,19 +1,17 @@
-import asyncio
+import hashlib
+import json
 import os
-from collections import defaultdict
 from typing import List, Dict
 
 from app.attackpilot.agents.AgentBase import AgentBase
-from app.attackpilot.daos.trace import TraceDao
-from app.attackpilot.downloaders.trace import RawTraceDownloader
-from app.attackpilot.downloaders.trans import TxReceiptDownloader
 from app.attackpilot.prompt.tx_role_analyze_prompt import TX_ROLE_ANALYZE_SP, TX_ROLE_ANALYZE_UP
 from app.attackpilot.settings import CACHE_DIR
-from app.attackpilot.utils.balance_utils import NATIVE_TOKEN_ADDRESS, BalanceAnalyzer
+from app.attackpilot.utils.balance_utils import NATIVE_TOKEN_ADDRESS, BalanceAnalyzer, fetch_token_prices
 from app.attackpilot.utils.bucket import AsyncItemBucket
-from app.attackpilot.utils.price import get_token_price, platform_to_chain
-from app.attackpilot.utils.signature import hex_to_int
-from app.attackpilot.utils.token_utils import ERC20_TRANSFER_TOPIC, parse_address
+from app.attackpilot.utils.price import platform_to_chain, pricing_policy_fingerprint
+from app.attackpilot.errors import AgentContractError, HistoricalReplayValidationError
+from app.attackpilot.utils.agent_contracts import classification, observed_addresses
+from app.attackpilot.utils.prompt_evidence import compact_price_evidence
 
 
 class TxRoleAgent(AgentBase):
@@ -23,9 +21,7 @@ class TxRoleAgent(AgentBase):
         self.apikey_bucket = apikey_bucket
         self.rpc_bucket = rpc_bucket
         self._platform = _platform
-        self.erc20_transfer_topic = ERC20_TRANSFER_TOPIC
         self.NATIVE_TOKEN_ADDRESS = NATIVE_TOKEN_ADDRESS
-        self.WETH_ADDRESS = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'
 
     async def handle(self, dapp_data: Dict, transactions: List[Dict]) -> tuple[Dict, List[str], List[str], Dict]:
         roles = {}
@@ -33,31 +29,63 @@ class TxRoleAgent(AgentBase):
         auxiliary_transactions = []
 
         balance_change = await self.get_balance_change(dapp_data, transactions)
+        addresses = observed_addresses(
+            dapp_data.get('transaction_to_detail'), dapp_data.get('transaction_to_property'),
+            dapp_data.get('trace_tree'), dapp_data.get('transfer_graph'), balance_change,
+        )
 
         # transaction role analyze
-        role_path = os.path.join(CACHE_DIR, 'summary/role_summary', '%s.json' % dapp_data.get("dapp").get("name"))
+        transfer_graph, prompt_balances, price_evidence = self._prompt_evidence(
+            dapp_data.get("transfer_graph", ""), balance_change,
+        )
+        initial_trace = dapp_data.get("trace_tree", {})
+        if isinstance(initial_trace, dict):
+            initial_trace = "\n\n".join(f"{tx_hash}:\n{tree}" for tx_hash, tree in initial_trace.items())
+        role_prompt = TX_ROLE_ANALYZE_UP.format(
+            tx_hash=dapp_data.get("transaction_hash_list", ""),
+            tx_detail=dapp_data.get("transaction_detail", ""),
+            trace_tree=initial_trace,
+            transfer_graph=transfer_graph,
+            tx_token_property=self.process_property(dapp_data), balance_change=prompt_balances,
+            price_evidence=price_evidence,
+        )
+        role_cache_name = hashlib.sha256(
+            (pricing_policy_fingerprint() + TX_ROLE_ANALYZE_SP + role_prompt).encode()
+        ).hexdigest()
+        role_path = os.path.join(CACHE_DIR, 'summary/role_summary', f'{role_cache_name}.json')
+        known = dapp_data.get('transaction_hash_list', [])
         if os.path.exists(role_path):
-            role_summary = self.load_summary_from_cache(str(role_path))
-        else:
-            role_summary = await self.query(TX_ROLE_ANALYZE_UP.format(
-                tx_hash=dapp_data.get("transaction_hash_list", ""),
-                tx_detail=dapp_data.get("transaction_detail", ""),
-                transfer_graph=dapp_data.get("transfer_graph", ""),
-                tx_token_property=self.process_property(dapp_data),
-                balance_change=balance_change
-            ), _format="json")
-            # write cache
-            self.write_summary_to_cache(cache_path='summary/role_summary', file_name=dapp_data.get("dapp").get("name"),
+            try:
+                roles, attack_transactions, auxiliary_transactions = classification(
+                    self.load_summary_from_cache(str(role_path)), known, addresses=addresses)
+                return roles, attack_transactions, auxiliary_transactions, balance_change
+            except (AgentContractError, ValueError, TypeError, AttributeError, OSError):
+                self.logger.warning('角色分类缓存不符合当前数据契约，重新分类。')
+        prompt = role_prompt
+        for attempt in range(2):
+            role_summary = await self.query(prompt, _format="json")
+            try:
+                roles, attack_transactions, auxiliary_transactions = classification(
+                    role_summary, known, addresses=addresses)
+            except AgentContractError:
+                if attempt:
+                    raise
+                self.logger.warning('角色分类范围或格式无效，进行一次纠正。')
+                prompt = role_prompt + (
+                    '\nReturn a JSON object with transaction.attack_transactions and auxiliary_transactions '
+                    'as disjoint lists covering only and all supplied transaction hashes; address_role must '
+                    'map full addresses to role/description strings. An empty attack list is allowed when '
+                    'no concrete suspicious fault-trigger candidate is supported; unresolved candidates '
+                    'do not require a proven vulnerability and unknown evidence does not prove safety. Address roles may '
+                    'only reference addresses present in the supplied chain evidence. Allowed addresses: '
+                    + ', '.join(sorted(addresses))
+                )
+                continue
+            self.write_summary_to_cache(cache_path='summary/role_summary', file_name=role_cache_name,
                                         summary=role_summary)
+            return roles, attack_transactions, auxiliary_transactions, balance_change
 
-        if role_summary:
-            if "transaction" in role_summary and isinstance(role_summary["transaction"], dict):
-                attack_transactions = role_summary["transaction"].get("attack_transactions", [])
-                auxiliary_transactions = role_summary["transaction"].get("auxiliary_transactions", [])
-            if "address_role" in role_summary and isinstance(role_summary["address_role"], dict):
-                roles = role_summary["address_role"]
-
-        return roles, attack_transactions, auxiliary_transactions, balance_change
+    _prompt_evidence = staticmethod(compact_price_evidence)
 
     def process_property(self, dapp_data):
         tx2property = dapp_data.get("transaction_to_property")
@@ -69,50 +97,46 @@ class TxRoleAgent(AgentBase):
         tx2property = dapp_data.get("transaction_to_property", {})
         tenderly_macro_map = dapp_data.get("transaction_to_detail", {}) or {} if dapp_data else {}
 
-        platform = dapp_data.get("dapp", {}).get("platform", "Ethereum")
+        platform = dapp_data.get("dapp", {}).get("platform") or self._platform
 
         hash_to_ts = {tx.get("tx_hash"): tx.get("timestamp") for tx in transactions}
+
+        if (not isinstance(tenderly_macro_map, dict) or any(
+                not isinstance(tenderly_macro_map.get(tx), dict) or not tenderly_macro_map[tx]
+                for tx in tx_hashes)):
+            raise HistoricalReplayValidationError('unavailable', 'missing_evidence',
+                                                  details={'field': 'transaction_to_detail'})
 
         price_map = await self._fetch_prices_for_all_txs(tx_hashes, hash_to_ts, tenderly_macro_map, tx2property,
                                                          platform)
 
-        missing = [tx for tx in tx_hashes if tx not in tenderly_macro_map]
-        traces_map, receipts_map = {}, {}
-        if missing:
-            traces_map, receipts_map = await asyncio.gather(
-                self._load_trace_tree(missing),
-                self._load_tx_receipts(missing)
-            )
-
         results = {}
-        global_metadata = self._build_initial_metadata(tx2property)
-
         for tx_hash in tx_hashes:
             macro_for_tx = tenderly_macro_map.get(tx_hash)
 
-            raw_balance_changes = defaultdict(lambda: defaultdict(int))
-
-            if macro_for_tx:
-                changes, extracted_meta = BalanceAnalyzer.parse_tenderly_data(macro_for_tx)
-                raw_balance_changes = changes
-                global_metadata.update(extracted_meta)
-            else:
-                trace = traces_map.get(tx_hash)
-                receipt = receipts_map.get(tx_hash)
-                if receipt:
-                    self._calculate_gas_cost(receipt, raw_balance_changes)
-                    self._analyze_token_changes(receipt.get('logs', []), raw_balance_changes)
-                if trace:
-                    self._analyze_eth_changes(trace, raw_balance_changes)
+            raw_balance_changes, extracted_meta = BalanceAnalyzer.parse_tenderly_data(macro_for_tx)
+            # Metadata from a different transaction must not change this one's
+            # units; partial provider labels also must not erase known decimals.
+            metadata = self._build_initial_metadata({tx_hash: tx2property.get(tx_hash, [])})
+            for address, info in extracted_meta.items():
+                target = metadata.setdefault(address, {})
+                for key, value in info.items():
+                    if value is None or value in ('', 'UNKNOWN', 'Unknown Token'):
+                        continue
+                    if key == 'decimals' and (type(value) is not int or not 0 <= value <= 255):
+                        continue
+                    target[key] = value
 
             tx_price_info = price_map.get(tx_hash, {})
-            results[tx_hash] = BalanceAnalyzer.calculate_usd_values(raw_balance_changes, global_metadata, tx_price_info, self._platform)
+            results[tx_hash] = BalanceAnalyzer.calculate_usd_values(raw_balance_changes, metadata, tx_price_info, platform)
 
         return results
 
     async def _fetch_prices_for_all_txs(self, tx_hashes, hash_to_ts, tenderly_map, tx2prop, platform) -> Dict:
-        chain = platform_to_chain.get(platform, "ethereum")
+        chain = platform_to_chain.get(platform)
         price_results = {}
+        if not chain:
+            return price_results
 
         for tx_hash in tx_hashes:
             ts = hash_to_ts.get(tx_hash)
@@ -131,25 +155,10 @@ class TxRoleAgent(AgentBase):
                     a = asset.get('token_info', {}).get('contract_address')
                     if a: query_addrs.add(a.lower())
 
-            final_query_list = []
-            for addr in query_addrs:
-                target = self.WETH_ADDRESS if addr == self.NATIVE_TOKEN_ADDRESS else addr
-                final_query_list.append(f"{chain}:{target}")
-
-            final_query_str = ",".join(set(final_query_list))
-
             try:
-                prices = await get_token_price(final_query_str, ts)
-
-                tx_prices = {}
-                for key, info in prices.items():
-                    token_addr = key.split(':')[-1].lower()
-                    price = info.get('price', 0.0)
-                    tx_prices[token_addr] = price
-                    if token_addr == self.WETH_ADDRESS:
-                        tx_prices[self.NATIVE_TOKEN_ADDRESS] = price
-
-                price_results[tx_hash] = tx_prices
+                price_results[tx_hash] = await fetch_token_prices(
+                    chain, ts, query_addrs, include_metadata=True, block_context=macro
+                )
             except Exception as e:
                 print(f"Price fetch error for {tx_hash}: {e}")
 
@@ -164,68 +173,7 @@ class TxRoleAgent(AgentBase):
                     meta[addr] = {
                         "symbol": p.get('token_symbol') or p.get('symbol', 'UNKNOWN'),
                         "name": p.get('name', 'Unknown Token'),
-                        "decimals": p.get('decimals', 18),
+                        "decimals": p.get('decimals'),
                         "contract": addr
                     }
         return meta
-
-    def _analyze_eth_changes(self, trace_node: Dict, changes: Dict[str, Dict[str, int]]):
-        if not trace_node:
-            return
-        value_hex = trace_node.get('value', '0x0')
-        value = hex_to_int(value_hex)
-        from_addr = trace_node.get('from', '').lower()
-        to_addr = trace_node.get('to', '').lower()
-
-        if value > 0 and from_addr and to_addr:
-            changes[from_addr][self.NATIVE_TOKEN_ADDRESS] -= value
-            changes[to_addr][self.NATIVE_TOKEN_ADDRESS] += value
-
-        for sub_call in trace_node.get('calls', []):
-            self._analyze_eth_changes(sub_call, changes)
-
-    def _analyze_token_changes(self, logs: List[Dict], changes: Dict[str, Dict[str, int]]):
-        for log in logs:
-            topics = log.get('topics', [])
-            if len(topics) == 3 and topics[0].lower() == self.erc20_transfer_topic:
-                token_addr = log.get('address', '').lower()
-                from_addr = parse_address(topics[1]).lower()
-                to_addr = parse_address(topics[2]).lower()
-                data_hex = log.get('data', '0x0')
-                amount = hex_to_int(data_hex)
-
-                if amount > 0:
-                    changes[from_addr][token_addr] -= amount
-                    changes[to_addr][token_addr] += amount
-
-    def _calculate_gas_cost(self, receipt: Dict, changes: Dict[str, Dict[str, int]]):
-        if not receipt:
-            return
-        gas_used = hex_to_int(receipt.get('gasUsed', '0x0'))
-        gas_price = hex_to_int(receipt.get('effectiveGasPrice', receipt.get('gasPrice', '0x0')))
-        total_fee = gas_used * gas_price
-
-        sender = receipt.get('from', '').lower()
-
-        if sender and total_fee > 0:
-            changes[sender][self.NATIVE_TOKEN_ADDRESS] -= total_fee
-
-    async def _load_trace_tree(self, transaction_hashs: List[str]) -> Dict[str, Dict]:
-        async def _create_task(_transaction_hash: str):
-            return await TraceDao(downloader=RawTraceDownloader(
-                rpc_url=await self.rpc_bucket.get(),
-            )).get_call_tree(transaction_hash=_transaction_hash)
-
-        tasks = [_create_task(txhash) for txhash in transaction_hashs]
-        result = await asyncio.gather(*tasks)
-        return {txhash: result[i] for i, txhash in enumerate(transaction_hashs)}
-
-    async def _load_tx_receipts(self, transaction_hashs: List[str]) -> Dict[str, List]:
-        async def _create_task(_transaction_hash: str):
-            return await TxReceiptDownloader(
-                rpc_url=await self.rpc_bucket.get(),
-            ).download(transaction_hash=_transaction_hash)
-
-        tasks = [_create_task(txhash) for txhash in transaction_hashs]
-        result = await asyncio.gather(*tasks)
-        return {txhash: result[i] for i, txhash in enumerate(transaction_hashs)}

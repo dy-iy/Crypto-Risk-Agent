@@ -9,6 +9,7 @@ class ContractEntity:
         self.contract_name = data_dict.get("contract_name")
         self.public = data_dict.get("public")
         self.verification_date = data_dict.get("verification_date")
+        self.source_lookup = data_dict.get("source_lookup")
 
         self.standard = data_dict.get("standard")
         self.standards = data_dict.get("standards", [])
@@ -38,7 +39,9 @@ class ContractEntity:
 
     @property
     def has_source_code(self) -> bool:
-        return len(self.contract_info) > 0 and any(c.get("source") for c in self.contract_info)
+        return isinstance(self.contract_info, list) and any(
+            isinstance(item, dict) and isinstance(item.get('source'), str) and item['source'].strip()
+            for item in self.contract_info)
 
     @property
     def has_abi(self) -> bool:
@@ -48,6 +51,9 @@ class ContractEntity:
         if self.has_source_code:
             status_code = "FULLY_OPEN_SOURCE"
             description = "The contract has been verified and made open source, providing complete source code and ABI."
+        elif isinstance(self.source_lookup, dict) and self.source_lookup.get('status') == 'failed':
+            status_code = "SOURCE_LOOKUP_FAILED"
+            description = "Verified-source lookup failed. Source availability is unknown; this is not evidence that the contract is unverified."
         elif self.has_abi and not self.has_source_code:
             status_code = "ABI_ONLY"
             description = "The contract is not open source or only provides the ABI. The source code is not visible; only the interface definitions are available."

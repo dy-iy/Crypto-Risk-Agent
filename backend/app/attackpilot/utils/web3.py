@@ -1,10 +1,5 @@
-import asyncio
-import json
-import traceback
 from typing import Union
 
-import aiohttp
-from multidict import CIMultiDict
 from web3 import Web3
 
 TOKEN20_721_TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
@@ -32,39 +27,6 @@ def parse_token_transfer(log: dict) -> Union[dict, None]:
             "value": topics_with_data[3],
             "symbol": log['address'],
         }
-
-
-async def web3_json_rpc(tx_obj: dict, provider: str, timeout: int):
-    """
-    Request the JSON-RPC of the web3 providers, and return the raw data of the `result`.
-
-    :param tx_obj:
-    :param provider:
-    :param timeout:
-    :return:
-    """
-    client = aiohttp.ClientSession(
-        loop=asyncio.get_event_loop(),
-        timeout=aiohttp.ClientTimeout(total=timeout)
-    )
-    try:
-        rsp = await client.request(
-            url=provider,
-            method='POST',
-            headers=CIMultiDict(**{'Content-Type': 'application/json'}),
-            data=json.dumps(tx_obj),
-        )
-        data = await rsp.read()
-    except:
-        traceback.print_exc()
-        return
-    finally:
-        await client.close()
-
-    # parse response
-    data = data.decode()
-    data = json.loads(data)
-    return data.get('result')
 
 
 def parse_bytes_data(data: bytes, output_types: list) -> Union[tuple, None]:

@@ -1,19 +1,47 @@
 import ast
 import asyncio
+import hashlib
 import json
+import re
+from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 from app.attackpilot.agents.AgentBase import AgentBase
 from app.attackpilot.daos.contract import ContractDao, ContractCompileItem
-from app.attackpilot.daos.tenderly import BundleTenderlyDao, TenderlyDao
-from app.attackpilot.downloaders.contract import ContractSourceDownloader, ContractBytecodeDownloader, ContractCreationDownloader
+from app.attackpilot.daos.tenderly import BundleTenderlyDao
+from app.attackpilot.downloaders.contract import ContractSourceDownloader, ContractBytecodeDownloader
 from app.attackpilot.downloaders.trans import BlockTimestampDownloader, TxDownloader
 from app.attackpilot.entities.contract import ContractEntityForCompile
+from app.attackpilot.errors import HistoricalReplayValidationError, TenderlyAPIError, failure_message
+from app.attackpilot.privacy import redact_text
 from app.attackpilot.mcp_tools.mcp_client import MCPClient
 from app.attackpilot.prompt.fix_prompt import FIX_SP, FIX_UP, FIX_FIX_UP
 from app.attackpilot.settings import PLATFORM_TO_CHAIN_ID, FIX_TURN
-from app.attackpilot.utils.bytecode_transplanter import BytecodeTransplanter
-from app.attackpilot.utils.patch import SolidityCodePatcher
+from app.attackpilot.utils.bytecode_transplanter import BytecodeTransplanter, RuntimeIntegrityError
+from app.attackpilot.utils.patch import SolidityCodePatcher, build_applied_patch_record
+from app.attackpilot.utils.patch_attribution import build_patch_attribution
+from app.attackpilot.utils.patch_replay import (
+    MAX_REPLAY_REQUESTS, MAX_REPLAY_TRANSACTIONS, PatchReplayBudgetError,
+    PatchReplayEvidenceStore, historical_payload, runtime_overrides, trace_summary,
+)
+from app.attackpilot.utils.replay_validation import validate_simulated_transaction
+
+
+MAX_PATCH_GENERATION_REQUESTS = FIX_TURN
+REPAIRABLE_RUNTIME_REJECTIONS = {
+    'constructor_or_immutable_changed', 'storage_layout_changed', 'patch_runtime_unchanged',
+}
+
+
+class HistoricalRuntimeError(RuntimeError):
+    def __init__(self, reason_code):
+        reasons = {
+            'historical_runtime_unavailable': '缺少可用的历史合约运行时代码；未使用当前 latest 代码替代。',
+            'historical_runtime_conflict': '同一合约在相关历史交易中的运行时代码不一致，已停止混用不同版本。',
+            'historical_runtime_context_mismatch': '历史代码来源与交易、网络或已校验回执不一致，已停止补丁生成。',
+        }
+        self.reason_code = reason_code if reason_code in reasons else 'historical_runtime_unavailable'
+        super().__init__(reasons[self.reason_code])
 
 
 class FixAgent(AgentBase):
@@ -29,261 +57,555 @@ class FixAgent(AgentBase):
         self._platform = self.processed_data.get("dapp", {}).get("platform", "Ethereum")
         self.chain_id = PLATFORM_TO_CHAIN_ID.get(self._platform)
         self.metrics_collector = metrics_collector
+        self._replayed_patch_digests = set()
+        self._rejected_patch_candidates = {}
+        self._source_refresh_attempted_addresses = set()
+        self._patch_generation_requests = 0
+        self._set_verification("not_run", "preconditions", "patch_not_started",
+                               "Patch generation and replay have not started.")
+
+    def _set_verification(self, status, stage, reason_code, reason, *,
+                          replay_attempted=False, replay_completed=False, terminal=False):
+        self.verification = {
+            "schema_version": 2,
+            "status": status,
+            "stage": stage,
+            "reason_code": reason_code,
+            "reason": reason,
+            "replay_attempted": replay_attempted,
+            "replay_completed": replay_completed,
+            "terminal": terminal,
+            "patch_generation_budget": {
+                "max_requests_per_task": MAX_PATCH_GENERATION_REQUESTS,
+                "requests_used": getattr(self, '_patch_generation_requests', 0),
+                "remaining_requests": max(0, MAX_PATCH_GENERATION_REQUESTS - getattr(self, '_patch_generation_requests', 0)),
+                "counting_scope": "generation_calls_including_repairs_and_errors",
+            },
+            "runtime_generation_budget": {
+                "max_requests_per_task": 0,
+                "requests_used": 0,
+                "method": "validated_historical_runtime_transplant",
+            },
+        }
+        budget = getattr(self, "_last_replay_request_budget", None)
+        if isinstance(budget, dict):
+            self.verification["request_budget"] = dict(budget)
+        integrity = getattr(self, "_runtime_integrity", None)
+        if isinstance(integrity, dict):
+            self.verification["runtime_integrity"] = integrity
+        sources = getattr(self, "_runtime_source_evidence", None)
+        if isinstance(sources, dict):
+            self.verification["runtime_source_evidence"] = dict(sources)
+        rejected = getattr(self, '_rejected_patch_candidates', None)
+        if isinstance(rejected, dict) and rejected:
+            self.verification['rejected_patch_candidates'] = [
+                {**item, 'generation_requests': list(item['generation_requests'])}
+                for item in rejected.values()
+            ]
+
+    def _stop(self, status, stage, reason_code, reason, *, patches="", retry_count=0,
+              replay_attempted=False, replay_completed=False, terminal=True):
+        self._set_verification(status, stage, reason_code, reason,
+                               replay_attempted=replay_attempted,
+                               replay_completed=replay_completed, terminal=terminal)
+        return False, reason, patches, retry_count
+
+    def _stop_error(self, exc, stage, reason_code, *, patches="", retry_count=0,
+                    replay_attempted=False):
+        replay_attempted = getattr(exc, "replay_attempted", replay_attempted) is True
+        partial = getattr(exc, "replay_evidence", None)
+        if isinstance(partial, dict):
+            if getattr(self, '_required_replay_triggers', None):
+                partial['required_trigger_transaction_hashes'] = list(self._required_replay_triggers)
+            self.replay_evidence = partial
+        status = "error"
+        if isinstance(exc, TimeoutError):
+            reason_code = f"{stage}_timeout"
+        elif isinstance(exc, PatchReplayBudgetError):
+            status, reason_code = "blocked", exc.reason_code
+        elif isinstance(exc, (HistoricalRuntimeError, RuntimeIntegrityError)):
+            status, reason_code = "blocked", exc.reason_code
+        elif isinstance(exc, HistoricalReplayValidationError):
+            status, reason_code = "blocked", f"baseline_{exc.status}"
+        elif isinstance(exc, TenderlyAPIError) and exc.error_code:
+            reason_code = f"tenderly_{exc.error_code}"
+        stopped = self._stop(status, stage, reason_code,
+                             str(exc) if isinstance(exc, (PatchReplayBudgetError, HistoricalRuntimeError, RuntimeIntegrityError))
+                             else failure_message(exc, "补丁处理"),
+                             patches=patches, retry_count=retry_count, replay_attempted=replay_attempted)
+        if isinstance(exc, PatchReplayBudgetError):
+            self.verification["request_budget"] = {
+                "max_requests_per_task": MAX_REPLAY_REQUESTS,
+                "required_requests": getattr(exc, "required_requests", None),
+                "remaining_requests": getattr(exc, "remaining_requests", None),
+            }
+        if isinstance(partial, dict):
+            return stopped[0], partial, stopped[2], stopped[3]
+        return stopped
+
+    @staticmethod
+    def _valid_runtime_bytecode(bytecode):
+        return (isinstance(bytecode, str)
+                and re.fullmatch(r"(?:0x)?(?:[0-9a-fA-F]{2})+", bytecode) is not None)
+
+    def _stop_generation_budget(self, *, patches='', retry_count=0):
+        patches = patches or getattr(self, '_last_applied_patches', '')
+        previous = getattr(self, 'verification', {})
+        last_reason = previous.get('reason_code')
+        budget_reason = '本任务已达到累计补丁生成调用上限；初稿、反馈修订和失败调用均计入，未再请求生成或回放，补丁效果仍未验证。'
+        candidate_rejected = last_reason in REPAIRABLE_RUNTIME_REJECTIONS
+        reason = previous.get('reason', '')
+        if candidate_rejected and previous.get('generation_stop_reason_code') != 'patch_generation_request_limit':
+            reason = f'{reason} {budget_reason}'
+        result = self._stop('blocked', 'runtime_generation' if candidate_rejected else 'patch_generation',
+                            last_reason if candidate_rejected else 'patch_generation_request_limit',
+                            reason if candidate_rejected else budget_reason,
+                            patches=patches, retry_count=retry_count)
+        self.verification.update(terminal=True, retryable=False,
+                                 generation_stop_reason_code='patch_generation_request_limit')
+        if last_reason not in {'patch_not_started', 'patch_generation_pending'}:
+            self.verification['last_attempt_reason_code'] = last_reason
+        return result
+
+    def _reject_runtime_candidate(self, patch_digest, reason_code, reason):
+        rejected = self._rejected_patch_candidates
+        if patch_digest not in rejected:
+            rejected[patch_digest] = {
+                'applied_patch_sha256': patch_digest, 'reason_code': reason_code,
+                'reason': reason, 'generation_requests': [],
+            }
+        rejected[patch_digest]['generation_requests'].append(self._patch_generation_requests)
+        self._set_verification('unverified', 'runtime_generation', reason_code, reason)
+        self.verification.update(retryable=True, next_action='revise_patch')
+        instructions = {
+            'constructor_or_immutable_changed':
+                'Preserve every original constructor, state initializer, base constructor argument, '
+                'and immutable declaration. Fix runtime logic instead; initialize only new patch state lazily.',
+            'storage_layout_changed':
+                'Preserve all original state declarations, types, order, and inheritance. '
+                'Store any new patch state in compiler-compatible unstructured storage.',
+            'patch_runtime_unchanged':
+                'The applied edits did not change executable runtime. Generate a source change '
+                'that implements the evidenced fix in executed runtime logic.',
+        }
+        return (f"Runtime candidate rejected: {reason_code}: {reason}\n"
+                f"{instructions[reason_code]} Do not repeat this rejected patch or deploy a replacement contract. "
+                'No attack replay was executed for this candidate.')
+
+    def _stop_original_compile(self, failures):
+        missing = all(item['reason_code'] == 'compiler_unavailable' for item in failures)
+        code = 'compiler_unavailable' if missing else 'original_compile_failed'
+        first = failures[0]
+        reason = (f"缺少合约 {first['address']} 所需的 Solidity 编译器 {first['compiler_version']}；补丁生成与回放均未开始。"
+                  if missing else f"合约 {first['address']} 的原始源码未通过编译，无法建立验证基准；补丁生成与回放均未开始。")
+        stopped = self._stop('blocked', 'compile', code, reason)
+        self.verification['compile_diagnostics'] = failures[:8]
+        logger = getattr(self, 'logger', None)
+        if logger:
+            # Diagnostic logging must not replace the actual failure outcome.
+            try:
+                logger.warning(reason + '\n' + json.dumps(failures[:8], ensure_ascii=False))
+            except Exception:
+                pass
+        return stopped
+
+    async def _get_patch_item(self, faulty_index):
+        arguments = {"session_id": self.session_id, "faulty_index": faulty_index}
+        item = await self.mcp_client.call_tool("get_patch_items", arguments)
+        self._check_cancelled()
+        if not isinstance(item, dict):
+            return item
+        address, source = item.get('address'), item.get('source_lookup')
+        files = item.get('contract_info')
+        has_source = (isinstance(files, list) and any(
+            isinstance(file, dict) and isinstance(file.get('source'), str) and file['source'].strip()
+            for file in files))
+        if (has_source or not isinstance(address, str) or not address.strip()
+                or not isinstance(source, dict) or source.get('status') != 'failed'
+                or source.get('retryable') is not True):
+            return item
+        if not hasattr(self, '_source_refresh_attempted_addresses'):
+            self._source_refresh_attempted_addresses = set()
+        address = address.lower()
+        if address in self._source_refresh_attempted_addresses:
+            return item
+        self._source_refresh_attempted_addresses.add(address)
+        refreshed = await self.mcp_client.call_tool("get_patch_items", {**arguments, "refresh_source": True})
+        self._check_cancelled()
+        if not isinstance(refreshed, dict) or str(refreshed.get('address', '')).lower() != address:
+            return {}
+        return refreshed
 
     async def handle(self, fault_data: Dict, verify: bool = True):
         self._check_cancelled()
-        fix_report = fault_data.get("fix_report", {})
-        json_parse_success, parse_result = self.process_fix_report(fix_report)
-        if not json_parse_success:
-            return False, parse_result
-        fix_report = parse_result
+        self.replay_evidence = None
+        self._last_replay_request_budget = None
+        self._required_replay_triggers = []
+        self._replay_scope = ()
+        self._runtime_source_evidence = {}
+        self._runtime_integrity = None
+        if not hasattr(self, "_replayed_patch_digests"):
+            self._replayed_patch_digests = set()
+        if not hasattr(self, '_rejected_patch_candidates'):
+            self._rejected_patch_candidates = {}
+        if getattr(self, '_patch_generation_requests', 0) >= MAX_PATCH_GENERATION_REQUESTS:
+            return self._stop_generation_budget(patches=getattr(self, '_last_applied_patches', ''))
+        self._set_verification("not_run", "preconditions", "patch_not_started",
+                               "Patch generation and replay have not started.")
+        if not isinstance(fault_data, dict):
+            return self._stop("blocked", "preconditions", "invalid_fix_report",
+                              "The patch report is missing or malformed; replay was not started.")
+        try:
+            json_parse_success, fix_report = self.process_fix_report(fault_data.get("fix_report"))
+        except (TypeError, ValueError, AttributeError):
+            json_parse_success, fix_report = False, None
+        if not json_parse_success or not isinstance(fix_report, dict):
+            return self._stop("blocked", "preconditions", "invalid_fix_report",
+                              "The patch report is missing or malformed; replay was not started.")
 
+        faulty_functions = fix_report.get("faulty_functions")
+        if not isinstance(faulty_functions, list) or not faulty_functions:
+            return self._stop("blocked", "preconditions", "no_patch_targets",
+                              "No source patch targets were identified; replay was not started.")
         faulty_indexes = []
-        faulty_functions = fix_report.get("faulty_functions", [])
         for faulty_function in faulty_functions:
-            if "trigger_point" in faulty_function and faulty_function.get("trigger_point") != {}:
-                trigger_point = faulty_function.get("trigger_point")
-                if "index" in trigger_point and trigger_point.get("index") \
-                        and "transaction_hash" in trigger_point and trigger_point.get("transaction_hash"):
-                    index = trigger_point.get("index", None)
-                    transaction_hash = trigger_point.get("transaction_hash", None)
-                    faulty_indexes.append(f"{transaction_hash}::{index}")
+            trigger = faulty_function.get("trigger_point") if isinstance(faulty_function, dict) else None
+            if not isinstance(trigger, dict):
+                return self._stop("blocked", "preconditions", "unmappable_patch_target",
+                                  "A patch target cannot be mapped to an original transaction trace.")
+            index, transaction_hash = trigger.get("index"), trigger.get("transaction_hash")
+            if type(index) is int and index >= 0:
+                pass
+            elif isinstance(index, str) and index.isdecimal():
+                index = int(index)
+            else:
+                return self._stop("blocked", "preconditions", "unmappable_patch_target",
+                                  "A patch target has no valid trace index; replay was not started.")
+            if (not isinstance(transaction_hash, str)
+                    or re.fullmatch(r'0x[0-9a-fA-F]{64}', transaction_hash) is None):
+                return self._stop("blocked", "preconditions", "unmappable_patch_target",
+                                  "A patch target has no original transaction hash; replay was not started.")
+            transaction_hash = transaction_hash.lower()
+            faulty_index = f"{transaction_hash}::{index}"
+            if faulty_index not in faulty_indexes:
+                faulty_indexes.append(faulty_index)
 
-        patch_error = ""
         address2contracts: Dict[str, ContractEntityForCompile] = {}
-        uid2faults: Dict[str, list] = {}  # {unique_id: [indexes]}
-        uid2source: Dict[str, str] = {}  # {unique_id: source_code}
+        uid2faults: Dict[str, list] = {}
+        uid2source: Dict[str, str] = {}
+        self._patch_trigger_transactions = {}
+        # Validate every target before compilation, bytecode fetching, or model calls.
+        # Patching a subset silently would leave the reported hypothesis untested.
         for faulty_index in faulty_indexes:
             self._check_cancelled()
-            patch_item = await self.mcp_client.call_tool("get_patch_items",
-                                                         {"session_id": self.session_id, "faulty_index": faulty_index})
+            try:
+                patch_item = await self._get_patch_item(faulty_index)
+            except Exception as exc:
+                return self._stop_error(exc, "source_lookup", "patch_source_lookup_error")
             self._check_cancelled()
-            print(f"========================\npatch_item:\n{patch_item}========================\n")
-
-            if isinstance(patch_item, str):
-                print(f"[FixAgent] Warning: get_patch_items failed for {faulty_index}. Error: {patch_item}")
-                patch_error = patch_error + "\n" + patch_item
-                continue
-
-            if patch_item == {}:
-                continue
-
+            if not isinstance(patch_item, dict) or not patch_item:
+                return self._stop("blocked", "preconditions", "unmappable_patch_target",
+                                  f"Source mapping is unavailable for trace target {faulty_index}; replay was not started.")
             address = patch_item.get("address")
-            if address and address != "":
-                contract_info = patch_item.get("contract_info", [])
+            if not isinstance(address, str) or not address.strip():
+                return self._stop("blocked", "preconditions", "unmappable_patch_target",
+                                  "A patch target has no contract address; replay was not started.")
+            self._patch_trigger_transactions.setdefault(address.lower(), set()).add(faulty_index.rsplit('::', 1)[0].lower())
+            contract_info = patch_item.get("contract_info")
+            if not isinstance(contract_info, list) or not any(
+                    isinstance(file, dict) and isinstance(file.get('source'), str) and file['source'].strip()
+                    for file in contract_info):
+                source_lookup = patch_item.get("source_lookup")
+                if isinstance(source_lookup, dict) and source_lookup.get("status") in {"failed", "unverified"}:
+                    failed = source_lookup["status"] == "failed"
+                    code = "source_fetch_failed" if failed else "source_not_verified"
+                    reason = (f"合约 {address} 的源码获取失败，尚不能确认源码是否公开；请检查区块浏览器连接或稍后重试。"
+                              if failed else f"区块浏览器尚未提供合约 {address} 的已验证源码；补丁生成与回放已停止。")
+                    stopped = self._stop("blocked", "source_lookup" if failed else "preconditions", code, reason)
+                    self.verification["source_lookup"] = {
+                        "address": address, "status": source_lookup["status"], "reason_code": code,
+                    }
+                    for field in ('refresh_attempted', 'refresh_reason_code'):
+                        if field in source_lookup:
+                            self.verification["source_lookup"][field] = source_lookup[field]
+                    self.verification["retryable"] = failed and source_lookup.get("retryable") is True
+                    self.verification["next_action"] = "retry_source_lookup" if failed else "provide_verified_source"
+                    return stopped
+                return self._stop("blocked", "preconditions", "missing_source",
+                                  f"Source code is unavailable for contract {address}; automatic patching and replay were stopped.")
 
-                has_source = len(contract_info) > 0
+            full_file_map, sources = {}, {}
+            for file_info in contract_info:
+                if (not isinstance(file_info, dict)
+                        or not isinstance(file_info.get("path"), str) or not file_info["path"].strip()
+                        or not isinstance(file_info.get("source"), str) or not file_info["source"].strip()):
+                    return self._stop("blocked", "preconditions", "missing_source",
+                                      f"Source files are incomplete for contract {address}; automatic patching and replay were stopped.")
+                file_id = file_info.get("id")
+                if file_id is None or str(file_id) in full_file_map or file_info["path"] in sources:
+                    return self._stop("blocked", "preconditions", "unmappable_patch_target",
+                                      f"Source file mapping is incomplete or ambiguous for contract {address}.")
+                full_file_map[str(file_id)] = dict(file_info)
+                sources[file_info["path"]] = file_info["source"]
+            target_file_info = full_file_map.get(str(patch_item.get("file_index")))
+            if target_file_info is None:
+                return self._stop("blocked", "preconditions", "unmappable_patch_target",
+                                  f"The trace target cannot be mapped to a source file for contract {address}.")
+            if address in address2contracts and address2contracts[address].sources != sources:
+                return self._stop("blocked", "preconditions", "unmappable_patch_target",
+                                  f"Conflicting source mappings were returned for contract {address}.")
+            if address not in address2contracts:
+                address2contracts[address] = ContractEntityForCompile.from_dict({
+                    **patch_item, "full_file_map": full_file_map, "sources": sources,
+                })
+            unique_id = f"{address}::{target_file_info['path']}"
+            uid2source[unique_id] = target_file_info["source"]
+            uid2faults.setdefault(unique_id, []).append(faulty_index)
 
-                if not has_source:
-                    if patch_item.get("deployed_bytecode"):
-                        error_msg = f"\n[FixAgent] Error: Contract at {patch_item.get('address')} is Unverified (Bytecode Only). Automatic patching requires Source Code."
-                        print(error_msg)
-                        patch_error += error_msg
-                    else:
-                        print(f"[FixAgent] Warning: No contract info found for {faulty_index}")
-                    continue
+        format_contracts = self.get_format_contracts(uid2faults, uid2source, address2contracts)
+        original_compile_results, on_chain_bytecodes = {}, {}
+        if verify:
+            try:
+                # Source mapping may locate the fault in a transaction that the
+                # initial attack classifier labelled auxiliary. Validate the
+                # complete selection before compilation or paid execution.
+                self._replay_selection()
+            except Exception as exc:
+                return self._stop_error(exc, "replay_preparation", "replay_preparation_error")
+            try:
+                original_compile_results = await self._load_compile_result(address2contracts)
+                self._check_cancelled()
+                failures = []
+                for address in address2contracts:
+                    original_item = original_compile_results.get(address)
+                    if not original_item or not original_item.bytecode or len(original_item.bytecode) <= 2:
+                        raw_errors = getattr(original_item, 'errors', []) or []
+                        missing = bool(raw_errors) and all(isinstance(error, dict)
+                            and error.get('reason_code') == 'compiler_unavailable' for error in raw_errors)
+                        failures.append({
+                            'address': address, 'contract_name': address2contracts[address].contract_name,
+                            'compiler_version': address2contracts[address].compiler_version,
+                            'reason_code': 'compiler_unavailable' if missing else 'original_compile_failed',
+                            'errors': [{'severity': error.get('severity', 'error') if isinstance(error, dict) else 'error',
+                                        'message': redact_text(str(error.get('formattedMessage') or error.get('message') or 'Unknown compiler error')
+                                                               if isinstance(error, dict) else str(error))[:1000]}
+                                       for error in raw_errors[:8]],
+                        })
+                if failures:
+                    return self._stop_original_compile(failures)
+            except Exception as exc:
+                return self._stop_error(exc, "compile", "patch_preparation_error")
+            try:
+                on_chain_bytecodes = await self._load_runtime_bytecode(list(address2contracts))
+                self._check_cancelled()
+            except Exception as exc:
+                return self._stop_error(exc, "runtime_generation", "runtime_generation_error")
+            if any(not self._valid_runtime_bytecode(on_chain_bytecodes.get(address))
+                   for address in address2contracts):
+                return self._stop("blocked", "runtime_generation", "missing_runtime_bytecode",
+                                  "Original contract bytecode is unavailable; replay was not started.")
+            try:
+                for address, original_item in original_compile_results.items():
+                    BytecodeTransplanter.validate_original(original_item, on_chain_bytecodes[address])
+                    BytecodeTransplanter._storage_signature(original_item)
+            except RuntimeIntegrityError as exc:
+                return self._stop_error(exc, "runtime_generation", exc.reason_code)
 
-                full_file_map: Dict[int, str] = {
-                    f.get("id"): {
-                        "path": f.get("path", ""),
-                        "name": f.get("name", ""),
-                        "source": f.get("source", "")
-                    } for f in contract_info
-                }
-                sources: Dict[str, str] = {
-                    f.get("path"): f.get("source", "") for f in contract_info
-                }
-
-                if address not in address2contracts:
-                    patch_item["full_file_map"] = full_file_map
-                    patch_item["sources"] = sources
-                    address2contracts[address] = ContractEntityForCompile.from_dict(patch_item)
-
-                file_index = patch_item.get("file_index", -1)
-                target_file_info = full_file_map.get(file_index, {})
-
-                if file_index != -1 and target_file_info != {}:
-                    file_path = target_file_info.get("path", "Unknown.sol")
-                    source_code = target_file_info.get("source", "")
-                    unique_id = f"{address}::{file_path}"
-                    uid2source[unique_id] = source_code
-
-                    if unique_id not in uid2faults:
-                        uid2faults[unique_id] = []
-                    uid2faults[unique_id].append(faulty_index)
-
-        format_contracts = self.get_format_contracts(uid2faults, uid2source) if patch_error == "" else patch_error
-
-        original_compile_results = await self._load_compile_result(address2contracts)
-        self._check_cancelled()
-        on_chain_bytecodes = await self._load_runtime_bytecode(list(address2contracts.keys()))
-        self._check_cancelled()
-
-        patch_execution_success = False
-        patches = ""
-        last_error = fault_data.get("fix_feedback") if len(fault_data.get("fix_feedback", "")) > 0 else ""
-        max_retries = FIX_TURN
+        patches, last_error = "", fault_data.get("fix_feedback") or ""
         retry_count = 0
-        final_replay_logs = ""
-
-        while not patch_execution_success and retry_count < max_retries:
+        while retry_count < FIX_TURN:
             self._check_cancelled()
-
-            if last_error == "":
-                patches = await self.query(FIX_UP.format(
+            if getattr(self, '_patch_generation_requests', 0) >= MAX_PATCH_GENERATION_REQUESTS:
+                return self._stop_generation_budget(patches=patches, retry_count=retry_count)
+            self._set_verification("unverified", "patch_generation", "patch_generation_pending",
+                                   "Patch generation is in progress; replay has not started.")
+            try:
+                prompt = FIX_UP if not last_error else FIX_FIX_UP
+                patches = ""
+                self._patch_generation_requests = getattr(self, '_patch_generation_requests', 0) + 1
+                self.verification['patch_generation_budget'].update(
+                    requests_used=self._patch_generation_requests,
+                    remaining_requests=MAX_PATCH_GENERATION_REQUESTS - self._patch_generation_requests,
+                )
+                proposal = await self.query(prompt.format(
                     fault_report=fault_data.get("fault_report", ""),
                     final_trace=fault_data.get("final_trace", ""),
                     fix_report=fault_data.get("fix_report", ""),
-                    contract_code=format_contracts,
-                    last_error=last_error
-                ), _format='str', temperature=1.0)
-            else:
-                patches = await self.query(FIX_FIX_UP.format(
-                    fault_report=fault_data.get("fault_report", ""),
-                    fix_report=fault_data.get("fix_report", ""),
-                    contract_code=format_contracts,
-                    last_error=last_error
-                ), _format='str', temperature=1.0)
-            parse_success, parse_logs, patched_contracts = SolidityCodePatcher(uid2source).apply_patches(patches)
+                    contract_code=format_contracts, last_error=last_error,
+                ), _format="str", temperature=1.0)
+                parse_success, parse_logs, patched_contracts = SolidityCodePatcher(uid2source).apply_patches(proposal)
+            except Exception as exc:
+                return self._stop_error(exc, "patch_generation", "patch_generation_error",
+                                        patches=patches, retry_count=retry_count)
             self._check_cancelled()
-
-            if not parse_success:
+            changed_sources = isinstance(patched_contracts, dict) and any(
+                isinstance(code, str) and file_id in uid2source
+                and code.splitlines() != uid2source[file_id].splitlines()
+                for file_id, code in patched_contracts.items()
+            )
+            if not parse_success or not changed_sources:
+                retry_count += 1
+                last_error = f"Patch application failed or changed no source code: {parse_logs}"
+                self._set_verification("unverified", "patch_generation", "patch_application_failed",
+                                       "No applicable source change was generated; replay has not started.")
+                continue
+            patches = build_applied_patch_record(uid2source, patched_contracts)
+            self._last_applied_patches = patches
+            patch_digest = hashlib.sha256(patches.encode()).hexdigest()
+            if verify and patch_digest in self._rejected_patch_candidates:
+                rejection = self._rejected_patch_candidates[patch_digest]
+                retry_count += 1
+                last_error = self._reject_runtime_candidate(
+                    patch_digest, rejection['reason_code'], rejection['reason'],
+                )
+                continue
+            replay_key = (patch_digest, getattr(self, '_replay_scope', ()))
+            previous_scopes = [set(key[1]) for key in self._replayed_patch_digests
+                               if isinstance(key, tuple) and len(key) == 2 and key[0] == patch_digest]
+            already_tested = (patch_digest in self._replayed_patch_digests or previous_scopes
+                              and not set().union(*previous_scopes) < set(replay_key[1]))
+            if verify and already_tested:
                 retry_count += 1
                 last_error = (
-                    f"Patch Application Failed (Format/Context Error):\n{parse_logs}\n"
-                    f"Action Required: Please strictly follow the Unified Diff format or "
-                    f"ensure the original code context matches exactly."
+                    "This exact applied patch was already replayed for the same original transactions "
+                    "and did not produce confirmed interception. Revise the implementation or add "
+                    "an evidenced trigger while preserving all previous replay inputs; do not repeat, "
+                    "shrink, or replace the same patch's replay scope."
                 )
-                print(f"[FixAgent] Retry {retry_count}/{max_retries} due to Parsing Error: {parse_logs}")
+                self._set_verification("unverified", "patch_generation", "duplicate_patch", last_error)
                 continue
-
             updated_contracts = self._update_contracts_with_patch(address2contracts, patched_contracts)
-
-            # compile patched code (Creation Bytecode)
-            compile_success, compile_result_or_error = await self.compile_patched_codes(updated_contracts)
+            try:
+                compile_success, compile_result_or_error = await self.compile_patched_codes(updated_contracts)
+            except Exception as exc:
+                return self._stop_error(exc, "compile", "patch_compile_error",
+                                        patches=patches, retry_count=retry_count)
             self._check_cancelled()
-
+            if compile_success and (not isinstance(compile_result_or_error, dict)
+                                    or set(compile_result_or_error) != set(updated_contracts)):
+                compile_success, compile_result_or_error = False, "Compilation returned incomplete contract results."
             if self.metrics_collector:
-                self.metrics_collector.record_compile_status(
-                    self.unique_id,
-                    compile_success
-                )
-
+                self.metrics_collector.record_compile_status(self.unique_id, compile_success)
             if not compile_success:
                 retry_count += 1
-                last_error = f"Compilation Failed:\n{compile_result_or_error}"
-                print(f"[FixAgent] Retry {retry_count}/{max_retries} due to Compilation Error: {last_error}")
+                last_error = f"Compilation failed: {compile_result_or_error}"
+                self._set_verification("unverified", "compile", "patch_compile_failed",
+                                       "The generated patch did not compile; replay has not started.")
                 continue
-
-            # ======================================================================================
-            # Core Logic: Runtime Bytecode Generation (Dual Strategy)
-            # Strategy A: Bytecode Transplantation (Direct Immutable Mapping)
-            # Strategy B: Simulation Deployment (Creation Bytecode + Args -> Tenderly)    backup
-            # ======================================================================================
-
             if not verify:
-                return True, "Patch compiled; replay verification was not requested.", patches, retry_count
+                reason = "Patch compiled; replay verification was not requested."
+                self._set_verification("skipped", "compile", "verification_disabled", reason, terminal=True)
+                return True, reason, patches, retry_count
 
             addr2runtime_bytecode = {}
-            strategy_b_candidates = {}  # Store items that failed Strategy A
-            bytecode_generation_error = ""
-
-            # --- Step A: Attempt Bytecode Transplantation ---
-            for addr, patched_compile_item in compile_result_or_error.items():
+            runtime_integrity = {
+                "schema_version": 1, "status": "validated", "applied_patch_sha256": patch_digest,
+                "contracts": {},
+            }
+            runtime_rejection = None
+            for address, patched_compile_item in compile_result_or_error.items():
                 self._check_cancelled()
-                original_item = original_compile_results.get(addr)
-                on_chain_code = on_chain_bytecodes.get(addr)
-
-                if not original_item:
-                    bytecode_generation_error += f"Missing original compile result for {addr}\n"
-                    continue
-
-                # Try Strategy A
-                is_ok, final_bytecode, logs = BytecodeTransplanter.transplant(
-                    original_compile_item=original_item,
-                    on_chain_runtime_bytecode_hex=on_chain_code,
-                    patched_compile_item=patched_compile_item
+                is_ok, final_bytecode, diagnostic = BytecodeTransplanter.transplant(
+                    original_compile_item=original_compile_results.get(address),
+                    on_chain_runtime_bytecode_hex=on_chain_bytecodes.get(address),
+                    patched_compile_item=patched_compile_item,
                 )
-
-                if is_ok:
-                    addr2runtime_bytecode[addr] = final_bytecode
-                    print(f"[FixAgent] Strategy A (Transplant) successful for {addr}")
-                else:
-                    print(f"[FixAgent] Strategy A failed for {addr}: {logs}. Fallback to Strategy B.")
-                    strategy_b_candidates[addr] = patched_compile_item
-
-            # --- Step B: Attempt Tenderly Simulation Deployment (Fallback) ---
-            if len(strategy_b_candidates) > 0:
-                addr2creation_bytecode = {}
-                for addr, compile_item in strategy_b_candidates.items():
-                    creation_bytecode = compile_item.creation_bytecode
-                    if not creation_bytecode:
-                        print(f"[FixAgent] Warning: No creation bytecode for {addr}, skipping Strategy B.")
-                        continue
-                    addr2creation_bytecode[addr] = creation_bytecode
-
-                print(f"[FixAgent] Executing Strategy B (Tenderly Deploy) for: {list(addr2creation_bytecode.keys())}")
-                try:
-                    deployed_results = await self._deploy_contracts(addr2creation_bytecode)
-                    self._check_cancelled()
-
-                    for addr, runtime_code in deployed_results.items():
-                        if runtime_code and len(runtime_code) > 2:
-                            addr2runtime_bytecode[addr] = runtime_code
-                            print(f"[FixAgent] Strategy B successful for {addr}")
-                        else:
-                            error_msg = f"Strategy B failed for {addr}: Tenderly returned empty bytecode. Error Message: {deployed_results}"
-                            print(f"[FixAgent] {error_msg}")
-                            bytecode_generation_error += error_msg + "\n"
-
-                except Exception as e:
-                    error_msg = f"Strategy B Exception: {str(e)}"
-                    print(f"[FixAgent] {error_msg}")
-                    bytecode_generation_error += error_msg + "\n"
-
-            missing_bytecode_addresses = []
-            for addr in compile_result_or_error.keys():
-                if addr not in addr2runtime_bytecode:
-                    missing_bytecode_addresses.append(addr)
-
-            if len(missing_bytecode_addresses) > 0:
+                if not is_ok or not self._valid_runtime_bytecode(final_bytecode):
+                    # Constructor simulation cannot repair a provenance or layout
+                    # mismatch: it may initialize a different state altogether.
+                    code = diagnostic.split(":", 1)[0] if not is_ok else "runtime_generation_failed"
+                    if code not in {"original_runtime_mismatch", "storage_layout_unavailable",
+                                    "storage_layout_changed", "immutable_layout_mismatch", "constructor_or_immutable_changed"}:
+                        code = "runtime_generation_failed"
+                    reason = f"Contract {address}: {diagnostic}; no attack replay was executed."
+                    if code in REPAIRABLE_RUNTIME_REJECTIONS:
+                        runtime_rejection = code, reason
+                        break
+                    return self._stop("blocked", "runtime_generation", code,
+                                      reason,
+                                      patches=patches, retry_count=retry_count)
+                historical_code = BytecodeTransplanter._code(on_chain_bytecodes[address])
+                patched_code = BytecodeTransplanter._code(final_bytecode)
+                original_end, _ = BytecodeTransplanter._metadata(historical_code)
+                patched_end, _ = BytecodeTransplanter._metadata(patched_code)
+                if historical_code[:original_end] == patched_code[:patched_end]:
+                    runtime_rejection = (
+                        'patch_runtime_unchanged',
+                        f"Contract {address}: applied source edits do not change executable runtime; no attack replay was executed.",
+                    )
+                    break
+                addr2runtime_bytecode[address] = final_bytecode
+                runtime_integrity["contracts"][address.lower()] = {
+                    "original_runtime_sha256": hashlib.sha256(historical_code).hexdigest(),
+                    "original_compiled_runtime_sha256": hashlib.sha256(BytecodeTransplanter._code(original_compile_results[address].bytecode)).hexdigest(),
+                    "patched_runtime_sha256": hashlib.sha256(patched_code).hexdigest(),
+                    "storage_layout_checked": True, "immutable_checked": True,
+                }
+            if runtime_rejection is not None:
                 retry_count += 1
-                error_details = bytecode_generation_error if bytecode_generation_error else "Unknown deployment error"
-
-                last_error = (
-                    f"Runtime Bytecode Generation Failed for addresses: {missing_bytecode_addresses}.\n"
-                    f"This means the patched code could not be deployed or transplanted.\n"
-                    f"Potential reasons: Constructor reverted during deployment, or Immutable variables mismatch.\n"
-                    f"Detailed Error Logs:\n{error_details}"
-                )
-                print(f"[FixAgent] Retry {retry_count}/{max_retries} (Bytecode Gen Error): {last_error}")
+                last_error = self._reject_runtime_candidate(patch_digest, *runtime_rejection)
                 continue
+            self._runtime_integrity = runtime_integrity
+            patch_attribution = build_patch_attribution(
+                address2contracts, updated_contracts, compile_result_or_error,
+                addr2runtime_bytecode, patches,
+            )
 
             try:
                 tenderly_transactions = await self.prepare_bundle_data()
                 self._check_cancelled()
+            except Exception as exc:
+                return self._stop_error(exc, "replay_preparation", "replay_preparation_error",
+                                        patches=patches, retry_count=retry_count)
+            if not isinstance(tenderly_transactions, list) or not tenderly_transactions:
+                return self._stop("blocked", "replay_preparation", "no_replay_transactions",
+                                  "No original attack transactions are available for replay.",
+                                  patches=patches, retry_count=retry_count)
+            self._set_verification("unverified", "replay", "replay_pending",
+                                   "The patched transaction replay has started; its outcome is not yet established.",
+                                   replay_attempted=True)
+            try:
+                self._replayed_patch_digests.add(replay_key)
                 execution_success, replay_logs = await self.run_patch_verification_from_tenderly(
-                    tenderly_transactions, addr2runtime_bytecode
-                )
+                    tenderly_transactions, addr2runtime_bytecode)
                 self._check_cancelled()
+            except Exception as exc:
+                return self._stop_error(exc, "replay", "replay_service_error", patches=patches,
+                                        retry_count=retry_count, replay_attempted=True)
+            if isinstance(replay_logs, dict):
+                replay_logs["runtime_integrity"] = runtime_integrity
+                replay_logs["patch_attribution"] = patch_attribution
+                replay_logs["required_trigger_transaction_hashes"] = list(self._required_replay_triggers)
+                self.replay_evidence = replay_logs
+            if not execution_success:
+                stopped = self._stop("error", "replay", "replay_service_error",
+                                  replay_logs if isinstance(replay_logs, str) and replay_logs else
+                                  "The replay service did not return usable execution evidence; patch effectiveness is unknown.",
+                                  patches=patches, retry_count=retry_count, replay_attempted=True)
+                return (stopped[0], replay_logs, stopped[2], stopped[3]) if isinstance(replay_logs, dict) else stopped
+            if (not isinstance(replay_logs, dict) or replay_logs.get("schema_version") != 1
+                    or replay_logs.get("status") != "completed"
+                    or replay_logs.get("control_validation") != "validated"
+                    or not isinstance(replay_logs.get("transactions"), list)
+                    or not replay_logs["transactions"]):
+                return self._stop("error", "replay", "invalid_replay_response",
+                                  "The replay service returned no execution evidence; patch effectiveness is unknown.",
+                                  patches=patches, retry_count=retry_count, replay_attempted=True)
+            replay_logs["applied_patch_sha256"] = hashlib.sha256(patches.encode()).hexdigest()
+            self.replay_evidence = replay_logs
+            # An EVM revert is completed execution. The coordinator's evidence
+            # gate must constrain the model's interpretation of effectiveness.
+            self._set_verification("unverified", "replay", "replay_completed_pending_review",
+                                   "Patched execution evidence is available and awaits effectiveness review.",
+                                   replay_attempted=True, replay_completed=True)
+            return True, replay_logs, patches, retry_count
 
-                if not execution_success:
-                    retry_count += 1
-                    last_error = f"Tenderly Simulation API Failed (Infrastructure Error or Revert). Logs: {replay_logs}\nAction: Please check logic or bytecode size."
-                    print(f"[FixAgent] Retry {retry_count}/{max_retries}: Verification Failed. {last_error}")
-                    continue
-                else:
-                    patch_execution_success = True
-                    final_replay_logs = replay_logs
-                    print(f"Patch applied and simulated successfully. Handing over to Judge. Revert reason: {replay_logs}.")
-                    break
-            except Exception as e:
-                retry_count += 1
-                last_error = f"Exception during verification preparation: {str(e)}"
-                print(f"[FixAgent] Retry {retry_count}/{max_retries}: Exception: {str(e)}")
-                continue
-
-        return patch_execution_success, final_replay_logs, patches, retry_count
+        # Local generation/compile retries are already exhausted. Repeating the
+        # same preconditions in another outer loop cannot add execution proof.
+        if self._patch_generation_requests >= MAX_PATCH_GENERATION_REQUESTS:
+            return self._stop_generation_budget(patches=patches, retry_count=retry_count)
+        self.verification.update(terminal=True, retryable=False, next_action="inspect_patch_generation")
+        return False, self.verification["reason"], patches, retry_count
 
     def _update_contracts_with_patch(
             self,
@@ -292,16 +614,20 @@ class FixAgent(AgentBase):
     ) -> Dict[str, ContractEntityForCompile]:
         import copy
         contracts_copy = copy.deepcopy(original_contracts)
+        changed_addresses = set()
 
         for unique_id, patched_code in patched_contracts.items():
             if "::" not in unique_id: continue
             addr, file_path = unique_id.split("::", 1)
 
-            if not patched_code:
+            if not isinstance(patched_code, str):
                 continue
 
             if addr in contracts_copy:
                 entity = contracts_copy[addr]
+                if not entity.sources or file_path not in entity.sources or entity.sources[file_path].splitlines() == patched_code.splitlines():
+                    continue
+                changed_addresses.add(addr)
 
                 if entity.full_file_map:
                     for file_id, file_info in entity.full_file_map.items():
@@ -310,40 +636,122 @@ class FixAgent(AgentBase):
 
                 if entity.sources and file_path in entity.sources:
                     entity.sources[file_path] = patched_code
-        return contracts_copy
+        return {address: contracts_copy[address] for address in changed_addresses}
 
-    async def prepare_bundle_data(self):
+    def _replay_selection(self):
+        """Preserve original order while covering candidates and mapped triggers."""
         tx_list = self.processed_data.get("transaction_hash_list", [])
         tx2detail = self.processed_data.get("transaction_to_detail", {})
-        attack_transactions = self.processed_data.get("attack_transactions", [])
+        candidates = self.processed_data.get("attack_transactions", [])
+        triggers = getattr(self, "_patch_trigger_transactions", {})
+        if (not isinstance(tx_list, list) or not isinstance(tx2detail, dict)
+                or not isinstance(candidates, list) or not isinstance(triggers, dict)
+                or any(not isinstance(group, (set, list, tuple)) for group in triggers.values())):
+            raise HistoricalReplayValidationError('unavailable', 'missing_evidence',
+                                                  details={'field': 'replay_selection'})
+        required = {tx for group in triggers.values() for tx in group}
+        requested = list(candidates) + list(required)
+        if any(not isinstance(tx, str) or re.fullmatch(r'0x[0-9a-fA-F]{64}', tx) is None
+               for tx in tx_list + requested + list(tx2detail)):
+            raise HistoricalReplayValidationError('unavailable', 'missing_evidence',
+                                                  details={'field': 'original_transaction_hash'})
+        ordered = list(dict.fromkeys(tx.lower() for tx in tx_list))
+        details = {tx.lower(): detail for tx, detail in tx2detail.items()}
+        if len(details) != len(tx2detail):
+            raise HistoricalReplayValidationError('inconsistent', 'context_mismatch',
+                                                  details={'field': 'replay_selection'})
+        required = {tx.lower() for tx in required}
+        selected = {tx.lower() for tx in requested}
+        if (not selected.issubset(ordered)
+                or any(not isinstance(details.get(tx), dict) for tx in selected)):
+            raise HistoricalReplayValidationError('unavailable', 'missing_evidence',
+                                                  details={'field': 'required_replay_transaction'})
+        if len(selected) > MAX_REPLAY_TRANSACTIONS:
+            raise PatchReplayBudgetError(transaction_limit=True)
+        # Changing only candidate order must not bypass duplicate protection;
+        # adding a newly located trigger permits the same patch to be measured.
+        self._replay_scope = tuple(sorted(selected))
+        self._required_replay_triggers = [tx for tx in ordered if tx in required]
+        return [(tx, details[tx]) for tx in ordered if tx in selected]
 
-        block_numbers = [detail["block_number"] for tx, detail in tx2detail.items()]
+    async def prepare_bundle_data(self):
+        selection = self._replay_selection()
+        block_numbers = list(dict.fromkeys(detail["block_number"] for _, detail in selection))
         block2time = await self._load_transaction_time(block_numbers)
-
         tenderly_transactions = []
-        for tx in tx_list:
-            if tx in attack_transactions:
-                detail = tx2detail.get(tx)
-                if detail:
-                    block = detail["block_number"]
-                    timestamp = block2time.get(block)
-                    if not timestamp:
-                        raise ValueError(
-                            f"CRITICAL: Failed to fetch timestamp for block {block}. Cannot proceed.")
-                    detail["timestamp"] = timestamp
-                    tenderly_transactions.append(detail)
+        for tx, detail in selection:
+            block = detail["block_number"]
+            timestamp = block2time.get(block)
+            if type(timestamp) is not int or timestamp < 0:
+                raise ValueError(f"Failed to fetch timestamp for block {block}; replay was not started.")
+            # Do not mutate classification or the saved original detail. The
+            # DAO still validates this identity against the task's RPC cache.
+            tenderly_transactions.append({**detail, "original_transaction_hash": tx, "timestamp": timestamp})
         return tenderly_transactions
 
     async def run_patch_verification_from_tenderly(self, transactions, addr2bytecode):
-        verification_success, verification_result = await BundleTenderlyDao(
-            _platform=self._platform).bundle_simulate_txs_in_tenderly(transactions, addr2bytecode)
+        dao = BundleTenderlyDao(_platform=self._platform)
+        try:
+            budget = self._preflight_replay_budget(dao, transactions, addr2bytecode)
+        except Exception as exc:
+            # A preflight failure precedes every paid request, including an
+            # invalid source context rather than only an exhausted budget.
+            exc.replay_attempted = False
+            raise
+        verification_success, verification_result = await dao.bundle_simulate_txs_in_tenderly(transactions, addr2bytecode)
+        self._last_replay_request_budget = {
+            "max_requests_per_task": MAX_REPLAY_REQUESTS,
+            "max_transactions": MAX_REPLAY_TRANSACTIONS,
+            "new_requests_this_round": budget['required_requests'],
+            "reused_requests_this_round": 2 * len(transactions) - budget['required_requests'],
+            "remaining_requests": budget['remaining_requests'] - budget['required_requests'],
+        }
+        if isinstance(verification_result, dict):
+            verification_result.setdefault('request_budget', {}).update(self._last_replay_request_budget)
         return verification_success, verification_result
+
+    @staticmethod
+    def _preflight_replay_budget(dao, transactions, addr2bytecode):
+        """Do not start a paid round that cannot finish all independent pairs.
+
+        Historical controls are immutable and reused across source revisions;
+        only cache misses consume the fixed task budget. Reservations in the
+        DAO remain the final atomic limit when a request is actually sent.
+        """
+        if dao.chain_id is None or not isinstance(transactions, list) or not transactions:
+            raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
+        if len(transactions) > MAX_REPLAY_TRANSACTIONS:
+            error = PatchReplayBudgetError(transaction_limit=True)
+            error.replay_attempted = False
+            raise error
+        overrides = runtime_overrides(addr2bytecode)
+        missing, seen = 0, set()
+        for detail in transactions:
+            if not isinstance(detail, dict):
+                raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
+            original_hash = detail.get('original_transaction_hash') or detail.get('hash')
+            context, original = dao.evidence_store.original_context(original_hash, dao.chain_id)
+            if context['transaction_hash'] in seen:
+                raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
+            seen.add(context['transaction_hash'])
+            for changes in (None, overrides):
+                if dao.evidence_store.cached_response(historical_payload(context, original, changes)) is None:
+                    missing += 1
+        occupied = sum((dao.evidence_store.root / 'requests' / f'{number:02}.json').exists()
+                       for number in range(1, MAX_REPLAY_REQUESTS + 1))
+        remaining = MAX_REPLAY_REQUESTS - occupied
+        if missing > remaining:
+            error = PatchReplayBudgetError()
+            error.replay_attempted = False
+            error.required_requests, error.remaining_requests = missing, remaining
+            raise error
+        return {'required_requests': missing, 'remaining_requests': remaining}
 
     async def compile_patched_codes(self, patched_contracts):
         """
         compile patched contracts
         """
-        if patched_contracts == {}:
+        if not isinstance(patched_contracts, dict) or not patched_contracts:
             return False, "Patched contract is none. Patch application is wrong."
 
         for addr, entity in patched_contracts.items():
@@ -353,20 +761,19 @@ class FixAgent(AgentBase):
             if not hasattr(entity, 'sources') or not entity.sources:
                 return False, f"Pre-compile Check Failed: Contract {addr} has no 'sources' dictionary. It might be an unverified contract."
 
-            has_valid_code = False
-            for file_path, source_code in entity.sources.items():
-                if source_code and len(source_code.strip()) > 0:
-                    has_valid_code = True
-                    break
-
-            if not has_valid_code:
+            if any(not isinstance(source_code, str) or not source_code.strip()
+                   for source_code in entity.sources.values()):
                 return False, (
                     f"Pre-compile Check Failed: Contract {addr} contains file entries but source code is empty. "
                     f"This usually happens when attempting to patch a Bytecode-Only contract.")
 
         addr2compile = await self._load_compile_result(patched_contracts)
+        if not isinstance(addr2compile, dict) or set(addr2compile) != set(patched_contracts):
+            return False, "Compilation returned incomplete contract results."
 
         for addr, compile_item in addr2compile.items():
+            if compile_item is None:
+                return False, f"Compilation returned no result for address: {addr}"
             has_bytecode = compile_item.bytecode and len(compile_item.bytecode) > 2 \
                            and compile_item.creation_bytecode and len(compile_item.creation_bytecode) > 2
 
@@ -407,39 +814,138 @@ class FixAgent(AgentBase):
         results = await asyncio.gather(*tasks)
         return {bn: ts for bn, ts in results}
 
+    def _validated_runtime_context(self, store, transaction_hash):
+        """Recheck cached original replay provenance before using its contracts."""
+        context, _ = store.original_context(transaction_hash, self.chain_id)
+        details = self.processed_data.get('transaction_to_detail', {})
+        detail = details.get(transaction_hash, {}) if isinstance(details, dict) else {}
+        baseline = detail.get('baseline_validation') if isinstance(detail, dict) else None
+        receipt_digest = hashlib.sha256(json.dumps({
+            key: context[key] for key in ('transaction_hash', 'chain_id', 'block_hash', 'block_number',
+                                         'transaction_index', 'status', 'gas_used', 'logs')
+        }, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        expected = {
+            'schema_version': 1, 'status': 'validated', 'method': 'rpc_receipt_vs_tenderly_original_replay',
+            'original_transaction_hash': context['transaction_hash'], 'network_id': str(context['chain_id']),
+            'block_number': context['block_number'], 'block_hash': context['block_hash'],
+            'transaction_index': context['transaction_index'], 'receipt_status': context['status'],
+            'gas_used': context['gas_used'], 'log_count': len(context['logs']), 'receipt_digest': receipt_digest,
+            'ordered_logs_sha256': hashlib.sha256(json.dumps(context['logs'], separators=(',', ':')).encode()).hexdigest(),
+        }
+        if (not isinstance(baseline, dict) or type(baseline.get('schema_version')) is not int
+                or any(baseline.get(key) != value for key, value in expected.items())):
+            raise HistoricalRuntimeError('historical_runtime_context_mismatch')
+        simulation_id = baseline.get('simulation_id')
+        if simulation_id is None:
+            return context, None
+        if not isinstance(simulation_id, str) or re.fullmatch(r'[a-zA-Z0-9-]{1,128}', simulation_id) is None:
+            raise HistoricalRuntimeError('historical_runtime_context_mismatch')
+        path = Path(store.cache_root) / 'trace' / 'simulation_result' / f'{simulation_id}.json'
+        try:
+            full_result = json.loads(path.read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            return context, None
+        except (OSError, ValueError, UnicodeDecodeError):
+            raise HistoricalRuntimeError('historical_runtime_context_mismatch') from None
+        validated = validate_simulated_transaction(context, full_result)
+        if (validated.get('simulation_id') != simulation_id
+                or any(validated.get(key) != value for key, value in expected.items())
+                or full_result.get('simulation', {}).get('state_objects')):
+            raise HistoricalRuntimeError('historical_runtime_context_mismatch')
+        return context, full_result
+
     async def _load_runtime_bytecode(self, contract_addresses: List[str]) -> Dict[str, str]:
-        async def _create_task(_address):
-            return await ContractBytecodeDownloader(
-                rpc_url=await self.rpc_bucket.get(),
-            ).download(contract_address=_address)
+        triggers = getattr(self, '_patch_trigger_transactions', {})
+        if any(not triggers.get(address.lower()) for address in contract_addresses):
+            raise HistoricalRuntimeError('historical_runtime_unavailable')
+        store = PatchReplayEvidenceStore()
+        transactions = set(self.processed_data.get('attack_transactions') or [])
+        transactions.update(tx for group in triggers.values() for tx in group)
+        contexts = {tx: self._validated_runtime_context(store, tx) for tx in sorted(transactions)}
+        self._runtime_source_evidence = {}
+        historical_codes = {}
+        result = {}
+        for address in contract_addresses:
+            target = address.lower()
+            versions, evidence = set(), []
+            self._runtime_source_evidence[target] = evidence
+            for tx_hash, (context, full_result) in contexts.items():
+                contracts = full_result.get('contracts', []) if isinstance(full_result, dict) else []
+                if not isinstance(contracts, list):
+                    raise HistoricalRuntimeError('historical_runtime_context_mismatch')
+                matches = [item for item in contracts if isinstance(item, dict)
+                           and isinstance(item.get('address'), str) and item['address'].lower() == target]
+                observed = {str(context.get('to')).lower()}
+                if isinstance(full_result, dict):
+                    trace = trace_summary(full_result.get('transaction', {}).get('transaction_info', {}), [])
+                    observed.update(trace.get('call_targets', []))
+                if tx_hash not in triggers[target] and not matches and target not in observed:
+                    continue
+                code = None
+                for contract in matches:
+                    candidate = contract.get('deployed_bytecode')
+                    if candidate in (None, '', '0x'):
+                        continue
+                    if (str(contract.get('network_id')) != str(context['chain_id'])
+                            or not self._valid_runtime_bytecode(candidate)):
+                        raise HistoricalRuntimeError('historical_runtime_context_mismatch')
+                    candidate = '0x' + candidate.removeprefix('0x').lower()
+                    if code is not None and code != candidate:
+                        raise HistoricalRuntimeError('historical_runtime_conflict')
+                    code = candidate
+                from_simulation = code is not None
+                if code is None:
+                    quantity = hex(context['block_number'])
+                    cache_key = (target, quantity)
+                    if cache_key not in historical_codes:
+                        historical_codes[cache_key] = await ContractBytecodeDownloader(
+                            rpc_url=await self.rpc_bucket.get(),
+                        ).download(contract_address=target, quantity=quantity)
+                    code = historical_codes[cache_key]
+                    if not self._valid_runtime_bytecode(code):
+                        raise HistoricalRuntimeError('historical_runtime_unavailable')
+                    code = '0x' + code.removeprefix('0x').lower()
+                versions.add(code)
+                evidence.append({
+                    'original_transaction_hash': tx_hash, 'network_id': str(context['chain_id']),
+                    'block_number': context['block_number'], 'transaction_index': context['transaction_index'],
+                    'simulation_id': full_result['simulation']['id'] if from_simulation else None,
+                    'source': 'validated_original_simulation' if from_simulation else 'historical_block_rpc',
+                    'scope': 'original_transaction_context' if from_simulation else 'historical_block_end',
+                    'transaction_state_verified': from_simulation,
+                    'bytecode_sha256': hashlib.sha256(bytes.fromhex(code[2:])).hexdigest(),
+                })
+                if len(versions) > 1:
+                    raise HistoricalRuntimeError('historical_runtime_conflict')
+            if not versions:
+                raise HistoricalRuntimeError('historical_runtime_unavailable')
+            result[address] = versions.pop()
+        return result
 
-        tasks = [_create_task(contract_address) for contract_address in contract_addresses]
-        results = await asyncio.gather(*tasks)
-        addr2runtime_bytecode = dict()
-        for i, contract_address in enumerate(contract_addresses):
-            addr2runtime_bytecode[contract_address] = results[i]
-        return addr2runtime_bytecode
-
-    async def _deploy_contracts(self, addr2creation_bytecode: Dict[str, str]):
-        async def _create_task(_addr: str, _bytecode: str):
-            return await TenderlyDao(
-                _platform=self._platform,
-                tx_downloader=TxDownloader(rpc_url=await self.rpc_bucket.get()),
-                source_downloader=ContractSourceDownloader(apikey=await self.apikey_bucket.get()),
-                bytecode_downloader=ContractBytecodeDownloader(rpc_url=await self.rpc_bucket.get()),
-                creation_downloader=ContractCreationDownloader(apikey=await self.apikey_bucket.get()),
-                addr2property={}
-            ).deploy_contracts_on_tenderly(_addr, _bytecode)
-
-        tasks = [_create_task(addr, creation_bytecode) for addr, creation_bytecode in addr2creation_bytecode.items()]
-        result = await asyncio.gather(*tasks)
-        return {original_addr: runtime_code for original_addr, runtime_code in result}
-
-    def get_format_contracts(self, uid2faults: Dict[str, List], uid2source: Dict[str, str]):
+    def get_format_contracts(self, uid2faults: Dict[str, List], uid2source: Dict[str, str],
+                             address2contracts: Dict[str, ContractEntityForCompile]):
         lines = ["=" * 60]
         for unique_id, source_code in uid2source.items():
             fault_indexes = uid2faults.get(unique_id, [])
+            contract = address2contracts[unique_id.split('::', 1)[0]]
+            # Match ContractDao's effective settings; a pragma alone cannot
+            # identify the deployed compiler or its optimizer/EVM options.
+            compiler_settings = contract.compiler_settings or {}
+            if compiler_settings:
+                optimizer = compiler_settings.get('optimizer', {'enabled': False, 'runs': 200})
+                evm_version = compiler_settings.get('evmVersion') or 'compiler default'
+            else:
+                optimizer = {'enabled': contract.optimizations_used,
+                             'runs': contract.optimization_runs or 200}
+                evm_version = contract.evm_version or 'compiler default'
+                if str(evm_version).lower() == 'default':
+                    evm_version = 'compiler default'
             lines.append(f"# File: {unique_id}")
+            lines.append('Compilation target: ' + json.dumps({
+                'compiler_version': contract.compiler_version,
+                'evm_version': evm_version,
+                'optimizer': optimizer,
+            }, ensure_ascii=False, sort_keys=True))
             lines.append(f"Faulty functions in this file: {fault_indexes}")
             lines.append("-" * 20)
             lines.append(source_code)
@@ -467,11 +973,13 @@ class FixAgent(AgentBase):
         return True, parse_result
 
     def final_process(self, parse_result):
+        if isinstance(parse_result, dict):
+            return True, parse_result
         try:
             parse_result = json.loads(parse_result)
-        except json.JSONDecodeError:
+        except (TypeError, ValueError):
             try:
                 parse_result = ast.literal_eval(parse_result)
             except Exception:
                 return False, "can't parse fix report"
-        return True, parse_result
+        return isinstance(parse_result, dict), parse_result

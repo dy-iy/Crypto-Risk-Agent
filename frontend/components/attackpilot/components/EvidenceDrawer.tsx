@@ -3,7 +3,7 @@ import { Descriptions, Drawer, Empty, List, Progress, Segmented, Space, Tag, Typ
 import { Database, FileText, TerminalSquare, Wrench } from "lucide-react";
 import { EvidenceItem } from "../types";
 import { normalizeEvidenceMarkdown } from "../utils/evidence";
-import { enrichEvidenceItems, isToolBackedEvidence } from "../utils/evidenceScoring";
+import { enrichEvidenceItems, evidenceScoreLabel, isToolBackedEvidence } from "../utils/evidenceScoring";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { agentDisplayName, messageTypeLabel } from "../utils/presentation";
 
@@ -39,17 +39,19 @@ function renderableContent(item: EvidenceItem) {
   return normalizeEvidenceMarkdown(item.full_content || item.content);
 }
 
-function tierLabel(tier?: EvidenceItem["evidence_tier"]) {
-  if (tier === "verified") return "已验证";
-  if (tier === "tool_backed") return "工具证据";
+function tierLabel(item: EvidenceItem) {
+  if (item.source === "transaction") return "交易引用（未核验）";
+  if (item.source === "system") return "结构化记录";
+  const tier = item.evidence_tier;
+  if (tier === "tool_backed") return "工具调用记录";
   if (tier === "agent_derived") return "智能体推理";
   return "报告提取";
 }
 
 function supportLabel(confidence: EvidenceItem["confidence"]) {
-  if (confidence === "high") return "强支撑";
-  if (confidence === "medium") return "一般支撑";
-  return "弱支撑";
+  if (confidence === "high") return "高相关";
+  if (confidence === "medium") return "相关";
+  return "低相关";
 }
 
 const EvidenceDrawer: React.FC<EvidenceDrawerProps> = ({ title, open, evidence, onClose }) => {
@@ -69,16 +71,17 @@ const EvidenceDrawer: React.FC<EvidenceDrawerProps> = ({ title, open, evidence, 
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无关联证据" />
       ) : (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Typography.Text type="secondary">按内容相关性排序；哈希引用、工具调用及模型叙述均需核对执行记录，分数不代表结论已验证。</Typography.Text>
           <Segmented
             size="small"
             value={filter}
             onChange={(value) => setFilter(value as EvidenceFilter)}
             options={[
               { label: "全部", value: "all" },
-              { label: "工具证据", value: "tool_backed" },
-              { label: "无工具支撑", value: "no_tool" },
+              { label: "工具记录", value: "tool_backed" },
+              { label: "其他记录", value: "no_tool" },
               { label: "仅报告", value: "report_only" },
-              { label: "弱证据", value: "weak" },
+              { label: "低相关", value: "weak" },
             ]}
           />
           {visibleEvidence.length === 0 ? (
@@ -94,10 +97,10 @@ const EvidenceDrawer: React.FC<EvidenceDrawerProps> = ({ title, open, evidence, 
                       <Space size={8} wrap>
                         <span className="evidence-source-icon">{getSourceIcon(item.source)}</span>
                         <Typography.Text strong>{item.title}</Typography.Text>
-                        <Tag>{tierLabel(item.evidence_tier)}</Tag>
+                        <Tag>{tierLabel(item)}</Tag>
                         <Tag color={getSupportColor(item.confidence)}>{supportLabel(item.confidence)}</Tag>
                         <Tag color={getScoreColor(item.score_label)}>
-                          {item.score_label === "strong" ? "强证据" : item.score_label === "supporting" ? "辅助证据" : "弱证据"}
+                          {evidenceScoreLabel(item.score_label ?? "weak")}
                         </Tag>
                       </Space>
                     </div>

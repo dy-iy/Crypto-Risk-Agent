@@ -1,7 +1,9 @@
+import json
 from typing import Dict
 
 from app.attackpilot.agents.AgentBase import AgentBase
 from app.attackpilot.prompt.tx_judge_prompt import PATCH_JUDGE_UP, PATCH_JUDGE_SP
+from app.attackpilot.utils.verification import adjudicate_patch_verification
 
 
 class JudgeAgent(AgentBase):
@@ -11,15 +13,54 @@ class JudgeAgent(AgentBase):
         self.unique_id = dapp_name
 
     async def handle(self, judge_data: Dict) -> Dict:
-        result = await self.query(PATCH_JUDGE_UP.format(
-            current_hypothesis=judge_data["current_hypothesis"],
-            replay_logs=judge_data["replay_logs"],
+        prompt = PATCH_JUDGE_UP.format(
+            current_hypothesis=json.dumps(judge_data["current_hypothesis"], ensure_ascii=False),
+            replay_logs=json.dumps(judge_data["replay_logs"], ensure_ascii=False),
             patches=judge_data["patches"],
-            real_balance_change=judge_data["real_balance_change"]
-        ), _format="json")
+            real_balance_change=json.dumps(judge_data["real_balance_change"], ensure_ascii=False)
+        )
+        for attempt in range(2):
+            self._check_cancelled()
+            result = await self.query(prompt, _format="json")
+            result = result if isinstance(result, dict) else {"verdict": "UNVERIFIED"}
+            state = adjudicate_patch_verification(result, judge_data["replay_logs"], judge_data["patches"])
+            result["verification"] = state
+            result["evidence_review_attempts"] = attempt + 1
+            if state.get("next_action") != "review_same_evidence":
+                break
+            if attempt:
+                state.update(terminal=True, retryable=False, next_action="inspect_judge_evidence")
+                break
+            # Reconsider the same execution once. A model disagreement never
+            # justifies rerunning a paid simulation or fabricating a verdict.
+            review = (
+                "The coordinator has completed its deterministic checks for the supplied trigger inputs. "
+                "Review these check references and your previous interpretation against the same evidence. "
+                "Do not require a sequential state replay, profit valuation, normal-function regression, "
+                "or proof of every patch hunk to judge the narrower recorded trigger interception. "
+                "Keep UNVERIFIED if a required interception check remains unsupported.\n"
+                + json.dumps({"coordinator_verification": state, "previous_interpretation": {
+                    key: result.get(key) for key in ('verdict', 'reason', 'evidence_refs', 'target_checks')
+                }}, ensure_ascii=False)
+            )
+            prompt = review + '\n\n' + PATCH_JUDGE_UP.format(
+                current_hypothesis=json.dumps(judge_data["current_hypothesis"], ensure_ascii=False),
+                replay_logs=json.dumps(judge_data["replay_logs"], ensure_ascii=False),
+                patches=judge_data["patches"],
+                real_balance_change=json.dumps(judge_data["real_balance_change"], ensure_ascii=False),
+            )
+            # The review prompt already contains the original evidence and
+            # relevant earlier interpretation; avoid a second full copy in
+            # chat history exceeding the model's context window.
+            self.init_system_prompt(PATCH_JUDGE_SP)
+        # Models interpret execution evidence; unavailable measurements remain unknown.
+        details = result.get("analysis_details")
+        details = dict(details) if isinstance(details, dict) else {}
+        details["attacker_profit_usd"] = result["verification"]["dimensions"]["profit"]["usd"]
+        result["analysis_details"] = details
 
         if self.metrics_collector and isinstance(result, dict):
-            verdict = result.get("verdict")
+            verdict = result.get("verdict") if result["verification"].get("evidence_validated") else "UNVERIFIED"
             if verdict:
                 feedback = str(result.get("reason", "")) + " " + str(result.get("feedback_to_agent", ""))
                 self.metrics_collector.record_judge_result(

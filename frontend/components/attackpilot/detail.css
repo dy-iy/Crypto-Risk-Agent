@@ -1,0 +1,127 @@
+.attackpilot-root .ap-detail-breadcrumb { display: flex; align-items: center; gap: 18px; margin: -12px 0 24px; }
+.attackpilot-root .ap-detail-breadcrumb .ant-btn { height: auto; padding: 0; color: var(--text-secondary); font-size: 12px; }
+.attackpilot-root .ap-detail-breadcrumb .ant-typography { font-size: 11px; }
+.attackpilot-root .ap-detail-page .ap-detail-heading { align-items: center; margin-bottom: 26px; }
+.attackpilot-root .ap-detail-heading .ap-page-actions { max-width: 470px; }
+.attackpilot-root .ap-detail-task-status { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.attackpilot-root .ap-detail-task-status .ant-tag { margin: 0; }
+.attackpilot-root .ap-detail-metadata { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 28px; margin-bottom: 28px; padding-bottom: 26px; border-bottom: 1px solid var(--border); }
+.attackpilot-root .ap-detail-metadata > div { display: flex; align-items: baseline; gap: 9px; }
+.attackpilot-root .ap-detail-metadata span { color: var(--text-muted); font-size: 12px; }
+.attackpilot-root .ap-detail-metadata strong { color: var(--text-secondary); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.attackpilot-root .ap-detail-metadata > .ant-tag { margin-left: auto; }
+.attackpilot-root .ap-detail-notices { display: grid; gap: 12px; margin-bottom: 28px; }
+.attackpilot-root .ap-detail-workspace { min-width: 0; }
+.attackpilot-root .ap-detail-toolbar { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 18px 28px; margin-bottom: 20px; }
+.attackpilot-root .ap-detail-view-switcher { display: flex; align-items: center; gap: 12px; padding-top: 3px; }
+.attackpilot-root .ap-detail-view-switcher > span { font-size: 12px; white-space: nowrap; }
+.attackpilot-root .ap-detail-view-switcher .ant-segmented { padding: 3px; background: var(--bg-elevated); font-size: 13px; }
+.attackpilot-root .ap-detail-view-switcher { flex-wrap: wrap; }
+.attackpilot-root .ap-detail-agent-filter.ant-btn { max-width: 100%; height: auto; padding: 5px 8px; border-color: var(--border); background: var(--bg-elevated); color: var(--accent); font-size: 11px; white-space: normal; }
+.attackpilot-root .ap-detail-page .ap-detail-report-language { width: auto; max-width: 100%; gap: 10px; margin: 0; padding: 0; }
+.attackpilot-root .ap-detail-report-language .ant-typography { font-size: 12px; }
+.attackpilot-root .ap-detail-report-language .ant-tag { margin: 0; font-size: 11px; white-space: normal; }
+.attackpilot-root .ap-detail-report-language .ant-segmented { font-size: 12px; }
+.attackpilot-root .ap-detail-reader { min-width: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-surface); }
+.attackpilot-root .ap-detail-reader > .ant-tabs > .ant-tabs-nav { margin: 0; padding-inline: 28px; }
+.attackpilot-root .ap-detail-reader > .ant-tabs > .ant-tabs-nav .ant-tabs-tab { padding-block: 20px; font-size: 13px; }
+.attackpilot-root .ap-detail-reader > .ant-tabs > .ant-tabs-body-holder { min-width: 0; padding: 28px; }
+.attackpilot-root .ap-detail-reader .ant-tabs-content { min-width: 0; }
+.attackpilot-root .ap-detail-page :is(.structured-report-panel, .attack-replay-panel, .macro-panel, .analysis-live-panel, .stream-panel, .learning-guide-panel) { min-width: 0; height: auto; padding: 0; overflow: visible; border: 0; border-radius: 0; background: transparent !important; box-shadow: none; }
+.attackpilot-root .ap-detail-page .report-actions { align-items: flex-start; flex-wrap: wrap; gap: 18px; margin-bottom: 24px; padding: 0; border: 0; background: transparent !important; }
+.attackpilot-root .ap-detail-page .report-actions > div:first-child { gap: 5px; }
+.attackpilot-root .ap-detail-page .report-actions > div:first-child > .ant-typography:first-child { font-size: 16px; font-weight: 600; }
+.attackpilot-root .ap-detail-page .report-actions > div:first-child > .ant-typography-secondary { font-size: 12px; }
+.attackpilot-root .ap-detail-page .ap-report-verification { margin-bottom: 30px; }
+.attackpilot-root .ap-detail-page .patch-verification-card { padding: 20px; background: var(--bg-card) !important; border-color: var(--border); border-radius: 10px; box-shadow: none; }
+.attackpilot-root .ap-detail-page .patch-verification-body { grid-template-columns: 60px minmax(0, 1fr); gap: 22px; margin-top: 18px; }
+.attackpilot-root .ap-detail-page .patch-status-icon { width: 60px; height: 60px; }
+.attackpilot-root .ap-detail-page .patch-summary p { margin-top: 6px; font-size: 12px; line-height: 1.8; }
+.attackpilot-root .ap-detail-page .ap-report-document { display: grid; grid-template-columns: 168px minmax(0, 1fr); align-items: start; gap: 32px; }
+.attackpilot-root .ap-report-index { position: sticky; top: 24px; display: grid; gap: 6px; padding-top: 4px; }
+.attackpilot-root .ap-report-index a { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 11px; border-radius: 7px; color: var(--text-secondary); font-size: 12px; line-height: 1.7; text-decoration: none; }
+.attackpilot-root .ap-report-index a:hover { background: var(--bg-elevated); color: var(--accent); }
+.attackpilot-root .ap-report-index svg { flex-shrink: 0; width: 15px; height: 15px; color: var(--text-muted); }
+.attackpilot-root .ap-detail-page .report-section-list { display: grid; min-width: 0; gap: 32px; padding: 0; overflow: visible; }
+.attackpilot-root .ap-detail-page .report-section-card { min-width: 0; padding: 0 0 28px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent !important; box-shadow: none; scroll-margin-top: 24px; }
+.attackpilot-root .ap-detail-page .report-section-head { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: start; gap: 12px; margin-bottom: 22px; padding: 0; background: transparent !important; }
+.attackpilot-root .ap-detail-page .report-section-head > div { display: flex; flex-direction: column; gap: 6px; }
+.attackpilot-root .ap-detail-page .report-section-head > div > .ant-typography:first-child { font-size: 17px; font-weight: 600; }
+.attackpilot-root .ap-detail-page .report-section-head > div > .ant-typography-secondary { font-size: 12px; line-height: 1.8; }
+.attackpilot-root .ap-detail-page .report-section-head > .ant-space { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.attackpilot-root .ap-detail-page .report-section-icon { width: 32px; height: 32px; border: 0; border-radius: 8px; background: var(--bg-elevated); color: var(--accent); }
+.attackpilot-root .ap-detail-page .report-section-footer { margin-top: 20px; padding-top: 0; border: 0; }
+.attackpilot-root .ap-detail-page .report-section-footer .ant-btn { border-radius: 7px; font-size: 12px; }
+.attackpilot-root .ap-detail-page .markdown-content { max-width: 100%; min-width: 0; padding: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.9; }
+.attackpilot-root .ap-detail-page .markdown-content :is(h1, h2, h3, h4) { margin-block: 24px 12px; color: var(--text-primary) !important; font-weight: 650; line-height: 1.6; }
+.attackpilot-root .ap-detail-page .markdown-content h1 { font-size: 24px; }
+.attackpilot-root .ap-detail-page .markdown-content h2 { font-size: 20px; }
+.attackpilot-root .ap-detail-page .markdown-content h3 { font-size: 17px; }
+.attackpilot-root .ap-detail-page .markdown-content :is(p, li, td, th) { color: var(--text-secondary); overflow-wrap: anywhere; }
+.attackpilot-root .ap-detail-page .markdown-content strong { color: var(--text-primary); }
+.attackpilot-root .ap-detail-page .markdown-content :is(ul, ol) { margin-block: 14px; padding-left: 24px; }
+.attackpilot-root .ap-detail-page .markdown-content li { margin-block: 7px; }
+.attackpilot-root .ap-detail-page .markdown-content pre { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); }
+.attackpilot-root .ap-detail-page .raw-report-card { padding: 24px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card) !important; }
+.attackpilot-root .ap-report-appendix { display: grid; gap: 12px; margin-top: 32px; }
+.attackpilot-root .ap-report-appendix > details { min-width: 0; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-surface); }
+.attackpilot-root .ap-report-appendix > details > summary { padding: 17px 20px; color: var(--text-primary); font-size: 13px; font-weight: 600; cursor: pointer; }
+.attackpilot-root .ap-report-appendix > details[open] > summary { border-bottom: 1px solid var(--border); }
+.attackpilot-root .ap-report-appendix > details > section { margin: 0; padding: 22px; border: 0; border-radius: 0; background: var(--bg-surface) !important; box-shadow: none; }
+.attackpilot-root .ap-detail-page :is(.macro-card, .macro-metric-card, .macro-tx-row, .macro-role-card, .attack-phase-card, .analysis-agent-card, .analysis-live-latest, .learning-block, .consistency-check-card) { min-width: 0; border-color: var(--border); border-radius: 9px; background: var(--bg-card) !important; box-shadow: none; }
+.attackpilot-root .ap-detail-page .macro-panel .macro-body { padding: 22px 0 0; overflow: visible; }
+.attackpilot-root .ap-detail-page .macro-grid { gap: 22px; }
+.attackpilot-root .ap-detail-page .macro-card { padding: 22px; }
+.attackpilot-root .ap-detail-page .attack-phase-list { padding: 22px 0 0; gap: 18px; overflow: visible; }
+.attackpilot-root .ap-detail-page .attack-phase-card { padding: 20px 20px 20px 58px; }
+.attackpilot-root .ap-detail-page .analysis-live-grid { grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; }
+.attackpilot-root .ap-detail-page .analysis-live-cards { gap: 12px; margin-block: 22px; }
+.attackpilot-root .ap-detail-page :is(.structured-report-panel, .macro-panel, .attack-replay-panel, .analysis-live-panel) .ant-typography:not(.ant-typography-secondary) { color: var(--text-primary) !important; }
+.attackpilot-root .ap-detail-page :is(.structured-report-panel, .macro-panel, .attack-replay-panel, .analysis-live-panel) .ant-typography-secondary { color: var(--text-secondary) !important; }
+.attackpilot-root .ap-detail-drawer .ant-drawer-body { padding: 24px; }
+.attackpilot-root .ap-detail-drawer .agent-nav { height: auto; margin-bottom: 28px; padding: 0; overflow: visible; border: 0; background: var(--bg-surface) !important; }
+.attackpilot-root .ap-detail-drawer .agent-list { max-height: none; overflow: visible; }
+.attackpilot-root .ap-detail-drawer .agent-row { min-width: 0; background: var(--bg-card); }
+.attackpilot-root .ap-detail-drawer .agent-insights-panel { padding: 18px 0 0; }
+.attackpilot-root .ap-detail-drawer .task-detail-list { padding: 20px 0; }
+.attackpilot-root .ap-detail-drawer .task-detail-list .text-mono { overflow-wrap: anywhere; }
+
+@media (max-width: 1000px) {
+  .attackpilot-root .ap-detail-page .ap-detail-heading { align-items: flex-start; flex-direction: column; gap: 20px; }
+  .attackpilot-root .ap-detail-heading .ap-page-actions { justify-content: flex-start; max-width: 100%; }
+  .attackpilot-root .ap-detail-page .ap-report-document { grid-template-columns: 140px minmax(0, 1fr); gap: 24px; }
+  .attackpilot-root .ap-detail-page .analysis-live-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .attackpilot-root .ap-detail-reader > .ant-tabs > .ant-tabs-nav { padding-inline: 20px; }
+  .attackpilot-root .ap-detail-reader > .ant-tabs > .ant-tabs-body-holder { padding: 22px 20px; }
+  .attackpilot-root .ap-detail-page .ap-report-document { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .attackpilot-root .ap-report-index { position: static; display: flex; min-width: 0; overflow-x: auto; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .attackpilot-root .ap-report-index a { flex-shrink: 0; white-space: nowrap; }
+  .attackpilot-root .ap-detail-page .macro-grid { grid-template-columns: minmax(0, 1fr); }
+  .attackpilot-root .ap-detail-page .analysis-live-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attackpilot-root .ap-detail-page .report-section-head { grid-template-columns: 32px minmax(0, 1fr); }
+  .attackpilot-root .ap-detail-page .report-section-head > .ant-space { grid-column: 2; justify-content: flex-start; }
+}
+@media (max-width: 540px) {
+  .attackpilot-root .ap-detail-breadcrumb { margin-top: -6px; }
+  .attackpilot-root .ap-detail-metadata { gap: 14px 18px; padding-bottom: 22px; }
+  .attackpilot-root .ap-detail-metadata > .ant-tag { margin-left: 0; }
+  .attackpilot-root .ap-detail-toolbar { gap: 18px; }
+  .attackpilot-root .ap-detail-view-switcher { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .attackpilot-root .ap-detail-reader { border-radius: 10px; }
+  .attackpilot-root .ap-detail-reader > .ant-tabs > .ant-tabs-nav { padding-inline: 16px; }
+  .attackpilot-root .ap-detail-reader > .ant-tabs > .ant-tabs-body-holder { padding: 22px 16px; }
+  .attackpilot-root .ap-detail-page .report-actions > .ant-space { gap: 8px; }
+  .attackpilot-root .ap-detail-page .patch-verification-card { padding: 16px; }
+  .attackpilot-root .ap-detail-page .patch-verification-body { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .attackpilot-root .ap-detail-page .patch-score { display: none; }
+  .attackpilot-root .ap-detail-page .report-section-head > div > .ant-typography:first-child { font-size: 16px; }
+  .attackpilot-root .ap-detail-page .markdown-content { font-size: 13px; line-height: 1.9; }
+  .attackpilot-root .ap-detail-page .markdown-content h1 { font-size: 20px; }
+  .attackpilot-root .ap-detail-page .markdown-content h2 { font-size: 18px; }
+  .attackpilot-root .ap-detail-page .raw-report-card { padding: 18px 14px; }
+  .attackpilot-root .ap-detail-page .macro-card { padding: 16px; }
+  .attackpilot-root .ap-detail-page .macro-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attackpilot-root .ap-report-appendix > details > section { padding: 16px; }
+}

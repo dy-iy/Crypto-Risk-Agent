@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 
-from app.attackpilot.utils.signature import hex_to_int, COMMON_SELECTORS
+from app.attackpilot.utils.signature import COMMON_SELECTORS, parse_quantity
 
 
 class SourceLocation:
@@ -262,7 +262,7 @@ class TraceNode:
         self.node_type = node_type  # "EXTERNAL" or "INTERNAL"
 
         self.gas_used = item.gas_used
-        self.value = hex_to_int(item.value_transferred) if item.value_transferred else 0
+        self.value = parse_quantity(item.value_transferred) if item.value_transferred is not None else 0
 
         self.comment = ""
         self.view_expanded = False
@@ -287,9 +287,9 @@ class TraceNode:
         if self.value and self.value > 0:
             val_eth = self.value / 1e18
             if val_eth < 0.0001:
-                extras.append(f"Val: <0.0001 ETH")
+                extras.append(f"Val: <0.0001 native (Raw: {self.value} Wei; Decimals: 18)")
             else:
-                extras.append(f"Val: {val_eth:.4f} ETH")
+                extras.append(f"Val: {val_eth:.4f} native (Raw: {self.value} Wei; Decimals: 18)")
 
         item = self.mix_trace_item
         if len(item.events) > 0:

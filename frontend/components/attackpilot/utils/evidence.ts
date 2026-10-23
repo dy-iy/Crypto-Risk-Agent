@@ -75,7 +75,9 @@ export function isLowValueOperationalLog(log: LogMessage) {
 }
 
 export function extractTransactionHashes(content: string) {
-  return Array.from(new Set(Array.from(content.matchAll(/0x[a-fA-F0-9]{64}/g)).map((item) => item[0])));
+  // Never treat the first 32 bytes of calldata/bytecode as a transaction hash.
+  return Array.from(new Set(Array.from(content.matchAll(/(?<![a-z0-9_])0x[a-f0-9]{64}(?![a-z0-9_])/gi))
+    .map((item) => item[0].toLowerCase())));
 }
 
 function getSectionKeywords(sectionKey: ReportSectionKey) {

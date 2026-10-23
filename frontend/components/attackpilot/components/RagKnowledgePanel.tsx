@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Empty, Input, Space, Tag, Typography } from "antd";
 import { BookOpen, ChevronDown, ChevronUp, Database, Search, Sparkles } from "lucide-react";
-import { searchRagKnowledge } from "../services/api";
+import { errorMessage, searchRagKnowledge } from "../services/api";
 import { RagSearchItem } from "../types";
 
 interface RagKnowledgePanelProps {
@@ -62,59 +62,59 @@ const RagKnowledgeSearch: React.FC<RagKnowledgePanelProps> = ({
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(Boolean(defaultQuery.trim()));
   const [manualOpen, setManualOpen] = useState(!compact);
+  const requestRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
+
+  const executeSearch = useCallback(async (value: string) => {
+    const nextQuery = value.trim();
+    if (!nextQuery) return;
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    const requestId = ++requestRef.current;
+    setQuery(nextQuery);
+    setLoading(true);
+    setError("");
+    setSearched(true);
+    try {
+      const response = await searchRagKnowledge({ query: nextQuery, top_k: compact ? 3 : 5 }, controller.signal);
+      if (requestId !== requestRef.current) return;
+      setItems(response.items || []);
+      setTotal(response.total || 0);
+    } catch (error) {
+      if (requestId !== requestRef.current || controller.signal.aborted) return;
+      setError(errorMessage(error));
+      setItems([]);
+      setTotal(0);
+    } finally {
+      if (requestId === requestRef.current) setLoading(false);
+    }
+  }, [compact]);
 
   useEffect(() => {
     const nextQuery = defaultQuery.trim();
-    if (!nextQuery) return;
-
     let cancelled = false;
-    searchRagKnowledge({ query: nextQuery, top_k: compact ? 3 : 5 })
-      .then((response) => {
-        if (cancelled) return;
-        setSearched(true);
-        setItems(response.items || []);
-        setTotal(response.total || 0);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
-        setError(detail || "相似案例检索暂时不可用，请检查后端知识索引。");
-        setItems([]);
-        setTotal(0);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      if (nextQuery) return executeSearch(nextQuery);
+      setLoading(false);
+      setItems([]);
+      setTotal(0);
+      setError("");
+      setSearched(false);
+    });
     return () => {
       cancelled = true;
+      requestRef.current += 1;
+      controllerRef.current?.abort();
     };
-  }, [compact, defaultQuery]);
+  }, [defaultQuery, executeSearch]);
 
   const topItems = useMemo(() => items.slice(0, compact ? 3 : 5), [compact, items]);
 
   const runSearch = useCallback(
-    async (value = query) => {
-      const nextQuery = value.trim();
-      if (!nextQuery || loading) return;
-      setQuery(nextQuery);
-      setLoading(true);
-      setError("");
-      setSearched(true);
-      try {
-        const response = await searchRagKnowledge({ query: nextQuery, top_k: compact ? 3 : 5 });
-        setItems(response.items || []);
-        setTotal(response.total || 0);
-      } catch (err) {
-        const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
-        setError(detail || "相似案例检索暂时不可用，请检查后端知识索引。");
-        setItems([]);
-        setTotal(0);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [compact, loading, query],
+    (value = query) => executeSearch(value),
+    [executeSearch, query],
   );
 
   return (

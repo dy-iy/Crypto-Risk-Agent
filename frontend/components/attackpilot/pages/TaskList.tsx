@@ -1,23 +1,17 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { useNavigate } from "../services/navigation";
-import { Alert, App as AntdApp, Button, Card, Col, Layout, Modal, Popconfirm, Row, Select, Space, Table, Tag, Typography } from "antd";
+import { Alert, App as AntdApp, Button, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
-  Activity,
   Archive,
-  CheckCircle2,
   Eye,
-  Home,
-  ListChecks,
   Play,
   RefreshCcw,
   Square,
   Trash2,
   Undo2,
-  XCircle,
 } from "lucide-react";
 import DappContextButton from "../components/DappContextButton";
 import { archiveTask, cancelTask, createTask, deleteTask, errorMessage, listDapps, listTasks, unarchiveTask } from "../services/api";
@@ -25,9 +19,7 @@ import { useAttackPilotIdentity } from "../context";
 import { DappCatalogItem, Task, TaskCreateRequest, TaskStatus } from "../types";
 import { formatDurationZh, taskStatusLabel } from "../utils/presentation";
 import { getDappMetadata } from "../utils/dappMetadata";
-const riskPilotLogo = "/attackpilot/riskpilot_logo.png";
-
-const { Header, Content } = Layout;
+import "../tasks.css";
 
 function getStatusColor(status: TaskStatus) {
   if (status === TaskStatus.COMPLETED) return "success";
@@ -55,12 +47,18 @@ const TaskList: React.FC = () => {
   const [dappCatalogError, setDappCatalogError] = useState("");
   const [loading, setLoading] = useState(true);
   const requestVersion = useRef(0);
+  const creationRef = useRef<AbortController | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [scopeFilter, setScopeFilter] = useState<"all" | "mine" | "demo">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | TaskStatus>("all");
   const [archiveFilter, setArchiveFilter] = useState<"active" | "archived" | "all">("active");
   const navigate = useNavigate();
+
+  useEffect(() => () => {
+    creationRef.current?.abort();
+    creationRef.current = null;
+  }, []);
 
   const fetchTasks = useCallback(() => {
     const version = ++requestVersion.current;
@@ -79,9 +77,14 @@ const TaskList: React.FC = () => {
   }, [archiveFilter]);
 
   useEffect(() => {
-    fetchTasks();
-    const interval = setInterval(fetchTasks, 5000);
-    return () => { clearInterval(interval); requestVersion.current += 1; };
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await fetchTasks();
+      if (!cancelled) timer = setTimeout(poll, 5000);
+    };
+    void poll();
+    return () => { cancelled = true; clearTimeout(timer); requestVersion.current += 1; };
   }, [fetchTasks]);
 
   useEffect(() => {
@@ -111,31 +114,38 @@ const TaskList: React.FC = () => {
 
   const handleCreate = async () => {
     if (!userId) { onLogin(); return; }
+    if (creationRef.current) return;
     if (selectedDapps.length === 0) {
       message.error("请至少选择一个案例");
       return;
     }
 
+    const controller = new AbortController();
+    creationRef.current = controller;
     const created: Task[] = [];
     try {
       setCreating(true);
       for (const dappName of selectedDapps) {
         const req: TaskCreateRequest = { dapp_name: dappName };
-        created.push(await createTask(req));
+        created.push(await createTask(req, controller.signal));
+        if (controller.signal.aborted) return;
       }
       message.success(`已启动 ${created.length} 个复盘任务`);
       setIsModalVisible(false);
       setSelectedDapps([]);
       await fetchTasks();
+      if (controller.signal.aborted) return;
       if (created.length === 1) {
         navigate(`/tasks/${created[0].task_id}`);
       }
     } catch (error: unknown) {
+      if (controller.signal.aborted) return;
       setSelectedDapps(selectedDapps.filter(name => !created.some(task => task.dapp_name === name)));
       message.error(`${created.length ? `已创建 ${created.length} 个任务，剩余案例创建失败：` : ""}${errorMessage(error)}`);
       if (created.length) await fetchTasks();
     } finally {
-      setCreating(false);
+      if (creationRef.current === controller) creationRef.current = null;
+      if (!controller.signal.aborted) setCreating(false);
     }
   };
 
@@ -223,12 +233,19 @@ const TaskList: React.FC = () => {
       title: "案例 / 任务",
       dataIndex: "dapp_name",
       key: "dapp_name",
-      render: (name: string, task) => <Space orientation="vertical" size={4}><Typography.Text strong>{name}</Typography.Text><Tag color={task.is_demo ? "blue" : "green"}>{task.is_demo ? "公共历史案例" : "我的分析"}</Tag></Space>,
+      width: 220,
+      render: (name: string, task) => (
+        <div className="ap-task-name">
+          <button type="button" onClick={() => navigate(`/tasks/${task.task_id}`)}>{name}</button>
+          <span>{task.is_demo ? "公共历史案例" : "我的分析"}</span>
+        </div>
+      ),
     },
     {
       title: "状态",
       dataIndex: "status",
       key: "status",
+      width: 170,
       render: (status: TaskStatus, record) => (
         <Space size={6}>
           <Tag color={getStatusColor(status)}>{taskStatusLabel(status)}</Tag>
@@ -240,20 +257,24 @@ const TaskList: React.FC = () => {
       title: "创建时间",
       dataIndex: "created_at",
       key: "created_at",
+      width: 190,
+      className: "ap-task-time",
       render: (value: string) => new Date(value).toLocaleString("zh-CN"),
     },
     {
       title: "耗时",
       dataIndex: "duration",
       key: "duration",
+      width: 100,
+      className: "ap-task-time",
       render: (value?: number | null) => formatDuration(value),
     },
     {
       title: "操作",
       key: "action",
-      width: 420,
+      width: 370,
       render: (_, record) => (
-        <Space wrap>
+        <Space wrap size={[8, 10]} className="ap-task-row-actions">
           <Button size="small" icon={<Eye size={14} />} onClick={() => navigate(`/tasks/${record.task_id}`)}>
             查看
           </Button>
@@ -280,137 +301,81 @@ const TaskList: React.FC = () => {
   ];
 
   return (
-    <Layout className="app-shell">
-      <Header className="topbar">
-        <div className="topbar-brand workbench-brand">
-          <span className="workbench-brand-mark"><Image src={riskPilotLogo} alt="AttackPilot 标志" width={48} height={48} unoptimized /></span>
+    <div className="ap-page ap-task-page">
+      <main className="ap-page-content">
+        <header className="ap-page-heading">
           <div>
-            <Typography.Text className="brand-kicker">AttackPilot 任务工作台</Typography.Text>
-            <Typography.Title level={3} className="topbar-title">
-              任务库
-            </Typography.Title>
-            <Typography.Text type="secondary" className="topbar-subtitle">
-              管理实时任务、历史报告和可复现攻击案例。
-            </Typography.Text>
+            <span className="ap-eyebrow">AttackPilot 任务工作台</span>
+            <h1>任务库</h1>
           </div>
-        </div>
-        <Space>
-          <Button icon={<Home size={15} />} onClick={() => navigate("/")}>
-            首页
-          </Button>
-          <Button icon={<RefreshCcw size={15} />} loading={loading} onClick={() => { setLoading(true); void fetchTasks(); }}>
-            刷新
-          </Button>
-          <Button type="primary" icon={<Play size={15} />} onClick={() => userId ? setIsModalVisible(true) : onLogin()}>
-            已发生案例复盘
-          </Button>
-        </Space>
-      </Header>
+          <div className="ap-page-actions">
+            <Button icon={<RefreshCcw size={15} />} loading={loading} onClick={() => { setLoading(true); void fetchTasks(); }}>
+              刷新
+            </Button>
+            <Button type="primary" icon={<Play size={15} />} onClick={() => userId ? setIsModalVisible(true) : onLogin()}>
+              已发生案例复盘
+            </Button>
+          </div>
+        </header>
 
-      <Content className="task-list-page">
-        {error ? <Alert type="error" showIcon title={error} /> : null}
-        {!userId ? <Alert type="info" showIcon title="公共历史案例可直接浏览，登录后可创建和管理自己的复盘任务。" action={<Button onClick={onLogin}>登录</Button>} /> : null}
-        <Row gutter={[16, 16]} className="stat-row">
-          <Col xs={12} lg={6}>
-            <Card className="metric-card metric-card-total">
-              <div className="metric-card-inner">
-                <span className="metric-icon">
-                  <ListChecks size={22} />
-                </span>
-                <div>
-                  <span className="metric-label">任务总数</span>
-                  <span className="metric-value large">{stats.total}</span>
-                </div>
-              </div>
-            </Card>
-          </Col>
-          <Col xs={12} lg={6}>
-            <Card className="metric-card metric-card-running">
-              <div className="metric-card-inner">
-                <span className="metric-icon">
-                  <Activity size={22} />
-                </span>
-                <div>
-                  <span className="metric-label">运行中</span>
-                  <span className="metric-value large text-blue">{stats.running}</span>
-                </div>
-              </div>
-            </Card>
-          </Col>
-          <Col xs={12} lg={6}>
-            <Card className="metric-card metric-card-completed">
-              <div className="metric-card-inner">
-                <span className="metric-icon">
-                  <CheckCircle2 size={22} />
-                </span>
-                <div>
-                  <span className="metric-label">已完成</span>
-                  <span className="metric-value large text-green">{stats.completed}</span>
-                </div>
-              </div>
-            </Card>
-          </Col>
-          <Col xs={12} lg={6}>
-            <Card className="metric-card metric-card-failed">
-              <div className="metric-card-inner">
-                <span className="metric-icon">
-                  <XCircle size={22} />
-                </span>
-                <div>
-                  <span className="metric-label">已失败</span>
-                  <span className="metric-value large text-red">{stats.failed}</span>
-                </div>
-              </div>
-            </Card>
-          </Col>
-        </Row>
+        {error || !userId ? <div className="ap-task-notices">
+          {error ? <Alert type="error" showIcon title={error} /> : null}
+          {!userId ? <Alert type="info" showIcon title="公共历史案例可直接浏览，登录后可创建和管理自己的复盘任务。" action={<Button onClick={onLogin}>登录</Button>} /> : null}
+        </div> : null}
 
-        <Card className="table-card">
-          <div className="table-toolbar">
-            <div>
-              <Typography.Title level={5}>复盘任务</Typography.Title>
-              <Typography.Text type="secondary">创建、恢复并查看攻击复盘任务。</Typography.Text>
+        <dl className="ap-task-stats">
+          <div><dt>任务总数</dt><dd>{stats.total}</dd></div>
+          <div><dt>运行中</dt><dd>{stats.running}</dd></div>
+          <div><dt>已完成</dt><dd>{stats.completed}</dd></div>
+          <div><dt>已失败</dt><dd>{stats.failed}</dd></div>
+        </dl>
+
+        <section className="ap-task-library" aria-labelledby="ap-task-library-title">
+          <div className="ap-task-toolbar">
+            <h2 id="ap-task-library-title">复盘任务</h2>
+            <div className="ap-task-filters">
+              <Select aria-label="任务范围" value={scopeFilter} onChange={setScopeFilter} options={[
+                { label: "全部可见任务", value: "all" },
+                { label: "公共历史案例", value: "demo" },
+                { label: "我的任务", value: "mine", disabled: !userId },
+              ]} />
+              <Select
+                aria-label="归档状态"
+                value={archiveFilter}
+                onChange={value => { setLoading(true); setArchiveFilter(value); }}
+                options={[
+                  { label: "当前任务", value: "active" },
+                  { label: "已归档", value: "archived" },
+                  { label: "全部记录", value: "all" },
+                ]}
+              />
+              <Select
+                aria-label="任务状态"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { label: "全部状态", value: "all" },
+                  { label: "等待中", value: TaskStatus.PENDING },
+                  { label: "运行中", value: TaskStatus.RUNNING },
+                  { label: "已完成", value: TaskStatus.COMPLETED },
+                  { label: "已失败", value: TaskStatus.FAILED },
+                  { label: "已取消", value: TaskStatus.CANCELLED },
+                ]}
+              />
             </div>
-            <Select aria-label="任务范围" value={scopeFilter} onChange={setScopeFilter} options={[
-              { label: "全部可见任务", value: "all" },
-              { label: "公共历史案例", value: "demo" },
-              { label: "我的任务", value: "mine", disabled: !userId },
-            ]} />
-            <Select
-              aria-label="归档状态"
-              value={archiveFilter}
-              onChange={value => { setLoading(true); setArchiveFilter(value); }}
-              options={[
-                { label: "当前任务", value: "active" },
-                { label: "已归档", value: "archived" },
-                { label: "全部记录", value: "all" },
-              ]}
-            />
-            <Select
-              aria-label="任务状态"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { label: "全部状态", value: "all" },
-                { label: "等待中", value: TaskStatus.PENDING },
-                { label: "运行中", value: TaskStatus.RUNNING },
-                { label: "已完成", value: TaskStatus.COMPLETED },
-                { label: "已失败", value: TaskStatus.FAILED },
-                { label: "已取消", value: TaskStatus.CANCELLED },
-              ]}
-            />
           </div>
 
           <Table
+            className="ap-task-table"
             dataSource={filteredTasks}
             columns={columns}
             rowKey="task_id"
             loading={loading}
-            scroll={{ x: 960 }}
+            scroll={{ x: 1050 }}
             pagination={{ pageSize: 10, size: "small" }}
           />
-        </Card>
-      </Content>
+        </section>
+      </main>
 
       <Modal
         title="已发生案例复盘"
@@ -438,6 +403,7 @@ const TaskList: React.FC = () => {
             placeholder="选择案例，例如 SushiSwap / ApeCoin"
             style={{ width: "100%" }}
             value={selectedDapps}
+            disabled={creating}
             onChange={setSelectedDapps}
             options={dappOptions}
             showSearch
@@ -470,7 +436,7 @@ const TaskList: React.FC = () => {
           </div>
         </Space>
       </Modal>
-    </Layout>
+    </div>
   );
 };
 

@@ -1,0 +1,554 @@
+.attackpilot-root .ap-knowledge-page .knowledge-heading p {
+  max-width: 780px;
+  margin: 16px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-workspace {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  gap: 26px 36px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-sidebar {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subjects {
+  display: grid;
+  gap: 5px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+  padding: 14px 13px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject > svg {
+  flex: 0 0 auto;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject strong {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject[aria-pressed="true"] {
+  border-color: var(--border);
+  background: var(--bg-surface);
+  color: var(--accent);
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject[aria-pressed="true"] strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-subject:focus-visible,
+.attackpilot-root .ap-knowledge-page .knowledge-resources a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-resources {
+  display: grid;
+  grid-column: 1;
+  grid-row: 2;
+  gap: 22px;
+  margin: 0 12px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-resources a {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-resources a > span {
+  display: grid;
+  gap: 5px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-resources strong {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-resources small {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-resources a:hover,
+.attackpilot-root .ap-knowledge-page .knowledge-resources a:hover strong {
+  color: var(--accent);
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-reading-column {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-width: 0;
+  gap: 28px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-lesson {
+  min-width: 0;
+  padding: 38px 40px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-surface);
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-lesson-title {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-lesson-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--accent);
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-lesson-title h2 {
+  margin: 0 0 5px;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.4;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-lesson-title small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-lesson-hook {
+  margin: 26px 0 0;
+  padding-bottom: 29px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-section {
+  min-width: 0;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-section h3,
+.attackpilot-root .ap-knowledge-page .knowledge-poc h3 {
+  margin: 0 0 15px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-section p,
+.attackpilot-root .ap-knowledge-page .knowledge-section li {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-section p {
+  margin: 0;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-intuition {
+  margin-top: 30px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 34px;
+  margin-top: 34px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-section ol {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-left: 20px;
+  list-style: decimal outside;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-section li {
+  padding-left: 4px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-section li::marker {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-repairs {
+  margin-top: 34px;
+  padding-top: 30px;
+  border-top: 1px solid var(--border);
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-repairs ol {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 34px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-poc {
+  margin-top: 32px;
+  padding: 20px 22px;
+  border-radius: 9px;
+  background: var(--bg-card);
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-poc h3 {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-poc p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.85;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-practice {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 25px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+.attackpilot-root .ap-knowledge-page .knowledge-practice svg {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+.attackpilot-root .ap-knowledge-page .rag-knowledge-panel {
+  padding: 26px 28px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  box-shadow: none;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-panel-header {
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-panel-header > .ant-space {
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-panel-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+}
+
+.attackpilot-root .ap-knowledge-page .rag-panel-header .ant-typography strong,
+.attackpilot-root .ap-knowledge-page .rag-panel-header span.ant-typography {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-panel-header p.ant-typography {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-panel-header > .ant-tag,
+.attackpilot-root .ap-knowledge-page .rag-tag-row .ant-tag,
+.attackpilot-root .ap-knowledge-page .rag-result-title .ant-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 2px 7px;
+  border-color: var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-result-list {
+  gap: 12px;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-result-meta,
+.attackpilot-root .ap-knowledge-page .rag-source-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-result-card {
+  padding: 18px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.attackpilot-root .ap-knowledge-page .rag-result-title {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 9px;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-result-title strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 550;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-result-title > span:last-child {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 2;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-result-card p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-manual-toggle.ant-btn {
+  margin-top: 16px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-search-row {
+  margin-top: 14px;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-search-row .ant-input-affix-wrapper,
+.attackpilot-root .ap-knowledge-page .rag-search-row .ant-btn {
+  border-radius: 8px;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-search-row .ant-input-affix-wrapper,
+.attackpilot-root .ap-knowledge-page .rag-search-row .ant-input {
+  border-color: var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.attackpilot-root .ap-knowledge-page .rag-prompt-row {
+  margin: 14px 0 0;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-prompt-row button {
+  border-color: var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: 7px;
+}
+
+.attackpilot-root .ap-knowledge-page .rag-prompt-row button:hover {
+  border-color: var(--accent);
+  background: var(--bg-surface);
+  color: var(--accent);
+}
+
+@media (max-width: 1100px) {
+  .attackpilot-root .ap-knowledge-page .knowledge-workspace {
+    grid-template-columns: 208px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-lesson {
+    padding: 30px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-evidence-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-repairs ol {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .attackpilot-root .ap-knowledge-page .knowledge-heading p {
+    margin-top: 12px;
+    font-size: 13px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    gap: 24px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-subjects {
+    display: flex;
+    gap: 8px;
+    padding: 2px 2px 12px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-subject {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 164px;
+    padding: 12px;
+    border-color: var(--border);
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-resources {
+    grid-row: 3;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin: 0;
+    padding-top: 24px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-reading-column {
+    grid-column: 1;
+    grid-row: 2;
+    gap: 22px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-lesson {
+    padding: 25px 22px;
+    border-radius: 12px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-lesson-title h2 {
+    font-size: 22px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-lesson-hook {
+    font-size: 14px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-evidence-grid {
+    gap: 28px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-poc {
+    padding: 18px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .rag-knowledge-panel {
+    padding: 22px;
+    border-radius: 12px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .rag-panel-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .rag-result-title {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .rag-result-title > .ant-tag {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 380px) {
+  .attackpilot-root .ap-knowledge-page .knowledge-lesson,
+  .attackpilot-root .ap-knowledge-page .rag-knowledge-panel {
+    padding: 22px 17px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-lesson-title {
+    gap: 12px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-lesson-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .attackpilot-root .ap-knowledge-page .knowledge-resources {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

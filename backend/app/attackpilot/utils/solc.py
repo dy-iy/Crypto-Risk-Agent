@@ -1,6 +1,7 @@
 import asyncio
 import json
 from asyncio import subprocess
+from pathlib import Path
 from typing import Dict, List, Union, Any
 from app.attackpilot.settings import node_environment
 
@@ -48,7 +49,7 @@ class SourceMappingItem:
 class CompileResult:
     def __init__(self, bytecode: str, creation_bytecode: str, ast: Dict[str, Dict],
                  source_mapping: List[SourceMappingItem], abi: List = None, errors: List[Dict] = None,
-                 immutable_references: Dict = None):
+                 immutable_references: Dict = None, storage_layout: Dict = None):
         self.bytecode = bytecode
         self.creation_bytecode = creation_bytecode
         self.ast = ast
@@ -56,6 +57,7 @@ class CompileResult:
         self.abi = abi if abi else []
         self.errors = errors if errors else []
         self.immutable_references = immutable_references if immutable_references else {}
+        self.storage_layout = storage_layout
 
 
 class Solc:
@@ -67,6 +69,27 @@ class Solc:
         self.path = path
         self.timeout = timeout
 
+    async def _run_compiler(self, cmd, input_data: bytes = None):
+        process = await subprocess.create_subprocess_exec(
+            *cmd,
+            env=node_environment(),
+            stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            return await asyncio.wait_for(process.communicate(input=input_data), timeout=self.timeout)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            # Cancellation must reap the compiler just like a timeout. Otherwise
+            # cancelling verification leaves native/Node compilation running.
+            if process.returncode is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+            await process.communicate()
+            raise
+
     async def compile_json(
             self, standard_json_path: str, contract_name: str
     ) -> Union[CompileResult, None]:
@@ -77,21 +100,13 @@ class Solc:
         :param contract_name: Name of target contract
         :return: a compacted result json.
         """
-        cmd = [self.path, '--standard-json', standard_json_path]
+        cmd = [self.path, '--standard-json']
         try:
-            process = await subprocess.create_subprocess_exec(
-                *cmd,
-                env=node_environment(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            output, err_out = await asyncio.wait_for(
-                process.communicate(),
-                timeout=self.timeout,
-            )
+            # Older native solc versions only accept standard JSON on stdin.
+            # Read bytes without newline normalization or JSON reserialization.
+            input_data = Path(standard_json_path).read_bytes()
+            output, err_out = await self._run_compiler(cmd, input_data=input_data)
         except asyncio.TimeoutError:
-            process.kill()
-            await process.communicate()
             return CompileResult("", "", {}, [], [], errors=[{"severity": "error", "message": "Compilation Timed Out"}])
         except Exception as e:
             return CompileResult("", "", {}, [], [],
@@ -172,7 +187,8 @@ class Solc:
                 source_mapping=source_mapping_items,
                 abi=abi,
                 errors=compilation_errors,
-                immutable_references=immutable_references  # [NEW]
+                immutable_references=immutable_references,
+                storage_layout=contract_data.get('storageLayout'),
             )
         except Exception as e:
             compilation_errors.append({"severity": "error", "message": f"Result Parsing Error: {str(e)}"})
@@ -203,19 +219,8 @@ class Solc:
         cmd.append(source_path)
 
         try:
-            process = await subprocess.create_subprocess_exec(
-                *cmd,
-                env=node_environment(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            output, err_out = await asyncio.wait_for(
-                process.communicate(),
-                timeout=self.timeout
-            )
+            output, err_out = await self._run_compiler(cmd)
         except asyncio.TimeoutError:
-            process.kill()
-            await process.communicate()
             return CompileResult("", "", {}, [], [], errors=[{"severity": "error", "message": "Compilation Timed Out"}])
         except Exception as e:
             return CompileResult("", "", {}, [], [],
@@ -293,9 +298,9 @@ class Solc:
         if not opcodes_str:
             return []
         # decompile the bytecode
-        push2size = {'PUSH%d' % i: i for i in range(1, 32 + 1)}
+        push2size = {'PUSH%d' % i: i for i in range(0, 32 + 1)}
         source_mapping_items, pc = list(), 0
-        opcodes = opcodes_str.split(' ')
+        opcodes = opcodes_str.split()
         for op in opcodes:
             if op.startswith('0x'):
                 continue
@@ -349,20 +354,8 @@ class SolcJS(Solc):
         cmd = [self.path, '--stack-size=65536', standard_json_path]
 
         try:
-            process = await subprocess.create_subprocess_exec(
-                *cmd,
-                env=node_environment(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
-            output, err_out = await asyncio.wait_for(
-                process.communicate(),
-                timeout=self.timeout,
-            )
-
+            output, err_out = await self._run_compiler(cmd)
         except asyncio.TimeoutError:
-            process.kill()
-            await process.communicate()
             return CompileResult("", "", {}, [], [], errors=[{"severity": "error", "message": "SolcJS Timed Out"}])
         except Exception as e:
             return CompileResult("", "", {}, [], [],
@@ -446,7 +439,8 @@ class SolcJS(Solc):
             )
             return CompileResult(bytecode, creation_bytecode, ast_dict, source_mapping_items, abi=abi,
                                  errors=compilation_errors,
-                                 immutable_references=immutable_references)
+                                 immutable_references=immutable_references,
+                                 storage_layout=target_contract[contract_name].get('storageLayout'))
         except Exception as e:
             return CompileResult("", "", {}, [], abi=[], errors=compilation_errors + [
                 {"severity": "error", "message": f"SolcJS Parsing Error: {str(e)}"}])

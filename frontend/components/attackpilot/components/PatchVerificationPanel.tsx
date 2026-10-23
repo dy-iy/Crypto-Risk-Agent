@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Button, Progress, Space, Tag, Typography } from "antd";
-import { AlertTriangle, CheckCircle2, SearchCheck, ShieldCheck } from "lucide-react";
+import { Button, Space, Tag, Typography } from "antd";
+import { AlertTriangle, SearchCheck, ShieldCheck } from "lucide-react";
 import { EvidenceItem, LogMessage, Task, TaskEvent } from "../types";
 import {
   compactEvidenceText,
@@ -8,6 +8,7 @@ import {
   isLowValueOperationalLog,
   normalizeEvidenceMarkdown,
 } from "../utils/evidence";
+import { getPatchCompileDiagnostics, getPatchVerificationDimensions, getPatchVerificationPresentation, PatchCompileDiagnostic, PatchVerificationDimension, PatchVerificationPresentation, PatchVerificationStatus } from "../utils/verification";
 import EvidenceDrawer from "./EvidenceDrawer";
 
 interface PatchVerificationPanelProps {
@@ -15,12 +16,10 @@ interface PatchVerificationPanelProps {
   events: TaskEvent[];
 }
 
-interface PatchVerificationSummary {
-  status: "verified" | "failed" | "pending" | "skipped" | "archived";
-  title: string;
-  description: string;
-  score: number;
+interface PatchVerificationSummary extends PatchVerificationPresentation {
   evidence: EvidenceItem[];
+  dimensions: PatchVerificationDimension[];
+  compileDiagnostics: PatchCompileDiagnostic[];
 }
 
 function pickParagraph(report: string, keywords: string[]) {
@@ -72,7 +71,7 @@ function buildPatchEvidence(report: string, logs: LogMessage[]): EvidenceItem[] 
     .forEach((log, index) => {
       evidence.push({
         id: `patch-log-${log.log_id ?? index}`,
-        title: `${log.agent} 补丁证据`,
+        title: `${log.agent} 补丁记录`,
         source: log.message_type === "tool" ? "tool" : "agent_log",
         agent: log.agent,
         level: log.level,
@@ -92,47 +91,30 @@ function buildSummary(task: Task | null, events: TaskEvent[]): PatchVerification
   const report = task?.final_report ?? "";
   const logs = events.filter(isLogEvent).filter((log) => !isLowValueOperationalLog(log));
   const evidence = buildPatchEvidence(report, logs);
-  const result = task?.result;
-  const verification = result && typeof result === "object" && "verification" in result
-    && result.verification && typeof result.verification === "object"
-    ? result.verification as { status?: string } : null;
-
-  if (task?.is_demo) {
-    return { status: "archived", title: "历史补丁验证记录", score: 0, evidence,
-      description: "以下证据来自原项目归档，当前环境尚未重新执行补丁回放。" };
-  }
-  if (verification?.status === "verified") {
-    return { status: "verified", title: "补丁回放验证通过", score: 100, evidence,
-      description: "后端实际回放结果确认，补丁已通过本次验证。" };
-  }
-  if (verification?.status === "failed") {
-    return { status: "failed", title: "补丁回放验证未通过", score: 0, evidence,
-      description: "后端实际回放返回失败，请查看关联证据与验证日志。" };
-  }
-  if (verification?.status === "skipped") {
-    return { status: "skipped", title: "本次任务未执行补丁回放", score: 0, evidence,
-      description: "本次分析跳过了补丁验证阶段，报告中的修复建议尚未经回放确认。" };
-  }
-  return { status: "pending", title: task?.status === "running" ? "等待补丁验证" : "补丁尚未验证", score: 0, evidence,
-    description: "尚无实际回放结果。报告和日志中的成功描述不能代替补丁验证。" };
+  return { ...getPatchVerificationPresentation(task), evidence, dimensions: getPatchVerificationDimensions(task),
+    compileDiagnostics: getPatchCompileDiagnostics(task) };
 }
 
-function statusColor(status: PatchVerificationSummary["status"]) {
-  if (status === "verified") return "success";
-  if (status === "failed") return "exception";
-  return "normal";
-}
-
-function tagColor(status: PatchVerificationSummary["status"]) {
-  if (status === "verified") return "success";
-  if (status === "failed") return "error";
-  return "default";
+function PatchStatusIcon({ status }: { status: PatchVerificationStatus }) {
+  return (
+    <svg className={`patch-status-icon is-${status}`} width="64" height="64" viewBox="0 0 64 64"
+      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false">
+      <circle cx="32" cy="32" r="27" fill="currentColor" fillOpacity="0.06" strokeOpacity="0.3" strokeWidth="2" />
+      {status === "verified" ? <path d="m20 32 8 8 16-16" strokeWidth="3.5" />
+        : status === "failed" ? <path d="m24 24 16 16m0-16L24 40" strokeWidth="3" />
+        : status === "not_run" || status === "unverified" ? <path d="M32 19v13l9 5" />
+        : status === "blocked" || status === "error" ? <><path d="M32 21v14" /><circle cx="32" cy="42" r="1" fill="currentColor" stroke="none" /></>
+        : status === "skipped" ? <path d="M23 32h18" strokeWidth="3" />
+        : <><rect x="22" y="28" width="20" height="15" rx="2" /><rect x="20" y="22" width="24" height="6" rx="1.5" /><path d="M28 34h8" /></>}
+    </svg>
+  );
 }
 
 const PatchVerificationPanel: React.FC<PatchVerificationPanelProps> = ({ task, events }) => {
   const [open, setOpen] = useState(false);
   const summary = useMemo(() => buildSummary(task, events), [events, task]);
-  const Icon = summary.status === "failed" ? AlertTriangle : ShieldCheck;
+  const Icon = ["failed", "blocked", "error"].includes(summary.status) ? AlertTriangle : ShieldCheck;
 
   return (
     <section className="product-summary-card patch-verification-card">
@@ -141,35 +123,36 @@ const PatchVerificationPanel: React.FC<PatchVerificationPanelProps> = ({ task, e
           <Icon size={16} />
           <Typography.Text strong>补丁验证</Typography.Text>
         </Space>
-        <Tag color={tagColor(summary.status)}>
-          {summary.status === "verified" ? "已通过" : summary.status === "failed" ? "未通过" : summary.status === "skipped" ? "已跳过" : summary.status === "archived" ? "历史记录" : "未验证"}
+        <Tag color={summary.color}>
+          {summary.label}
         </Tag>
       </div>
 
       <div className="patch-verification-body">
         <div className="patch-score">
-          <Progress
-            type="circle"
-            size={78}
-            percent={summary.score}
-            status={statusColor(summary.status)}
-            format={() => (summary.status === "verified" ? <CheckCircle2 size={22} /> : <ShieldCheck size={22} />)}
-          />
+          <PatchStatusIcon status={summary.status} />
         </div>
         <div className="patch-summary">
           <Typography.Text strong>{summary.title}</Typography.Text>
           <Typography.Paragraph>{summary.description}</Typography.Paragraph>
+          {summary.compileDiagnostics.map((diagnostic, index) => <Typography.Paragraph type="secondary" key={index}>
+            {`${diagnostic.target}${diagnostic.compilerVersion ? ` · Solidity ${diagnostic.compilerVersion}` : ""}：${diagnostic.description}`}
+          </Typography.Paragraph>)}
+          {summary.nextStep && <Typography.Paragraph type="secondary">下一步：{summary.nextStep}</Typography.Paragraph>}
+          {summary.dimensions.length > 0 && <Space size={[8, 6]} wrap style={{ marginBottom: 12 }} aria-label="补丁验证范围">
+            {summary.dimensions.map(dimension => <Tag key={dimension.key}>{dimension.label}：{dimension.value}</Tag>)}
+          </Space>}
           <Space size={8} wrap>
-            <Tag color={summary.evidence.length > 0 ? "cyan" : "default"}>{summary.evidence.length} 条证据</Tag>
+            <Tag color={summary.evidence.length > 0 ? "cyan" : "default"} title="报告片段和相关日志的数量，不代表验证通过次数">{summary.evidence.length} 条相关记录</Tag>
             <Button size="small" icon={<SearchCheck size={14} />} onClick={() => setOpen(true)}>
-              查看证据
+              查看记录
             </Button>
           </Space>
         </div>
       </div>
 
       <EvidenceDrawer
-        title="补丁验证证据"
+        title="补丁相关记录"
         open={open}
         evidence={summary.evidence}
         onClose={() => setOpen(false)}

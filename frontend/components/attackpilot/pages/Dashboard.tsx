@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { useNavigate, useParams } from "../services/navigation";
-import { Alert, App as AntdApp, Button, Layout, Segmented, Space, Spin, Tabs, Tag, Typography } from "antd";
-import { Activity, ArrowLeft, Bot, FileText, FolderOpen, Home, ListTree, RefreshCcw, ShieldCheck, Wifi, WifiOff } from "lucide-react";
+import { Alert, App as AntdApp, Button, Drawer, Layout, Segmented, Space, Spin, Tabs, Tag, Typography } from "antd";
+import { Activity, ArrowLeft, Bot, FileText, FolderOpen, ListTree, RefreshCcw, ShieldCheck, Wifi, WifiOff, X } from "lucide-react";
 import AgentNavigator, { AgentStats } from "../components/AgentNavigator";
 import AgentFileLogs from "../components/AgentFileLogs";
 import AgentConsistencyPanel from "../components/AgentConsistencyPanel";
@@ -31,11 +30,13 @@ import {
   TaskStatus,
 } from "../types";
 import { modeLabel, t } from "../utils/i18n";
-import { formatDurationZh, taskStatusLabel } from "../utils/presentation";
+import { agentDisplayName, formatDurationZh, taskStatusLabel } from "../utils/presentation";
+import { getPatchVerificationPresentation } from "../utils/verification";
 import { useAttackPilotIdentity } from "../context";
+import "../detail.css";
 
 
-const { Header, Content } = Layout;
+const { Content } = Layout;
 
 type MainTabItem = NonNullable<React.ComponentProps<typeof Tabs>["items"]>[number];
 
@@ -69,12 +70,12 @@ function getDefaultMainTab(mode: ProductViewMode, running = false) {
 const PERSISTED_LOG_PAGE_SIZE = 1000;
 const MAX_PERSISTED_LOG_PAGES = 5;
 
-async function fetchPersistedTaskEvents(taskId: string) {
+async function fetchPersistedTaskEvents(taskId: string, signal?: AbortSignal) {
   let cursor: number | null = null;
   let events: LogMessage[] = [];
 
   for (let pageIndex = 0; pageIndex < MAX_PERSISTED_LOG_PAGES; pageIndex += 1) {
-    const page = await getTaskLogs(taskId, { limit: PERSISTED_LOG_PAGE_SIZE, before_id: cursor });
+    const page = await getTaskLogs(taskId, { limit: PERSISTED_LOG_PAGE_SIZE, before_id: cursor }, signal);
     events = [...page.events, ...events];
     if (!page.has_more || !page.next_before_id) break;
     cursor = page.next_before_id;
@@ -89,16 +90,18 @@ const Dashboard: React.FC = () => {
   const { message } = AntdApp.useApp();
   const { userId, onLogin } = useAttackPilotIdentity();
   const mountedRef = useRef(true);
-  const generatedNoticeRef = useRef({ report: false, macro: false, review: false });
+  const completionNoticeTaskRef = useRef<string | null>(null);
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const [selectedAgentChoice, setSelectedAgent] = useState<string | "all">("all");
   const [selectedLog, setSelectedLog] = useState<LogMessage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [wsStatus, setWsStatus] = useState<WebSocket["readyState"] | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [loadingTask, setLoadingTask] = useState(true);
+  const [connectionRevision, setConnectionRevision] = useState(0);
   const [viewMode, setViewMode] = useState<ProductViewMode>("report");
   const language: LanguageMode = "zh";
   const [activeMainTab, setActiveMainTab] = useState("");
@@ -111,22 +114,22 @@ const Dashboard: React.FC = () => {
     status: "translating" | "ready" | "missing" | "original" | "error";
     error?: string;
   } | null>(null);
-  const verification = task?.result && typeof task.result === "object" && "verification" in task.result
-    ? task.result.verification as { status?: string } | null : null;
-  const verificationLabel = ({ verified: "回放验证通过", failed: "验证未通过", skipped: "验证已跳过", not_run: "验证未执行" } as Record<string, string>)[verification?.status || "not_run"] || "验证未完成";
+  const resolvedTranslationRef = useRef<{ taskId: string; source: string } | null>(null);
+  const verification = getPatchVerificationPresentation(task);
 
-  const refreshTask = useCallback(async () => {
+  const refreshTask = useCallback(async (signal?: AbortSignal) => {
     if (!taskId) return null;
     try {
-      const nextTask = await getTask(taskId);
+      const nextTask = await getTask(taskId, signal);
+      if (signal?.aborted) return null;
       setTask(nextTask);
       setErrorMsg("");
       return nextTask;
-    } catch {
-      setErrorMsg("任务状态获取失败。");
+    } catch (error) {
+      if (!signal?.aborted) setErrorMsg(errorMessage(error));
       return null;
     } finally {
-      setLoadingTask(false);
+      if (!signal?.aborted) setLoadingTask(false);
     }
   }, [taskId]);
 
@@ -135,12 +138,14 @@ const Dashboard: React.FC = () => {
     if (!taskId) return;
 
     let cancelled = false;
+    const controller = new AbortController();
+    let notifyReportCompletion = false;
     TaskEventService.disconnect();
     TaskEventService.clearHistory();
 
     const handleConnect = () => {
       setErrorMsg("");
-      setWsStatus(WebSocket.OPEN);
+      setWsStatus(TaskEventService.getConnectionState());
     };
 
     const handleError = (error: string) => {
@@ -153,7 +158,7 @@ const Dashboard: React.FC = () => {
     };
 
     const handleEvent = (event: TaskEvent) => {
-      if (!mountedRef.current) return;
+      if (cancelled || !mountedRef.current || (event.task_id && event.task_id !== taskId)) return;
       setEvents((prev) => [...prev, event].slice(-5000));
 
       if (event.type === "TASK_STATUS") {
@@ -173,6 +178,12 @@ const Dashboard: React.FC = () => {
       }
 
       if (event.type === "TASK_FINAL") {
+        if (notifyReportCompletion && event.status === TaskStatus.COMPLETED && event.final_report?.trim()
+          && completionNoticeTaskRef.current !== taskId) {
+          notifyReportCompletion = false;
+          completionNoticeTaskRef.current = taskId;
+          message.success({ key: `attackpilot-report-ready:${taskId}`, content: "结构化报告已生成，报告和攻击复盘入口已开放。" });
+        }
         setTask((prev) => ({
           ...prev,
           task_id: event.task_id,
@@ -190,12 +201,12 @@ const Dashboard: React.FC = () => {
     };
 
     const initializeTaskView = async () => {
-      const nextTask = await refreshTask();
+      const nextTask = await refreshTask(controller.signal);
       if (cancelled || !mountedRef.current || !nextTask) return;
 
       if (isTerminalTask(nextTask.status)) {
         try {
-          const persistedEvents = await fetchPersistedTaskEvents(taskId);
+          const persistedEvents = await fetchPersistedTaskEvents(taskId, controller.signal);
           if (!cancelled && mountedRef.current) {
             setEvents(persistedEvents);
             setWsStatus(null);
@@ -206,6 +217,7 @@ const Dashboard: React.FC = () => {
         return;
       }
 
+      notifyReportCompletion = !nextTask.is_demo && !nextTask.final_report?.trim();
       setEvents(TaskEventService.getHistory());
       TaskEventService.subscribe(handleEvent);
       TaskEventService.subscribeStatus(handleStatus);
@@ -217,12 +229,13 @@ const Dashboard: React.FC = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
       mountedRef.current = false;
       TaskEventService.disconnect();
       TaskEventService.unsubscribe(handleEvent);
       TaskEventService.unsubscribeStatus(handleStatus);
     };
-  }, [refreshTask, taskId]);
+  }, [connectionRevision, message, refreshTask, taskId]);
 
   const terminalTask = isTerminalTask(task?.status);
   const isTaskRunning = task?.status === TaskStatus.RUNNING || (!terminalTask && wsStatus === WebSocket.OPEN);
@@ -240,7 +253,8 @@ const Dashboard: React.FC = () => {
   const usingTranslation = reportLanguage === "zh" && currentTranslation?.status === "ready";
 
   useEffect(() => {
-    if (!taskId || !finalReportText || reportLanguage !== "zh") return;
+    if (!taskId || !finalReportText) return;
+    if (resolvedTranslationRef.current?.taskId === taskId && resolvedTranslationRef.current.source === finalReportText) return;
     let cancelled = false;
     const source = finalReportText;
     getReportTranslation(taskId).then(async (payload) => {
@@ -249,24 +263,25 @@ const Dashboard: React.FC = () => {
         setTranslation({ taskId, source, report: null, status: "translating" });
         payload = await createReportTranslation(taskId);
       }
-      if (!cancelled) setTranslation({ taskId, source, report: payload.translated_report, status: payload.status });
+      if (!cancelled) {
+        if (payload.status === "ready" || payload.status === "original") {
+          if (!payload.translated_report?.trim()) throw new Error("中文译文内容不完整，当前保留原始报告。请手动重试。");
+          resolvedTranslationRef.current = { taskId, source };
+        }
+        setTranslation({ taskId, source, report: payload.translated_report, status: payload.status });
+      }
     }).catch((error: unknown) => {
       if (!cancelled) setTranslation({ taskId, source, report: null, status: "error", error: errorMessage(error) });
     });
     return () => { cancelled = true; };
-  }, [finalReportText, reportLanguage, taskId, translationRevision, userId]);
-
-  useEffect(() => {
-    generatedNoticeRef.current = { report: false, macro: false, review: false };
-  }, [taskId]);
-
-
+  }, [finalReportText, taskId, translationRevision, userId]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!taskId) return;
+    if (!taskId || task?.status === undefined) return;
+    const controller = new AbortController();
 
-    getMacroAnalysis(taskId)
+    getMacroAnalysis(taskId, controller.signal)
       .then((payload) => {
         if (!cancelled) setMacroAnalysis(payload);
       })
@@ -276,14 +291,16 @@ const Dashboard: React.FC = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [taskId, task?.status, task?.completed_at]);
+  }, [connectionRevision, taskId, task?.status, task?.completed_at]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!taskId) return;
+    if (!taskId || task?.status === undefined) return;
+    const controller = new AbortController();
 
-    getAutomatedReview(taskId)
+    getAutomatedReview(taskId, controller.signal)
       .then((payload) => {
         if (!cancelled) setAutomatedReview(payload);
       })
@@ -293,26 +310,9 @@ const Dashboard: React.FC = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [taskId, task?.status, task?.completed_at]);
-
-  useEffect(() => {
-    if (!taskId) return;
-
-    const notices = generatedNoticeRef.current;
-    if (hasFinalReport && !notices.report) {
-      notices.report = true;
-      message.success("结构化报告已生成，报告和攻击复盘入口已开放。");
-    }
-    if (hasMacroAnalysis && !notices.macro) {
-      notices.macro = true;
-      message.info("宏观分析已生成，可以查看交易角色和资金路径。");
-    }
-    if (hasAutomatedReview && !notices.review) {
-      notices.review = true;
-      message.info("一致性审查已生成，可以核对证据链。");
-    }
-  }, [hasAutomatedReview, hasFinalReport, hasMacroAnalysis, message, taskId]);
+  }, [connectionRevision, taskId, task?.status, task?.completed_at]);
 
   const agentStats = useMemo<AgentStats[]>(() => {
     const map = new Map<string, AgentStats>();
@@ -349,11 +349,11 @@ const Dashboard: React.FC = () => {
       ? taskStatusLabel(task?.status)
       : "待连接";
   const systemStatusTone = agentIssueCount > 0 ? "warning" : task?.status === TaskStatus.FAILED ? "error" : "healthy";
-  const systemStatusHint = agentIssueCount > 0
-    ? `${agentIssueCount} 个智能体有告警或错误`
-    : activeAgentCount > 0
-      ? "所有智能体正常运行"
-      : "等待智能体输出日志";
+  const systemStatusHint = task?.status === TaskStatus.FAILED ? "分析已失败，请查看任务错误与日志"
+    : task?.status === TaskStatus.CANCELLED ? "分析已取消，已产生的记录供核对"
+      : agentIssueCount > 0 ? `${agentIssueCount} 个智能体有告警或错误`
+        : activeAgentCount > 0 ? "当前已加载日志未发现告警"
+          : "暂无可显示的智能体日志";
 
   const openLog = (log: LogMessage) => {
     setSelectedLog(log);
@@ -467,11 +467,14 @@ const Dashboard: React.FC = () => {
       ),
       children: (
         <LogStream
+          key={taskId}
           taskId={taskId}
           events={events}
           selectedAgent={selectedAgent}
           onSelectLog={openLog}
           rawMode
+          followLatest={!terminalTask}
+          onAgentChange={setSelectedAgent}
         />
       ),
     };
@@ -538,6 +541,7 @@ const Dashboard: React.FC = () => {
     selectedAgent,
     task,
     taskId,
+    terminalTask,
     viewMode,
     usingTranslation,
   ]);
@@ -613,61 +617,69 @@ const Dashboard: React.FC = () => {
   );
 
   return (
-    <Layout className="app-shell">
-      <Header className="topbar">
-        <Space size={12} className="review-topbar-main">
-          <Button icon={<ArrowLeft size={16} />} onClick={() => navigate("/tasks")} title="返回任务控制台" />
-          <Button icon={<Home size={16} />} onClick={() => navigate("/")} title="返回首页" />
-          <span className="workbench-brand-mark compact"><Image src="/attackpilot/riskpilot_logo.png" width={40} height={40} alt="AttackPilot 标志" /></span>
-          <div className="review-title-block">
-            <Typography.Title level={5} className="review-title">
+    <Layout className="ap-page ap-detail-page">
+      <Content className="ap-page-content">
+        <div className="ap-detail-breadcrumb">
+          <Button type="text" icon={<ArrowLeft size={15} />} onClick={() => navigate("/tasks")}>任务库</Button>
+          <Typography.Text type="secondary" className="text-mono" copyable={{ text: taskId }} title={taskId}>
+            {taskId?.slice(0, 8)}...
+          </Typography.Text>
+        </div>
+        <header className="ap-page-heading ap-detail-heading">
+          <div>
+            <span className="ap-eyebrow">攻击复盘工作台</span>
+            <Typography.Title>
               {task?.dapp_name ? `${task.dapp_name} 攻击复盘` : "攻击复盘工作台"}
             </Typography.Title>
-            <Typography.Text type="secondary" className="text-mono">
-              {taskId?.slice(0, 8)}...
-            </Typography.Text>
+            <div className="ap-detail-task-status">
+              <Tag color={getStatusColor(task?.status)}>{task?.status ? taskStatusLabel(task.status) : t(language, "loading")}</Tag>
+              {task && !task.is_demo && <Tag color={verification.color}>{verification.headerLabel}</Tag>}
+              {task?.archived ? <Tag>{t(language, "archived")}</Tag> : null}
+            </div>
           </div>
-        </Space>
-        <Space size={10}>
-          <div className="view-mode-switcher">
-            <Typography.Text className="view-mode-label">{language === "zh" ? "视图模式" : "View"}</Typography.Text>
-            <Segmented
-              value={viewMode}
-              onChange={(value) => { setViewMode(value as ProductViewMode); setActiveMainTab(""); }}
-              options={[
-                { label: modeLabel(language, "report"), value: "report" },
-                { label: modeLabel(language, "learn"), value: "learn" },
-                { label: modeLabel(language, "auditor"), value: "auditor" },
-                { label: modeLabel(language, "raw"), value: "raw" },
-              ]}
-            />
+          <div className="ap-page-actions">
+            <DappContextButton dappName={task?.dapp_name} />
+            <Button icon={<Bot size={15} />} onClick={() => setInspectorOpen(true)}>{t(language, "agentBriefTab")}</Button>
+            <Button icon={<Bot size={15} />} onClick={() => setAssistantOpen(true)}>取证助手</Button>
+            <Button icon={<RefreshCcw size={15} />} onClick={() => {
+              setLoadingTask(true);
+              setConnectionRevision(value => value + 1);
+            }}>{t(language, "refresh")}</Button>
           </div>
-          <Tag color={getStatusColor(task?.status)}>{task?.status ? taskStatusLabel(task.status) : t(language, "loading")}</Tag>
-          {task && !task.is_demo && <Tag color={verification?.status === "verified" ? "success" : "default"}>{verificationLabel}</Tag>}
-          {task?.archived ? <Tag>{t(language, "archived")}</Tag> : null}
-          <Tag>{task?.dapp_name ?? t(language, "unknownDapp")}</Tag>
-          <Tag>{formatDuration(task?.duration)}</Tag>
-          <Tag icon={wsOpen ? <Wifi size={13} /> : <WifiOff size={13} />} color={connectionColor}>
-            {connectionLabel}
-          </Tag>
-          <DappContextButton dappName={task?.dapp_name} autoOpenKey={task?.task_id} />
-          <Button icon={<Bot size={15} />} onClick={() => setAssistantOpen(true)}>
-            取证助手
-          </Button>
-          <Button icon={<RefreshCcw size={15} />} onClick={refreshTask}>
-            {t(language, "refresh")}
-          </Button>
-        </Space>
-      </Header>
+        </header>
 
-      <Content className="dashboard-layout">
-        {task && <Alert type={task.is_demo ? "info" : "warning"} showIcon title={task.is_demo
-          ? "公共历史示例 · 报告与日志来自原项目归档，未在当前环境重新验证。"
-          : "实时分析任务 · 仅本人可见。补丁验证状态以报告中的实际执行结果为准。"} />}
+        <div className="ap-detail-metadata">
+          <div><span>{t(language, "logs")}</span><strong>{totalLogs}</strong></div>
+          <div><span>{t(language, "agents")}</span><strong>{agentStats.filter((item) => item.total > 0).length}</strong></div>
+          <div><span>{t(language, "duration")}</span><strong>{formatDuration(task?.duration)}</strong></div>
+          <Tag icon={wsOpen ? <Wifi size={13} /> : <WifiOff size={13} />} color={connectionColor}>{connectionLabel}</Tag>
+        </div>
 
-        {errorMsg ? <Alert type="error" showIcon message={errorMsg} closable onClose={() => setErrorMsg("")} /> : null}
+        <div className="ap-detail-notices">
+          {task && <Alert type={task.is_demo ? "info" : "warning"} showIcon title={task.is_demo
+            ? "公共历史示例 · 报告与日志来自原项目归档，未在当前环境重新验证。"
+            : "实时分析任务 · 仅本人可见。补丁验证状态以报告中的实际执行结果为准。"} />}
+          {errorMsg ? <Alert type="error" showIcon message={errorMsg} closable onClose={() => setErrorMsg("")} /> : null}
+        </div>
 
-        {hasFinalReport && <div className="report-language-toolbar">
+        <section className="ap-detail-workspace">
+          <div className="ap-detail-toolbar">
+            <div className="ap-detail-view-switcher">
+              <Typography.Text type="secondary">视图模式</Typography.Text>
+              <Segmented
+                aria-label="视图模式"
+                value={viewMode}
+                onChange={(value) => { setViewMode(value as ProductViewMode); setActiveMainTab(""); }}
+                options={[
+                  { label: modeLabel(language, "report"), value: "report" },
+                  { label: modeLabel(language, "learn"), value: "learn" },
+                  { label: modeLabel(language, "auditor"), value: "auditor" },
+                  { label: modeLabel(language, "raw"), value: "raw" },
+                ]}
+              />
+              {selectedAgent !== "all" ? <Button className="ap-detail-agent-filter" size="small" icon={<X size={13} />} title="显示全部智能体" aria-label="显示全部智能体" onClick={() => setSelectedAgent("all")}>{agentDisplayName(selectedAgent)}</Button> : null}
+            </div>
+        {hasFinalReport && <div className="report-language-toolbar ap-detail-report-language">
           <Space wrap>
             <Typography.Text strong>报告语言</Typography.Text>
             <Segmented value={reportLanguage} onChange={(value) => setReportLanguage(value as "zh" | "original")}
@@ -685,61 +697,25 @@ const Dashboard: React.FC = () => {
               action={<Button size="small" onClick={() => { setTranslation(null); setTranslationRevision(value => value + 1); }}>重试</Button>} />}
         </div>}
 
-        <div className="task-overview">
-          <div>
-            <Typography.Text type="secondary">{t(language, "dapp")}</Typography.Text>
-            <Typography.Title level={4}>{task?.dapp_name ?? "加载中..."}</Typography.Title>
           </div>
-          <div className="overview-metrics">
-            <div>
-              <span className="metric-value">{totalLogs}</span>
-              <span className="metric-label">{t(language, "logs")}</span>
+          {loadingTask && !task ? <div className="center-loading"><Spin /></div> : (
+            <div className="ap-detail-reader">
+              <Tabs activeKey={displayedTab} onChange={setActiveMainTab} items={mainTabItems} tabBarGutter={24} />
             </div>
-            <div>
-              <span className="metric-value">{agentStats.filter((item) => item.total > 0).length}</span>
-              <span className="metric-label">{t(language, "agents")}</span>
-            </div>
-            <div>
-              <span className="metric-value">{formatDuration(task?.duration)}</span>
-              <span className="metric-label">{t(language, "duration")}</span>
-            </div>
-          </div>
-        </div>
-
-        {loadingTask && !task ? (
-          <div className="center-loading">
-            <Spin />
-          </div>
-        ) : (
-          <div className="workbench-grid">
-            <AgentNavigator
-              stats={agentStats}
-              selectedAgent={selectedAgent}
-              onSelectAgent={setSelectedAgent}
-              systemStatus={{
-                label: systemStatusLabel,
-                hint: systemStatusHint,
-                tone: systemStatusTone,
-              }}
-            />
-
-            <div className="analysis-center">
-              <Tabs
-                activeKey={displayedTab}
-                onChange={setActiveMainTab}
-                items={mainTabItems}
-              />
-            </div>
-
-            <aside className="inspector-panel">
-              <Tabs
-                defaultActiveKey="agents"
-                items={inspectorTabItems}
-              />
-            </aside>
-          </div>
-        )}
+          )}
+        </section>
       </Content>
+
+      <Drawer className="ap-detail-drawer" title={t(language, "agentBriefTab")} open={inspectorOpen} onClose={() => setInspectorOpen(false)} size={440}
+        getContainer={() => document.querySelector<HTMLElement>(".attackpilot-root") || document.body}>
+        <AgentNavigator
+          stats={agentStats}
+          selectedAgent={selectedAgent}
+          onSelectAgent={(agent) => { setSelectedAgent(agent); setInspectorOpen(false); }}
+          systemStatus={{ label: systemStatusLabel, hint: systemStatusHint, tone: systemStatusTone }}
+        />
+        <Tabs defaultActiveKey="agents" items={inspectorTabItems} />
+      </Drawer>
 
       <LogDetailDrawer
         taskId={taskId ?? ""}

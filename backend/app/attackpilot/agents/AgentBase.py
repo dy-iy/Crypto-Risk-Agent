@@ -3,6 +3,7 @@ import os
 import time
 import traceback
 import asyncio
+from copy import deepcopy
 from typing import Any, Dict, List, Optional, Callable
 
 from app.attackpilot.settings import LLM_NAME, CACHE_DIR
@@ -10,8 +11,11 @@ from app.attackpilot.utils.agent_helpers import AgentLogger, TokenManager, Respo
 from app.attackpilot.utils.llm import MODEL_MAX_OUTPUT_TOKENS
 from app.attackpilot.utils.llm_client import LLMClient
 from app.attackpilot.web.models import LogMessage
+from app.attackpilot.errors import AgentContractError
 
 class AgentBase:
+    INTERNAL_TOOLS = frozenset({'get_current_tree', 'init_debug_session', 'set_current_tx',
+                                'set_attack_tx_list', 'get_patch_items', 'close_session'})
     def __init__(self, name: str, role_prompt: str, unique_id: str = "default", need_tool=False, max_turns=1,log_callback: Optional[Callable[[LogMessage], None]] = None):
         self.name = name
         self.model = LLM_NAME
@@ -77,17 +81,24 @@ class AgentBase:
                 user_message + '\n\nReturn only a valid JSON object matching the requested schema. Preserve the evidence; do not invent missing facts.',
                 temperature, thinking=thinking,
             )
-            return self.parser.process_response(corrected, _format, strict=True)
+            try:
+                return self.parser.process_response(corrected, _format, strict=True)
+            except JSONParsingError as exc:
+                stage = {'TxRoleAgent': 'classification', 'FilterAgent': 'filter',
+                         'TaskAgent': 'task', 'TraceAgent': 'trace',
+                         'GlobalMemoryAgent': 'memory'}.get(type(self).__name__, 'agent')
+                raise AgentContractError(stage, 'agent_output_invalid') from exc
 
     async def _send_message(self, user_message: str, temperature=1.0, *, thinking=True) -> str:
         try:
             self._check_cancelled()
-            truncated_user_msg = self.tm.truncate_prompt(user_message)
-            self.memory.append({"role": "user", "content": truncated_user_msg})
+            user_input = {"role": "user", "content": user_message}
+            final_messages = self.tm.truncate_history([*self.memory, user_input], self.max_turns)
+            self.memory.append(user_input)
 
             start_time = time.time()
             chat_completion = await self.llm_client.create_chat_completion(
-                messages=self.tm.truncate_history(self.memory, self.max_turns),
+                messages=final_messages,
                 model=self.model,
                 temperature=temperature,
                 extra_body={"thinking": {"type": "enabled" if thinking else "disabled"}},
@@ -105,8 +116,8 @@ class AgentBase:
             self.token += usage_token
             self.memory.append(chat_completion.choices[0].message.model_dump(exclude_none=True))
 
-            snapshot = self._get_memory_snapshot_str(self.tm.truncate_history(self.memory[:-1], self.max_turns))
-            self.logger.log_full_interaction("Query", snapshot, truncated_user_msg, reply)
+            snapshot = self._get_memory_snapshot_str(final_messages)
+            self.logger.log_full_interaction("Query", snapshot, user_message, reply)
             self.logger.display_result(reply, {"time": elapsed_time, "token": usage_token})
 
             return reply
@@ -153,7 +164,7 @@ class AgentBase:
 
             if tools and not message.tool_calls:
                 if not _retry_without_tools:
-                    raise RuntimeError('模型两次未选择调试工具，无法继续执行轨迹分析')
+                    raise AgentContractError('trace', 'agent_trace_tool_selection_missing')
                 self.logger.warning('模型尚未选择工具，正在补问一次以继续调试。')
                 return await self.query_with_tools(
                     user_message + '\n\nSelect and call the next available debugging tool. A prose-only answer does not execute the requested investigation.',
@@ -165,6 +176,9 @@ class AgentBase:
             self._handle_error(e)
 
     def _handle_error(self, e):
+        if isinstance(e, AgentContractError):
+            self.logger.file_logger.error(traceback.format_exc())
+            raise e
         error_str = str(e)
         error_type = type(e).__name__
         print(f"\n❌ API Error: {type(e).__name__}\ndetail: {error_str}")
@@ -181,19 +195,10 @@ class AgentBase:
 
         mcp_tools_result = await self.mcp_client.list_tools()
         tools = []
-        hidden_tools = [
-            "get_current_tree",
-            "init_debug_session",
-            "set_current_tx",
-            "set_attack_tx_list",
-            "get_patch_item",
-            "close_session"
-        ]
-
         for tool in mcp_tools_result.tools:
-            if tool.name in hidden_tools:
+            if tool.name in self.INTERNAL_TOOLS:
                 continue
-            schema = tool.inputSchema.copy()
+            schema = deepcopy(tool.inputSchema)
             if "properties" in schema and "session_id" in schema["properties"]:
                 del schema["properties"]["session_id"]
             if "required" in schema and isinstance(schema["required"], list):
@@ -209,20 +214,15 @@ class AgentBase:
                 }
             })
 
+        self._available_tool_names = {tool['function']['name'] for tool in tools}
         return tools
 
     def load_summary_from_cache(self, cache_path: str):
         with open(cache_path, 'r', encoding="utf-8") as f:
             cache = json.load(f)
             summary = cache.get("summary", "")
-            self.token += int(cache.get("token", 0))
-            time_val = cache.get("time", "")
-            if time_val:
-                if isinstance(time_val, str):
-                    loaded_times = [float(t) for t in time_val.split(',') if t.strip()]
-                    self.times.extend(loaded_times)
-                else:
-                    self.times.append(float(time_val))
+            # Stored usage belongs to the original generation. Reading its
+            # result does not consume tokens or model time in this run.
         return summary
 
     def write_summary_to_cache(self, cache_path: str, file_name: str, summary: str):

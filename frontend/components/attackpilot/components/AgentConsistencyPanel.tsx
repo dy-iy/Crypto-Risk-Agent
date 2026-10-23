@@ -37,7 +37,7 @@ const CHECK_COPY: Record<string, { title: string; description: string }> = {
   },
   "verification-loop": {
     title: "补丁验证闭环",
-    description: "检查补丁生成后是否出现重放、成功、失败或验证智能体反馈。",
+    description: "以结构化回放证据检查触发交易拦截；模型提及补丁或验证不构成通过。",
   },
   "root-cause-quorum": {
     title: "根因共识",
@@ -60,11 +60,21 @@ const AgentConsistencyPanel: React.FC<AgentConsistencyPanelProps> = ({
 }) => {
   const isZh = language === "zh";
   const localSummary = useMemo(() => analyzeAgentConsistency(task, events, macro), [events, macro, task]);
+  // A cached review may predate evidence validation. Keep its patch score aligned
+  // with the same canonical task envelope shown in the verification panel.
+  const reviewedChecks = review?.checks.map(check => check.id === "verification-loop"
+    ? localSummary.checks.find(local => local.id === check.id) ?? check : check);
+  const calculatedScore = reviewedChecks?.length
+    ? Math.round(reviewedChecks.reduce((sum, check) => sum + check.score, 0) / reviewedChecks.length) : null;
+  const verifiedLoop = localSummary.checks.some(check => check.id === "verification-loop" && check.status === "pass");
+  const reviewedScore = calculatedScore === null ? null : verifiedLoop ? calculatedScore : Math.min(74, calculatedScore);
   const summary = review
     ? {
-        score: review.score,
-        status: review.status,
-        checks: review.checks,
+        score: reviewedScore,
+        status: review.status === "unavailable" ? "unavailable" as const
+          : reviewedScore !== null && reviewedScore >= 75 ? "pass" as const
+            : reviewedScore !== null && reviewedScore >= 45 ? "warning" as const : "risk" as const,
+        checks: reviewedChecks ?? [],
         agentSignals: review.agent_signals,
         sharedTransactions: review.shared_transactions,
         sharedFunctions: review.shared_functions,
@@ -96,7 +106,7 @@ const AgentConsistencyPanel: React.FC<AgentConsistencyPanelProps> = ({
             <Typography.Text strong>{isZh ? "多智能体一致性检查" : "Cross-Agent Consistency"}</Typography.Text>
             <Typography.Text type="secondary">
               {isZh
-                ? "检查宏观交易筛选、Trace 调试、根因定位、补丁生成和补丁验证之间是否连续。"
+                ? "检查各阶段记录是否连续；引用一致性评分不证明根因正确或交易安全。"
                 : "Checks continuity across macro transaction selection, trace debugging, localization, patching, and verification."}
             </Typography.Text>
           </div>

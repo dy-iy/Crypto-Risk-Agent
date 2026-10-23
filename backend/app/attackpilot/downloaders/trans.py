@@ -5,10 +5,10 @@ from app.attackpilot.downloaders.trace import FlatTraceDownloader
 import asyncio
 import json
 import os
-import urllib.parse
+import re
 from typing import Dict
-from app.attackpilot.downloaders.defs import EtherscanDownloader
 from app.attackpilot.settings import CACHE_DIR
+from app.attackpilot.errors import ChainRPCError
 
 
 class TransactionDownloader(Downloader):
@@ -143,9 +143,16 @@ class TxDetailDownloader(JSONRPCDownloader):
 
 
 class BlockTimestampDownloader(JSONRPCDownloader):
+    @staticmethod
+    def _block_number(value):
+        if type(value) is int and value >= 0:
+            return value
+        if isinstance(value, str) and re.fullmatch(r'0x[0-9a-fA-F]+|[0-9]+', value):
+            return int(value, 16 if value.startswith('0x') else 10)
+        raise ValueError('Invalid block number')
+
     def get_request_param(self, block_number: Union[int, str]) -> Dict:
-        if isinstance(block_number, int):
-            block_number = hex(block_number)
+        block_number = hex(self._block_number(block_number))
         data = {
             "id": 1,
             "jsonrpc": "2.0",
@@ -158,25 +165,38 @@ class BlockTimestampDownloader(JSONRPCDownloader):
         }
 
     async def _preprocess(self, block_number: Union[int, str]):
-        if isinstance(block_number, str):
-            bn_int = int(block_number, 16)
-        else:
-            bn_int = block_number
+        bn_int = self._block_number(block_number)
 
         path = os.path.join(CACHE_DIR, 'timestamp', f'{bn_int}.json')
         if os.path.exists(path):
-            with open(path, 'r') as f:
-                return json.load(f)
+            try:
+                with open(path, 'r') as f:
+                    cached = json.load(f)
+                if (isinstance(cached, dict) and type(cached.get('schema_version')) is int
+                        and cached['schema_version'] == 1
+                        and type(cached.get('block_number')) is int and cached['block_number'] == bn_int
+                        and isinstance(cached.get('block_hash'), str)
+                        and re.fullmatch(r'0x[0-9a-fA-F]{64}', cached['block_hash'])
+                        and type(cached.get('timestamp')) is int and cached['timestamp'] >= 0):
+                    return cached['timestamp']
+            except (OSError, ValueError, UnicodeError):
+                pass
         return None
 
     async def _process(self, result: str, **kwargs):
-        res_json = json.loads(result)
-        timestamp_hex = res_json["result"]["timestamp"]
-        timestamp = int(timestamp_hex, 16)
-
-        block_number = kwargs['block_number']
-        if isinstance(block_number, str):
-            block_number = int(block_number, 16)
+        block_number = self._block_number(kwargs['block_number'])
+        try:
+            header = json.loads(result)['result']
+            if not isinstance(header, dict) or self._block_number(header.get('number')) != block_number:
+                raise ValueError('Block identity mismatch')
+            if not isinstance(header.get('hash'), str) or not re.fullmatch(r'0x[0-9a-fA-F]{64}', header['hash']):
+                raise ValueError('Invalid block hash')
+            timestamp_hex = header.get('timestamp')
+            if not isinstance(timestamp_hex, str) or not re.fullmatch(r'0x[0-9a-fA-F]+', timestamp_hex):
+                raise ValueError('Invalid block timestamp')
+            timestamp = int(timestamp_hex, 16)
+        except (ValueError, TypeError, KeyError):
+            raise ChainRPCError('invalid_response', method='eth_getBlockByNumber') from None
 
         path = os.path.join(CACHE_DIR, 'timestamp')
         if not os.path.exists(path):
@@ -184,14 +204,7 @@ class BlockTimestampDownloader(JSONRPCDownloader):
 
         save_path = os.path.join(path, f'{block_number}.json')
         with open(save_path, 'w') as f:
-            json.dump(timestamp, f)
+            json.dump({'schema_version': 1, 'block_number': block_number,
+                       'block_hash': header['hash'].lower(), 'timestamp': timestamp}, f)
 
         return timestamp
-
-
-async def test():
-    d = TransactionDownloader('https://eth-mainnet.nodereal.io/v1/317f6d43dd4c4acea1fa00515cf02f90')
-    rlt = await d.download(transaction_hash='0x54e45ce9b037a6e353284533958147a607ff0569670d62add99d5f5f3b9e09e9')
-    print(rlt)
-
-

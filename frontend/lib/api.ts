@@ -996,7 +996,11 @@ function assertApiPath(path: string) {
 
 function apiFetch(path: string, init?: RequestInit) {
   assertApiPath(path);
-  const timeout = AbortSignal.timeout(path.includes("/stream") ? 300_000 : 120_000);
+  // Report translation may run for 240 seconds on the backend. Give that
+  // explicit operation time to finish without relaxing other JSON requests.
+  const reportTranslation = init?.method?.toUpperCase() === "POST"
+    && /^\/api\/attackpilot\/tasks\/[^/]+\/report-translation(?:\?|$)/.test(path);
+  const timeout = AbortSignal.timeout(reportTranslation || path.includes("/stream") ? 300_000 : 120_000);
   const signals = [timeout, ...(init?.signal ? [init.signal] : [])];
   if (!path.startsWith("/api/auth/") && path !== "/api/account?confirm=delete-my-account") signals.push(getAccountSignal());
   return fetch(path, { ...init, signal: AbortSignal.any(signals) });

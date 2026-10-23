@@ -33,8 +33,11 @@ class PatchQualityMetrics:
             os.replace(temp_path, path)
         except Exception as e:
             print(f"[Metrics] Save failed for {case_name}: {e}")
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                pass
 
     def start_case(self, case_name):
         """Initialize or resume a tracking record."""
@@ -44,11 +47,17 @@ class PatchQualityMetrics:
             try:
                 with open(path, 'r', encoding='utf-8') as f:
                     self.case_records[case_name] = json.load(f)
+                if not isinstance(self.case_records[case_name], dict):
+                    self._init_new_record(case_name)
             except Exception:
                 self._init_new_record(case_name)
         else:
             self._init_new_record(case_name)
 
+        # A resumed record's historical verdict is not a measurement of this run.
+        record = self.case_records[case_name]
+        record.update(localization_correct=None, localization_status="not_independently_measured",
+                      fix_success=False, verification_scope=None)
         self._flush(case_name)
 
     def _init_new_record(self, case_name):
@@ -64,7 +73,8 @@ class PatchQualityMetrics:
             # FSR: Was the final result VERIFIED?
             "fix_success": False,
             # LFC/PFC: Was the root cause localization correct?
-            "localization_correct": False,
+            "localization_correct": None,
+            "localization_status": "not_independently_measured",
 
             # --- Counters ---
             "total_turns": 0,
@@ -109,31 +119,19 @@ class PatchQualityMetrics:
 
     def record_judge_result(self, case_name, verdict, reason=""):
         """
-        Updates the metrics based on the Judge's Verdict.
-
-        Logic Mapping for LFC/PFC:
-        - VERIFIED: Fix worked. Localization must be Correct.
-        - INEFFECTIVE_PATCH: Fix failed. Localization Ambiguous (assume Incorrect for strict PFC, or Unknown).
-          *Strict Policy*: We treat INEFFECTIVE as Incorrect Localization here unless verified later.
-        - WRONG_ROOT_CAUSE: Fix failed. Localization Incorrect.
+        Record interception separately from independently measured localization.
+        A blocked historical attack does not prove a complete root-cause claim;
+        an unsuccessful patch does not by itself disprove that claim either.
         """
         if case_name not in self.case_records: return
 
         self.case_records[case_name]["final_verdict"] = verdict
         self.case_records[case_name]["judge_reason"] = reason
 
-        if verdict == "VERIFIED":
-            self.case_records[case_name]["fix_success"] = True
-            self.case_records[case_name]["localization_correct"] = True
-
-        elif verdict in ["WRONG_ROOT_CAUSE", "INEFFECTIVE_PATCH"]:
-            self.case_records[case_name]["fix_success"] = False
-            self.case_records[case_name]["localization_correct"] = False
-
-        else:
-            # UNKNOWN, TIMEOUT, ERROR
-            self.case_records[case_name]["fix_success"] = False
-            self.case_records[case_name]["localization_correct"] = False
+        self.case_records[case_name]["fix_success"] = verdict == "VERIFIED"
+        self.case_records[case_name]["verification_scope"] = "attack_path_only" if verdict == "VERIFIED" else None
+        self.case_records[case_name]["localization_correct"] = None
+        self.case_records[case_name]["localization_status"] = "not_independently_measured"
 
         self._flush(case_name)
 

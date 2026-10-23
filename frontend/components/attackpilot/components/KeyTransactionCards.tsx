@@ -22,6 +22,8 @@ import {
 } from "../types";
 import { getMacroAnalysis } from "../services/api";
 import { t } from "../utils/i18n";
+import { formatUsdDelta as formatUsd } from "../utils/presentation";
+import { reportNarrativeParagraphs } from "../utils/reportNarrative";
 import {
   compactEvidenceText,
   extractTransactionHashes,
@@ -53,31 +55,12 @@ function shortHash(hash: string) {
 }
 
 function getReportParagraphs(report: string) {
-  return report
-    .split(/\n\s*\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return reportNarrativeParagraphs(report).map(paragraph => paragraph.content);
 }
 
-function inferRole(text: string, index: number, total: number) {
-  const normalized = text.toLowerCase();
-  if (/create|prepare|init|liquidity|pool|部署|创建|初始化|流动性/.test(normalized)) return "攻击准备";
-  if (/trigger|convert|execute|swap|call|触发|调用|执行|兑换/.test(normalized)) return "漏洞触发";
-  if (/manipulate|storage|price|slippage|reserve|操纵|价格|滑点|储备/.test(normalized)) return "状态操纵";
-  if (/profit|benefit|gain|transfer|withdraw|获利|收益|转移|提现/.test(normalized)) return "攻击获利";
-  if (index === 0) return "攻击准备";
-  if (index === total - 1 && total > 1) return "获利与收尾";
-  return "攻击步骤";
-}
 
 function logsMentioningHash(logs: LogMessage[], hash: string) {
   return logs.filter((log) => log.message.includes(hash)).slice(-4);
-}
-
-function formatUsd(value?: number | null) {
-  if (value == null || Number.isNaN(value)) return "暂无";
-  const sign = value > 0 ? "+" : "";
-  return `${sign}$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 function getTransactionTypeLabel(type: KeyTransaction["type"]) {
@@ -213,7 +196,7 @@ function buildFallbackTransactions(task: Task | null, events: TaskEvent[]): KeyT
   const hashes = extractTransactionHashes(`${report}\n${logText}`).slice(0, 8);
   const paragraphs = getReportParagraphs(report);
 
-  return hashes.map((hash, index) => {
+  return hashes.map((hash) => {
     const reportContext =
       paragraphs.find((paragraph) => paragraph.includes(hash)) ??
       logs.find((log) => log.message.includes(hash))?.message ??
@@ -222,7 +205,7 @@ function buildFallbackTransactions(task: Task | null, events: TaskEvent[]): KeyT
       ? compactEvidenceText(reportContext, 220)
       : "分析中引用了该交易，详细证据可在关联日志中查看。";
     const relatedLogs = logsMentioningHash(logs, hash);
-    const role = inferRole(`${reportContext}\n${relatedLogs.map((log) => log.message).join("\n")}`, index, hashes.length);
+    const role = "交易引用 · 分类待核实";
 
     const evidence: EvidenceItem[] = [
       {

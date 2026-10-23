@@ -4,9 +4,10 @@ import { CircleDollarSign, GitBranch, PlayCircle, SearchCheck, ShieldCheck, Zap 
 import { EvidenceItem, ProductViewMode, Task, TaskEvent } from "../types";
 import {
   buildAttackPhaseEvidence,
-  compactEvidenceText,
   extractTransactionHashes,
 } from "../utils/evidence";
+import { findNarrativeSummary, reportNarrativeParagraphs } from "../utils/reportNarrative";
+import { getPatchVerificationPresentation } from "../utils/verification";
 import EvidenceDrawer from "./EvidenceDrawer";
 import { modeLabel } from "../utils/i18n";
 
@@ -25,25 +26,12 @@ interface AttackPhase {
   evidence: EvidenceItem[];
 }
 
-function findTextByKeywords(report: string, keywords: string[], fallback: string) {
-  const paragraphs = report
-    .split(/\n\s*\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const normalized = keywords.map((keyword) => keyword.toLowerCase());
-  const match = paragraphs.find((paragraph) => {
-    const haystack = paragraph.toLowerCase();
-    return normalized.some((keyword) => haystack.includes(keyword));
-  });
-  return match ? compactEvidenceText(match, 360) : fallback;
-}
-
 function transactionEvidence(report: string): EvidenceItem[] {
-  return extractTransactionHashes(report)
+  return extractTransactionHashes(reportNarrativeParagraphs(report).map(paragraph => paragraph.content).join("\n"))
     .slice(0, 5)
     .map((hash, index) => ({
       id: `attack-tx-${index}`,
-      title: `攻击交易 ${index + 1}`,
+      title: `报告交易引用 ${index + 1}`,
       source: "transaction",
       content: hash,
       full_content: hash,
@@ -54,16 +42,18 @@ function transactionEvidence(report: string): EvidenceItem[] {
 function buildAttackPhases(task: Task | null, events: TaskEvent[]): AttackPhase[] {
   const report = task?.final_report ?? "";
   const txEvidence = transactionEvidence(report);
+  const verification = getPatchVerificationPresentation(task);
 
   return [
     {
       key: "prepare",
       title: "攻击准备",
       subtitle: "准备攻击条件",
-      description: findTextByKeywords(
+      description: findNarrativeSummary(
         report,
         ["prepare", "create", "pool", "liquidity", "初始化", "创建", "流动性"],
-        "识别攻击者是否先创建市场、准备流动性、部署辅助合约或设置攻击前置状态。",
+        "报告尚未提供足够的攻击准备叙述。",
+        360, ["攻击准备", "攻击前置", "preparation", "setup"],
       ),
       icon: <GitBranch size={17} />,
       evidence: [...txEvidence.slice(0, 2), ...buildAttackPhaseEvidence(events, ["create", "pool", "liquidity", "init"])],
@@ -72,10 +62,11 @@ function buildAttackPhases(task: Task | null, events: TaskEvent[]): AttackPhase[
       key: "trigger",
       title: "漏洞触发",
       subtitle: "触发关键函数",
-      description: findTextByKeywords(
+      description: findNarrativeSummary(
         report,
         ["trigger", "convert", "call", "execute", "触发", "调用", "执行"],
-        "定位触发漏洞的核心交易、核心函数和关键调用链。",
+        "报告尚未提供足够的漏洞触发叙述。",
+        360, ["漏洞触发", "trigger", "攻击路径", "attack path", "exploit path"],
       ),
       icon: <PlayCircle size={17} />,
       evidence: buildAttackPhaseEvidence(events, ["trigger", "convert", "execute", "call", "function", "trace"]),
@@ -84,10 +75,11 @@ function buildAttackPhases(task: Task | null, events: TaskEvent[]): AttackPhase[
       key: "manipulate",
       title: "状态操纵",
       subtitle: "改变价格或状态",
-      description: findTextByKeywords(
+      description: findNarrativeSummary(
         report,
         ["manipulate", "slippage", "storage", "event", "price", "操纵", "滑点", "状态", "价格"],
-        "观察执行轨迹、状态变更和事件日志中是否出现价格、储备、余额或权限状态异常。",
+        "报告尚未提供足够的状态操纵叙述。",
+        360, ["状态操纵", "价格操纵", "state manipulation", "price manipulation"],
       ),
       icon: <Zap size={17} />,
       evidence: buildAttackPhaseEvidence(events, ["storage", "event", "swap", "price", "balance", "state"]),
@@ -95,11 +87,12 @@ function buildAttackPhases(task: Task | null, events: TaskEvent[]): AttackPhase[
     {
       key: "profit",
       title: "攻击获利",
-      subtitle: "完成资产转移",
-      description: findTextByKeywords(
+      subtitle: "核对资产转移与收益",
+      description: findNarrativeSummary(
         report,
         ["profit", "gain", "benefit", "transfer", "获利", "收益", "转移"],
-        "归纳攻击者最终如何完成资产转移或套利收益。",
+        "报告尚未提供足够的攻击获利叙述，不能从验证表中的未知收益推断获利。",
+        360, ["攻击获利", "资产转移", "profit", "fund flow"],
       ),
       icon: <CircleDollarSign size={17} />,
       evidence: buildAttackPhaseEvidence(events, ["profit", "transfer", "balance", "attacker", "benefit"]),
@@ -108,11 +101,7 @@ function buildAttackPhases(task: Task | null, events: TaskEvent[]): AttackPhase[
       key: "verify",
       title: "补丁验证",
       subtitle: "重放检查修复",
-      description: findTextByKeywords(
-        report,
-        ["verify", "patch", "replay", "validation", "验证", "补丁", "抵挡"],
-        "检查补丁建议是否经过重放验证，以及攻击路径是否被阻断。",
-      ),
+      description: `${verification.title}：${verification.description}`,
       icon: <ShieldCheck size={17} />,
       evidence: buildAttackPhaseEvidence(events, ["patch", "verify", "replay", "validation", "success", "failure"]),
     },
@@ -138,7 +127,7 @@ const AttackReplayTimeline: React.FC<AttackReplayTimelineProps> = ({ task, event
           <GitBranch size={16} />
           <Typography.Text strong>攻击复盘时间线</Typography.Text>
         </Space>
-        <Tag>{modeLabel("zh", mode)}</Tag>
+        <Space size={6}><Tag>报告叙述复盘</Tag><Tag>{modeLabel("zh", mode)}</Tag></Space>
       </div>
 
       <div className="attack-phase-list">
@@ -153,7 +142,7 @@ const AttackReplayTimeline: React.FC<AttackReplayTimelineProps> = ({ task, event
                   <Typography.Text type="secondary">{phase.subtitle}</Typography.Text>
                 </div>
                 <Space size={6}>
-                  <Tag color={phase.evidence.length > 0 ? "cyan" : "default"}>{phase.evidence.length} 条证据</Tag>
+                  <Tag color={phase.evidence.length > 0 ? "cyan" : "default"}>{phase.evidence.length} 条相关记录</Tag>
                   <Button
                     size="small"
                     icon={<SearchCheck size={14} />}

@@ -47,13 +47,13 @@ const EvidenceIntelligencePanel: React.FC<EvidenceIntelligencePanelProps> = ({ s
             <Typography.Text strong>{isZh ? "证据智能筛选" : "Evidence Intelligence"}</Typography.Text>
             <Typography.Text type="secondary">
               {isZh
-                ? "按来源层级、工具调用和交易哈希评估支撑等级，不代表模型概率。"
-                : "Ranks support by source tier, tool usage, and transaction hashes, not model probability."}
+                ? "按来源、工具调用和哈希引用排列相关记录；分数不代表证据已验证或结论正确。"
+                : "Ranks related records by source and references; scores do not establish verified evidence or correct conclusions."}
             </Typography.Text>
           </div>
         </Space>
         <Button size="small" icon={<SearchCheck size={14} />} onClick={() => setDrawerOpen(true)}>
-          {isZh ? "查看强证据" : "Top Evidence"}
+          {isZh ? "查看相关记录" : "Top Evidence"}
         </Button>
       </div>
 
@@ -68,26 +68,26 @@ const EvidenceIntelligencePanel: React.FC<EvidenceIntelligencePanelProps> = ({ s
           <div>
             <Tag color={scoreColor(health.label)}>{evidenceScoreLabel(health.label, language)}</Tag>
             <Typography.Text type="secondary">
-              {isZh ? "整体证据支撑度" : "Overall evidence support"}
+              {isZh ? "整体记录相关性" : "Overall record relevance"}
             </Typography.Text>
           </div>
         </div>
         <div className="evidence-metric-strip">
           <span>
             <ShieldCheck size={14} />
-            {health.strong} {isZh ? "条强证据" : "strong"}
+            {health.strong} {isZh ? "条高相关记录" : "strong"}
           </span>
           <span>
             <Activity size={14} />
-            {health.supporting} {isZh ? "条辅助证据" : "supporting"}
+            {health.supporting} {isZh ? "条相关记录" : "supporting"}
           </span>
           <span>
             <Database size={14} />
-            {health.transactions} {isZh ? "条交易证据" : "tx"}
+            {health.transactions} {isZh ? "条交易引用" : "tx"}
           </span>
           <span>
             <Wrench size={14} />
-            {health.tools} {isZh ? "条工具证据" : "tool"}
+            {health.tools} {isZh ? "条工具记录" : "tool"}
           </span>
         </div>
       </div>
@@ -99,7 +99,7 @@ const EvidenceIntelligencePanel: React.FC<EvidenceIntelligencePanelProps> = ({ s
               <Typography.Text strong>{section.title}</Typography.Text>
               <Space size={4} wrap className="evidence-section-tags">
                 <Tag color={scoreColor(section.health.label)}>{evidenceScoreLabel(section.health.label, language)}</Tag>
-                <Tag>{section.health.total} {isZh ? "条证据" : "evidence"}</Tag>
+                <Tag>{section.health.total} {isZh ? "条相关记录" : "evidence"}</Tag>
               </Space>
             </div>
             <Progress
@@ -126,7 +126,7 @@ const EvidenceIntelligencePanel: React.FC<EvidenceIntelligencePanelProps> = ({ s
       ) : null}
 
       <EvidenceDrawer
-        title={isZh ? "强证据排序" : "Top Ranked Evidence"}
+        title={isZh ? "相关记录排序" : "Top Ranked Evidence"}
         open={drawerOpen}
         evidence={enrichedEvidence}
         onClose={() => setDrawerOpen(false)}

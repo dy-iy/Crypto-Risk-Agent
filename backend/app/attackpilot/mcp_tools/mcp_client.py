@@ -1,4 +1,5 @@
 import json
+import asyncio
 import sys
 import os
 from contextlib import AsyncExitStack
@@ -6,6 +7,16 @@ from typing import Optional, Dict, Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
+
+class MCPToolError(RuntimeError):
+    """A failed transport/tool response cannot be used as execution evidence."""
+
+    def __init__(self, tool_name: str, reason_code: str):
+        self.tool_name = tool_name
+        self.reason_code = reason_code
+        # Do not include remote error bodies, arguments, or transport URLs.
+        super().__init__(f"MCP tool failed ({reason_code})")
 
 
 class MCPClient:
@@ -52,19 +63,30 @@ class MCPClient:
 
     async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str | Dict:
         if not self.session:
-            raise RuntimeError("Client not connected")
+            raise MCPToolError(tool_name, "not_connected")
 
         try:
             result = await self.session.call_tool(tool_name, arguments)
-            if result.content and hasattr(result.content[0], 'text'):
-                text_response = result.content[0].text
-                try:
-                    return json.loads(text_response)
-                except json.JSONDecodeError:
-                    return text_response
-            return str(result)
-        except Exception as e:
-            return f"Tool execution failed: {str(e)}"
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            raise MCPToolError(tool_name, "transport_error") from None
+
+        if getattr(result, "isError", False) is True:
+            raise MCPToolError(tool_name, "remote_error")
+        content = getattr(result, "content", None)
+        if not isinstance(content, list) or not content:
+            raise MCPToolError(tool_name, "empty_content")
+        if any(getattr(item, "type", None) != "text" or not isinstance(getattr(item, "text", None), str)
+               for item in content):
+            raise MCPToolError(tool_name, "unsupported_content")
+        text_response = "\n".join(item.text for item in content)
+        if not text_response.strip():
+            raise MCPToolError(tool_name, "empty_content")
+        try:
+            return json.loads(text_response)
+        except json.JSONDecodeError:
+            return text_response
 
     async def close(self):
         await self.exit_stack.aclose()

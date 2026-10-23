@@ -20,7 +20,8 @@ class ContractCompileItem:
             abi: List = None, contract_name: str = "",
             errors: List[Dict] = None,
             creation_bytecode: str = "",
-            immutable_references: Dict = None
+            immutable_references: Dict = None,
+            storage_layout: Dict = None
     ):
         self.contract_address = contract_address
         self.bytecode = bytecode  # Runtime Bytecode
@@ -31,6 +32,7 @@ class ContractCompileItem:
         self.contract_name = contract_name
         self.errors = errors if errors is not None else []
         self.immutable_references = immutable_references if immutable_references is not None else {}
+        self.storage_layout = storage_layout
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -41,7 +43,8 @@ class ContractCompileItem:
             "source_mapping": [item.to_dict() for item in self.source_mapping],
             "abi": self.abi,
             "errors": self.errors,
-            "immutable_references": self.immutable_references
+            "immutable_references": self.immutable_references,
+            "storage_layout": self.storage_layout
         }
 
     @classmethod
@@ -57,7 +60,8 @@ class ContractCompileItem:
             source_mapping=mapping_objs,
             abi=data.get("abi", []),
             errors=data.get("errors", []),
-            immutable_references=data.get("immutable_references", {})
+            immutable_references=data.get("immutable_references", {}),
+            storage_layout=data.get("storage_layout")
         )
 
     def is_success(self) -> bool:
@@ -125,9 +129,9 @@ class ContractDao:
                 sources = standard_json.get('sources', {})
                 return {fn: val['content'] for fn, val in sources.items() if 'content' in val}
             else:
-                return {'': source_code_raw.replace('\r\n', '\n')}
+                return {'': source_code_raw}
         except Exception:
-            return {'': result.get('SourceCode', '').replace('\r\n', '\n')}
+            return {'': result.get('SourceCode', '')}
 
     async def get_compile_item_by_json(self, contract_address: str, result: Dict) -> ContractCompileItem:
         """
@@ -201,7 +205,7 @@ class ContractDao:
                 "*": [
                     "evm.bytecode",
                     "evm.deployedBytecode",
-                    "abi"
+                    "abi", "storageLayout"
                 ],
                 "": ["ast"]
             }
@@ -249,6 +253,104 @@ class ContractDao:
             collected_errors.extend(product.errors)
 
         return ContractCompileItem(entity.address, '', {}, [], abi=[], contract_name="", errors=collected_errors)
+
+    async def resolve_source_function(self, entity: ContractEntityForCompile, calldata: str) -> Dict:
+        """Resolve an external entry point using compiler AST evidence only.
+
+        The returned compilation still requires historical-runtime validation by
+        the caller. Offsets are UTF-8 byte offsets, not Python string indices.
+        """
+        if (not isinstance(calldata, str)
+                or not re.fullmatch(r'0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{2})*', calldata)):
+            raise ValueError('source_function_selector_unavailable')
+        compiled = await self.get_compile_item_from_entity(entity)
+        if not compiled.is_success() or any(e.get('severity') == 'error' for e in compiled.errors):
+            raise ValueError('source_function_compilation_failed')
+        return self._resolve_compiled_source_function(entity, calldata[:10].lower(), compiled)
+
+    @staticmethod
+    def _resolve_compiled_source_function(
+            entity: ContractEntityForCompile, selector: str, compiled: ContractCompileItem,
+    ) -> Dict:
+        def source_range(node):
+            raw = node.get('src') if isinstance(node, dict) else None
+            if not isinstance(raw, str) or not re.fullmatch(r'\d+:\d+:\d+', raw):
+                raise ValueError('source_function_location_unavailable')
+            return tuple(int(value) for value in raw.split(':'))
+
+        contracts, source_files = {}, {}
+        if not isinstance(compiled.ast, dict) or not isinstance(entity.sources, dict):
+            raise ValueError('source_function_ast_unavailable')
+        for path, unit in compiled.ast.items():
+            if path not in entity.sources or not isinstance(entity.sources[path], str):
+                raise ValueError('source_function_source_unavailable')
+            if not isinstance(unit, dict) or unit.get('nodeType') != 'SourceUnit':
+                raise ValueError('source_function_ast_unavailable')
+            _, _, file_id = source_range(unit)
+            if file_id in source_files:
+                raise ValueError('source_function_ambiguous_source')
+            source_files[file_id] = path
+            for node in unit.get('nodes', []):
+                if node.get('nodeType') != 'ContractDefinition':
+                    continue
+                ident = node.get('id')
+                if type(ident) is not int or ident in contracts:
+                    raise ValueError('source_function_ambiguous_contract')
+                contracts[ident] = node
+
+        targets = [node for node in contracts.values() if node.get('name') == entity.contract_name]
+        if len(targets) != 1 or targets[0].get('abstract') is True:
+            raise ValueError('source_function_ambiguous_contract')
+        target = targets[0]
+        bases = target.get('linearizedBaseContracts')
+        if (not isinstance(bases, list) or not bases or bases[0] != target['id']
+                or any(type(ident) is not int or ident not in contracts for ident in bases)
+                or len(set(bases)) != len(bases)):
+            raise ValueError('source_function_inheritance_unavailable')
+
+        # Solidity's C3 order starts with the most-derived implementation.
+        # Do not walk into a base body when a derived public getter owns entry.
+        for ident in bases:
+            owner = contracts[ident]
+            matches = [node for node in owner.get('nodes', [])
+                       if isinstance(node.get('functionSelector'), str)
+                       and node['functionSelector'].removeprefix('0x').lower() == selector[2:]
+                       and node.get('visibility') in {'public', 'external'}]
+            if len(matches) > 1:
+                raise ValueError('source_function_ambiguous_selector')
+            if not matches:
+                continue
+            function = matches[0]
+            if function.get('nodeType') != 'FunctionDefinition' or function.get('kind') != 'function':
+                raise ValueError('source_function_getter_unsupported')
+            body = function.get('body')
+            if body is None:
+                continue
+            if not isinstance(body, dict) or body.get('nodeType') != 'Block':
+                raise ValueError('source_function_body_unavailable')
+            start, length, file_id = source_range(function)
+            body_start, body_length, body_file_id = source_range(body)
+            path = source_files.get(file_id)
+            if (path is None or length <= 0 or body_length <= 0 or body_file_id != file_id
+                    or body_start < start or body_start + body_length > start + length):
+                raise ValueError('source_function_location_unavailable')
+            content = entity.sources[path].encode('utf-8')
+            if start + length > len(content):
+                raise ValueError('source_function_location_unavailable')
+            try:
+                prefix = content[:start].decode('utf-8')
+                content[start:start + length].decode('utf-8')
+            except UnicodeDecodeError:
+                raise ValueError('source_function_location_unavailable') from None
+            return {
+                'filename': path, 'source_file_id': file_id,
+                'code_start': start, 'code_length': length,
+                'line_number': prefix.count('\n') + 1,
+                'function_name': function.get('name'), 'selector': selector,
+                'declaring_contract': owner.get('name'),
+                'source_mapping': 'compiled_ast_function_selector', 'compiled': compiled,
+            }
+        raise ValueError('source_function_selector_unmapped')
 
     async def get_compile_item(self, contract_address: str) -> ContractCompileItem:
         """
@@ -298,7 +400,7 @@ class ContractDao:
                 parsed_json["settings"]["outputSelection"] = {}
 
             parsed_json["settings"]["outputSelection"]["*"] = {
-                "*": ["evm.bytecode", "evm.deployedBytecode", "abi"],
+                "*": ["evm.bytecode", "evm.deployedBytecode", "abi", "storageLayout"],
                 "": ["ast"]
             }
             return parsed_json
@@ -323,7 +425,7 @@ class ContractDao:
                 },
                 "outputSelection": {
                     "*": {
-                        "*": ["evm.bytecode", "evm.deployedBytecode", "abi"],
+                        "*": ["evm.bytecode", "evm.deployedBytecode", "abi", "storageLayout"],
                         "": ["ast"]
                     }
                 }
@@ -346,53 +448,30 @@ class ContractDao:
             prefix = "solc-macosx-amd64-" if system_name == 'darwin' else "solc-linux-amd64-"
             suffix = ""
 
-        version_match = re.search(r'v?(\d+\.\d+\.\d+)', compiler_version)
-        if not version_match:
-            target_base = compiler_version
-        else:
-            target_base = version_match.group(1)
-
-        candidates = []
+        identity = self._compiler_identity(compiler_version)
+        if identity is None:
+            return ""
+        target_base, target_commit = identity
         try:
             files = os.listdir(compiler_dir)
         except OSError:
             return ""
 
-        input_has_commit = "commit" in compiler_version
+        pattern = re.compile(re.escape(prefix) + r'v(\d+\.\d+\.\d+)\+commit\.([0-9a-fA-F]{8})' + re.escape(suffix))
+        for fname in sorted(files):
+            match = pattern.fullmatch(fname)
+            if (match and match[1] == target_base
+                    and (target_commit is None or match[2].lower() == target_commit)
+                    and os.path.isfile(os.path.join(compiler_dir, fname))):
+                return os.path.join(compiler_dir, fname)
+        return ""
 
-        for fname in files:
-            if not fname.startswith(prefix):
-                continue
-            if suffix and not fname.endswith(suffix):
-                continue
-
-            check_ver = f"v{target_base}"
-            if check_ver in fname:
-                candidates.append(fname)
-
-        if not candidates:
-            return ""
-
-        best_match = None
-
-        for c in candidates:
-            if compiler_version in c:
-                best_match = c
-                break
-
-        if best_match is None and input_has_commit:
-            commit_match = re.search(r'commit\.([0-9a-fA-F]+)', compiler_version)
-            if commit_match:
-                commit_hash = commit_match.group(1)
-                for c in candidates:
-                    if commit_hash in c:
-                        best_match = c
-                        break
-
-        if best_match is None:
-            best_match = candidates[0]
-
-        return os.path.join(compiler_dir, best_match)
+    @staticmethod
+    def _compiler_identity(version):
+        if not isinstance(version, str):
+            return None
+        match = re.fullmatch(r'v?(\d+\.\d+\.\d+)(?:\+commit\.([0-9a-fA-F]{8}))?(?:\.(?:Linux|Windows|Darwin|Emscripten)\..+)?', version.strip())
+        return (match[1], match[2].lower() if match[2] else None) if match else None
 
     async def _get_compile_item_by_solc(
             self, contract_address: str, result: Dict
@@ -411,14 +490,10 @@ class ContractDao:
         solc_path = self._resolve_solc_path(raw_version)
 
         if not solc_path or not os.path.exists(solc_path):
-            if platform.system().lower() == 'windows':
-                expected_name = f"solc-windows-amd64-{raw_version}.exe"
-            else:
-                expected_name = f"solc-linux-amd64-{raw_version}"
             return ContractCompileItem(contract_address, '', {}, [],
                                        errors=[
-                                           {"severity": "warning",
-                                            "message": f"Compiler binary not found for version {raw_version}. Expected something like {expected_name}"}])
+                                           {"severity": "error", "reason_code": "compiler_unavailable",
+                                            "message": f"Matching native Solidity compiler is not installed: {raw_version}"}])
 
         contract_name = result["ContractName"]
         standard_json = self._parse_source_json(result)
@@ -435,7 +510,7 @@ class ContractDao:
                 libraries = ['{}:0x{}'.format(*lib.split(':')) for lib in libraries]
 
             product = await wrap_run4tmpfile(
-                data=self._clean_source_code(result['SourceCode']).replace('\r\n', '\n'),
+                data=self._clean_source_code(result['SourceCode']),
                 async_func=lambda p: Solc(solc_path).compile_sol(
                     source_path=p,
                     contract_name=contract_name,
@@ -455,7 +530,8 @@ class ContractDao:
             abi=product.abi,
             contract_name=contract_name,
             errors=getattr(product, 'errors', []),
-            immutable_references=getattr(product, 'immutable_references', {})
+            immutable_references=getattr(product, 'immutable_references', {}),
+            storage_layout=getattr(product, 'storage_layout', None)
         ) if product is not None else None
 
     async def _get_compile_item_by_solcjs(
@@ -470,12 +546,17 @@ class ContractDao:
         :param result: the result of the source code request
         :return: the compiled item or None
         """
-        version_match = re.search(r'v?(\d+\.\d+\.\d+)', result["CompilerVersion"])
-        if version_match is None:
+        identity = self._compiler_identity(result["CompilerVersion"])
+        if identity is None:
             return ContractCompileItem(contract_address, '', {}, [],
                                        errors=[{"severity": "error",
                                                 "message": "Cannot parse compiler version for SolcJS"}])
-        solc_version = 'v%s' % version_match.group(1)
+        solc_version = 'v%s' % identity[0]
+        if not os.path.isfile(os.path.join(PROJECT_PATH, 'node_modules', f'solc{solc_version}', 'package.json')):
+            return ContractCompileItem(contract_address, '', {}, [], errors=[{
+                "severity": "error", "reason_code": "compiler_unavailable",
+                "message": f"Matching JavaScript Solidity compiler is not installed: {result['CompilerVersion']}",
+            }])
         contract_name = result["ContractName"]
         _tmp_filename = "this_is_a_tmp_filename.sol"
 
@@ -494,7 +575,7 @@ class ContractDao:
                 },
                 "sources": {
                     _tmp_filename: {
-                        "content": clean_source.replace('\r\n', '\n'),
+                        "content": clean_source,
                     }
                 }
             }
@@ -514,13 +595,14 @@ class ContractDao:
             standard_json['settings'] = {}
         standard_json['settings']['outputSelection'] = {
             "*": {
-                "*": ["evm.bytecode", "evm.deployedBytecode", "abi"],
+                "*": ["evm.bytecode", "evm.deployedBytecode", "abi", "storageLayout"],
                 "": ["ast"],
             },
         }
 
         product = await wrap_run4tmpfile(
-            data=SOLCJS_CODE % (solc_version, json.dumps(standard_json)),
+            data=("const expectedCompiler = " + json.dumps({"version": identity[0], "commit": identity[1]}) + ";\n"
+                  + SOLCJS_CODE % (solc_version, json.dumps(standard_json))),
             async_func=lambda p: SolcJS(NODE_PATH).compile_json(p, contract_name)
         )
         if product is None:
@@ -545,7 +627,8 @@ class ContractDao:
             abi=product.abi,
             contract_name=contract_name,
             errors=getattr(product, 'errors', []),
-            immutable_references=getattr(product, 'immutable_references', {})
+            immutable_references=getattr(product, 'immutable_references', {}),
+            storage_layout=getattr(product, 'storage_layout', None)
         ) if product is not None else None
 
     async def is_contract(self, contract_address: str) -> bool:
@@ -553,11 +636,9 @@ class ContractDao:
         return result != '0x'
 
     def _clean_source_code(self, source_code: str) -> str:
-        if not source_code:
-            return source_code
-        if source_code.startswith('\ufeff'):
-            source_code = source_code[1:]
-        source_code = re.sub(r'[\xa0\u3000\u200b\t]', ' ', source_code)
+        # Whitespace and Unicode can be literal contents; every source byte also
+        # contributes to metadata hashes and compiler UTF-8 source locations.
+        # Preserve provider source exactly across native and JavaScript paths.
         return source_code
 
 

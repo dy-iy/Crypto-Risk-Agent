@@ -1,6 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
-import { Button, Layout, Space, Tag, Typography } from "antd";
 import {
   AlertTriangle,
   BookOpen,
@@ -14,13 +12,10 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useNavigate } from "../services/navigation";
 import RagKnowledgePanel from "../components/RagKnowledgePanel";
 import { listVulnerabilityKnowledge } from "../services/api";
 import { VulnerabilityTypeKnowledge } from "../types";
-
-
-const { Header, Content } = Layout;
+import "../knowledge.css";
 
 type VulnerabilityLesson = {
   id: string;
@@ -270,7 +265,6 @@ function toLesson(item: VulnerabilityTypeKnowledge): VulnerabilityLesson {
 }
 
 const LearningCenter: React.FC = () => {
-  const navigate = useNavigate();
   const [lessons, setLessons] = useState<VulnerabilityLesson[]>(fallbackLessons);
   const [activeId, setActiveId] = useState(fallbackLessons[0].id);
 
@@ -297,117 +291,115 @@ const LearningCenter: React.FC = () => {
   const ragQuery = `${selectedLesson.titleEn} ${selectedLesson.titleZh} ${selectedLesson.beginnerHook}`;
 
   return (
-    <Layout className="learning-page">
-      <Header className="landing-v2-nav">
-        <button className="landing-brand" type="button" onClick={() => navigate("/")}>
-          <span className="landing-brand-mark"><Image src="/attackpilot/riskpilot_logo.png" width={40} height={40} alt="AttackPilot 标志" /></span>
-          <span><strong>AttackPilot</strong><small>漏洞学习中心</small></span>
-        </button>
-        <Space size={10} className="landing-nav-actions">
-          <Button type="text" onClick={() => navigate("/")}>返回首页</Button>
-          <Button type="text" onClick={() => navigate("/tasks")}>任务库</Button>
-        </Space>
-      </Header>
-
-      <Content className="learning-page-content">
-        <section className="learning-page-hero">
-          <Tag className="stage-chip">漏洞教程</Tag>
-          <Typography.Title>按攻击路径理解漏洞</Typography.Title>
-          <Typography.Paragraph>
-            不是背术语，而是按“背景直觉 → 攻击步骤 → 链上证据 → 练习路径”学习。先理解攻击为什么成立，再回到真实交易里核对证据。
-          </Typography.Paragraph>
-          <div className="learning-links">
-            {learningLinks.map((link) => (
-              <a key={link.label} href={link.href} target="_blank" rel="noreferrer">
-                <strong>{link.label}</strong>
-                <small>{link.desc}</small>
-                <ExternalLink size={15} />
-              </a>
-            ))}
+    <main className="ap-page ap-knowledge-page">
+      <div className="ap-page-content">
+        <header className="ap-page-heading knowledge-heading">
+          <div>
+            <span className="ap-eyebrow">漏洞教程</span>
+            <h1 className="ant-typography">按攻击路径理解漏洞</h1>
+            <p>
+              不是背术语，而是按“背景直觉 → 攻击步骤 → 链上证据 → 练习路径”学习。先理解攻击为什么成立，再回到真实交易里核对证据。
+            </p>
           </div>
-        </section>
+        </header>
 
-        <section className="tutorial-section" id="vuln-tutorial">
-          <div className="tutorial-board">
-            <div className="tutorial-list">
+        <div className="knowledge-workspace" id="vuln-tutorial">
+          <aside className="knowledge-sidebar">
+            <nav className="knowledge-subjects" aria-label="漏洞教程">
               {lessons.map((item) => {
                 const Icon = item.icon;
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    className={`tutorial-tab ${item.id === selectedLesson.id ? "tutorial-tab-active" : ""}`}
+                    className="knowledge-subject"
+                    aria-pressed={item.id === selectedLesson.id}
+                    aria-controls="knowledge-lesson"
                     onClick={() => setActiveId(item.id)}
                   >
-                    <span className="tutorial-tab-icon"><Icon size={16} /></span>
-                    <strong>{item.titleZh}</strong>
-                    <small>{item.titleEn}</small>
-                    <span>{item.beginnerHook}</span>
+                    <Icon size={17} aria-hidden="true" />
+                    <span>
+                      <strong>{item.titleZh}</strong>
+                      <small>{item.titleEn}</small>
+                    </span>
                   </button>
                 );
               })}
-            </div>
+            </nav>
+          </aside>
 
-            <article className="tutorial-detail">
-              <div className="tutorial-title">
-                <span className="tutorial-tab-icon"><SelectedIcon size={18} /></span>
+          <div className="knowledge-reading-column">
+            <article className="knowledge-lesson" id="knowledge-lesson" aria-labelledby="knowledge-lesson-title">
+              <header className="knowledge-lesson-title">
+                <span className="knowledge-lesson-icon"><SelectedIcon size={23} aria-hidden="true" /></span>
                 <div>
-                  <strong>{selectedLesson.titleZh}</strong>
+                  <h2 id="knowledge-lesson-title">{selectedLesson.titleZh}</h2>
                   <small>{selectedLesson.titleEn}</small>
                 </div>
-              </div>
+              </header>
 
-              <p className="tutorial-hook">{selectedLesson.beginnerHook}</p>
+              <p className="knowledge-lesson-hook">{selectedLesson.beginnerHook}</p>
 
-              <div className="tutorial-block">
-                <span>1. 背景直觉</span>
+              <section className="knowledge-section knowledge-intuition">
+                <h3>1. 背景直觉</h3>
                 <p>{selectedLesson.mentalModel}</p>
-              </div>
+              </section>
 
-              <div className="tutorial-columns">
-                <div className="tutorial-block">
-                  <span>2. 攻击者怎么做</span>
+              <div className="knowledge-evidence-grid">
+                <section className="knowledge-section">
+                  <h3>2. 攻击者怎么做</h3>
                   <ol>
                     {selectedLesson.attackSteps.map((step) => <li key={step}>{step}</li>)}
                   </ol>
-                </div>
-                <div className="tutorial-block">
-                  <span>3. AttackPilot 怎么查</span>
+                </section>
+                <section className="knowledge-section">
+                  <h3>3. AttackPilot 怎么查</h3>
                   <ol>
                     {selectedLesson.traceChecklist.map((step) => <li key={step}>{step}</li>)}
                   </ol>
-                </div>
+                </section>
               </div>
 
-              <div className="tutorial-bottom-grid">
-                <div className="tutorial-note">
-                  <span>PoC 是什么</span>
-                  <p>PoC（Proof of Concept）就是“最小攻击复现”：用一段脚本或一笔交易证明漏洞真的能被触发。看 PoC 不是为了照抄攻击，而是为了确认漏洞成立需要哪些前提。</p>
-                </div>
-                <div className="tutorial-block tutorial-patch">
-                  <span>4. 一般怎么打补丁</span>
-                  <ol>
-                    {selectedLesson.repairHints.map((hint) => <li key={hint}>{hint}</li>)}
-                  </ol>
-                </div>
-              </div>
+              <section className="knowledge-section knowledge-repairs">
+                <h3>4. 一般怎么打补丁</h3>
+                <ol>
+                  {selectedLesson.repairHints.map((hint) => <li key={hint}>{hint}</li>)}
+                </ol>
+              </section>
 
-              <div className="tutorial-practice">
-                <BookOpen size={16} />
+              <aside className="knowledge-poc">
+                <h3>PoC 是什么</h3>
+                <p>PoC（Proof of Concept）就是“最小攻击复现”：用一段脚本或一笔交易证明漏洞真的能被触发。看 PoC 不是为了照抄攻击，而是为了确认漏洞成立需要哪些前提。</p>
+              </aside>
+
+              <div className="knowledge-practice">
+                <BookOpen size={17} aria-hidden="true" />
                 <span>{selectedLesson.practice}</span>
               </div>
             </article>
-          </div>
-        </section>
 
-        <RagKnowledgePanel
-          compact
-          defaultQuery={ragQuery}
-          title="相似案例参考"
-          subtitle="从历史漏洞、真实案例和复现材料中检索相似攻击模式，辅助理解当前漏洞。"
-        />
-      </Content>
-    </Layout>
+            <RagKnowledgePanel
+              compact
+              defaultQuery={ragQuery}
+              title="相似案例参考"
+              subtitle="从历史漏洞、真实案例和复现材料中检索相似攻击模式，辅助理解当前漏洞。"
+            />
+          </div>
+
+          <div className="knowledge-resources">
+            {learningLinks.map((link) => (
+              <a key={link.label} href={link.href} target="_blank" rel="noreferrer">
+                <span>
+                  <strong>{link.label}</strong>
+                  <small>{link.desc}</small>
+                </span>
+                <ExternalLink size={14} aria-hidden="true" />
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </main>
   );
 };
 

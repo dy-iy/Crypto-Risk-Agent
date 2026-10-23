@@ -1,3 +1,6 @@
+// Keep aligned with the backend's execution-evidence verification policy.
+export const VERIFICATION_POLICY_VERSION = 2;
+
 export enum TaskStatus {
   PENDING = "pending",
   RUNNING = "running",
@@ -159,8 +162,9 @@ export interface FullLogResponse {
 export interface TaskLogPageResponse {
   events: LogMessage[];
   next_before_id?: number | null;
+  next_after_id?: number | null;
   has_more: boolean;
-  total: number;
+  total?: number;
 }
 
 export interface AgentLogFileMeta {
@@ -240,13 +244,19 @@ export interface TokenBalanceChange {
 
 export interface BalanceParticipantSummary {
   address: string;
-  usd_delta: number;
+  usd_delta: number | null;
+  valuation_status?: "available" | "unavailable";
+  priced_asset_count?: number;
+  unpriced_asset_count?: number;
   tokens: TokenBalanceChange[];
 }
 
 export interface TransactionBalanceSummary {
   participant_count: number;
-  total_usd_delta: number;
+  total_usd_delta: number | null;
+  valuation_status?: "available" | "unavailable";
+  priced_asset_count?: number;
+  unpriced_asset_count?: number;
   top_participants: BalanceParticipantSummary[];
 }
 

@@ -1,5 +1,7 @@
 from decimal import Decimal
 from typing import Dict, Any
+from app.attackpilot.utils.signature import parse_quantity
+from app.attackpilot.utils.token_utils import ERC20_TRANSFER_TOPIC, parse_address
 
 
 class LogAnalyzer:
@@ -15,11 +17,13 @@ class LogAnalyzer:
     def _fmt_amt(self, amount_raw: Any, token_address: str) -> str:
         try:
             raw_str = str(amount_raw)
-            amt_decimal = Decimal(raw_str)
+            amt_decimal = Decimal(parse_quantity(amount_raw))
 
             info = self.token_db.get(token_address.lower())
-            decimals = info['decimals'] if info else 18
-            symbol = info['name'] if info else "Units"
+            decimals = info.get('decimals') if info else None
+            symbol = info.get('token_symbol') or info.get('name') or 'Units' if info else 'Units'
+            if type(decimals) is not int or not 0 <= decimals <= 255:
+                return f"Raw: {raw_str} {symbol} (Decimals: unknown; adjusted amount unavailable; Address: {token_address})"
             val = amt_decimal / Decimal(10 ** decimals)
             readable_val = "{:f}".format(val.normalize())
 
@@ -39,7 +43,17 @@ class LogAnalyzer:
         if event_name == "Transfer":
             frm = inputs.get("from") or inputs.get("src")
             to = inputs.get("to") or inputs.get("dst")
-            val = inputs.get("value") or inputs.get("wad")
+            val = inputs.get("value", inputs.get("wad"))
+            raw = log.get('raw') or {}
+            topics = raw.get('topics') or []
+            if (len(topics) in (3, 4) and isinstance(topics[0], str)
+                    and topics[0].lower() == ERC20_TRANSFER_TOPIC):
+                frm, to = parse_address(topics[1]), parse_address(topics[2])
+                val = parse_quantity(raw.get('data')) if len(topics) == 3 else None
+            if (len(topics) == 4 and isinstance(topics[0], str)
+                    and topics[0].lower() == ERC20_TRANSFER_TOPIC):
+                return (f"[NFT TRANSFER] Token ID: {parse_quantity(topics[3])} | "
+                        f"{self._fmt_addr(frm)} -> {self._fmt_addr(to)} | Contract: {contract_addr}")
 
             action = "TRANSFER"
             if frm == "0x0000000000000000000000000000000000000000":
@@ -52,7 +66,7 @@ class LogAnalyzer:
         elif event_name == "Approval":
             owner = inputs.get("owner") or inputs.get("src")
             spender = inputs.get("spender") or inputs.get("guy")
-            val = inputs.get("value") or inputs.get("wad")
+            val = inputs.get("value", inputs.get("wad"))
             return f"[APPROVE] {self._fmt_addr(owner)} allowed {self._fmt_addr(spender)} for {self._fmt_amt(val, contract_addr)}"
 
         elif event_name == "Swap":

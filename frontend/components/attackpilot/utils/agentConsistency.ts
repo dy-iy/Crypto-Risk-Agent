@@ -1,5 +1,7 @@
 import { LanguageMode, LogMessage, MacroAnalysisResponse, Task, TaskEvent } from "../types";
 import { agentDisplayName } from "./presentation";
+import { getPatchVerificationPresentation } from "./verification";
+import { extractTransactionHashes } from "./evidence";
 
 const CONSISTENCY_COPY_ZH: Record<string, string> = {
   "Macro transaction selection -> Trace debugging": "宏观交易筛选与调用轨迹调试",
@@ -88,7 +90,6 @@ export interface AgentConsistencySummary {
   sharedFunctions: Array<{ value: string; agents: string[] }>;
 }
 
-const TX_HASH_RE = /0x[a-fA-F0-9]{64}/g;
 const FUNCTION_RE = /\b([A-Za-z_][A-Za-z0-9_]{2,})\s*\(/g;
 const NOISE_FUNCTIONS = new Set([
   "if",
@@ -117,7 +118,7 @@ function shortHash(value: string) {
 }
 
 function extractTransactions(text: string) {
-  return unique(Array.from(text.matchAll(TX_HASH_RE)).map((item) => item[0].toLowerCase()));
+  return extractTransactionHashes(text);
 }
 
 function extractFunctions(text: string) {
@@ -226,13 +227,14 @@ export function analyzeAgentConsistency(
     return { score: null, status: "unavailable", checks: [], agentSignals: [], sharedTransactions: [], sharedFunctions: [] };
   }
   const agentSignals = buildAgentSignals(events, task);
-  const sharedTransactions = sharedValues(agentSignals, "transactions");
-  const sharedFunctions = sharedValues(agentSignals, "functions");
+  const independentSignals = agentSignals.filter(signal => signal.agent !== "Final Report");
+  const sharedTransactions = sharedValues(independentSignals, "transactions");
+  const sharedFunctions = sharedValues(independentSignals, "functions");
   const debugTargets = (macro?.transactions_need_analyze?.length ? macro.transactions_need_analyze : macro?.attack_transactions) ?? [];
   const macroAttackTxs = macro?.attack_transactions ?? [];
   const debugAgents = ["Transaction Debugger", "GlobalMemory Administrator", "Final Report"];
-  const patchAgents = ["Code Patcher", "Transaction Judge", "Final Report"];
-  const rootAgents = ["TxFaultAgent", "Task Organizer", "Transaction Debugger", "GlobalMemory Administrator", "Final Report"];
+  const patchAgents = ["Code Patcher", "Transaction Judge"];
+  const rootAgents = ["TxFaultAgent", "Task Organizer", "Transaction Debugger", "GlobalMemory Administrator"];
 
   const macroTxCovered = debugTargets.length
     ? containsAnyTransaction(agentSignals, debugAgents, debugTargets)
@@ -247,9 +249,8 @@ export function analyzeAgentConsistency(
   const patchFunctions = functionsForAgents(agentSignals, patchAgents);
   const overlappingFunctions = rootFunctions.filter((name) => patchFunctions.includes(name));
 
-  const patchMentionAgents = agentSignals.filter((signal) => signal.mentionsPatch).map((signal) => signal.agent);
-  const verificationMentionAgents = agentSignals.filter((signal) => signal.mentionsVerification).map((signal) => signal.agent);
-  const rootCauseAgents = agentSignals.filter((signal) => signal.mentionsRootCause).map((signal) => signal.agent);
+  const verification = getPatchVerificationPresentation(task);
+  const rootCauseAgents = independentSignals.filter((signal) => signal.mentionsRootCause).map((signal) => signal.agent);
 
   const checks: ConsistencyCheck[] = [
     makeCheck(
@@ -293,17 +294,10 @@ export function analyzeAgentConsistency(
     makeCheck(
       "verification-loop",
       "Patch verification loop",
-      "Checks whether patch/fix discussion is followed by verification, replay, success/failure, or judge signals.",
-      patchMentionAgents.length && verificationMentionAgents.length ? 86 : patchMentionAgents.length ? 55 : 25,
-      [
-        patchMentionAgents.length ? `Patch mentioned by: ${patchMentionAgents.join(", ")}` : "No patch/fix signal detected.",
-        verificationMentionAgents.length
-          ? `Verification mentioned by: ${verificationMentionAgents.join(", ")}`
-          : "No verification/replay signal detected.",
-      ],
-      patchMentionAgents.length && verificationMentionAgents.length
-        ? undefined
-        : "Expose patch replay results and success/failure signals in the final report.",
+      "以结构化回放证据检查触发交易拦截；模型提及补丁或验证不构成通过。",
+      verification.status === "verified" ? 100 : 25,
+      [verification.title, verification.description],
+      verification.status === "verified" ? undefined : verification.nextStep ?? "补齐可核实的补丁回放证据后再确认效果。",
     ),
     makeCheck(
       "root-cause-quorum",
@@ -315,7 +309,8 @@ export function analyzeAgentConsistency(
     ),
   ];
 
-  const score = Math.round(checks.reduce((sum, check) => sum + check.score, 0) / checks.length);
+  const calculatedScore = Math.round(checks.reduce((sum, check) => sum + check.score, 0) / checks.length);
+  const score = verification.status === "verified" ? calculatedScore : Math.min(74, calculatedScore);
   const status: ConsistencyStatus = score >= 75 ? "pass" : score >= 45 ? "warning" : "risk";
 
   return {

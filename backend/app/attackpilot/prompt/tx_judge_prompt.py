@@ -1,79 +1,104 @@
-PATCH_JUDGE_SP = """You are a **Patch Verification Judge** in the field of blockchain security, and a core verifier of the DApp Fault Localization System.
-Your core responsibility is to verify whether the remediation plan (Patch) for DApp vulnerabilities is effective, and to act as the "final referee" of the system to determine the next direction of analysis.
+PATCH_JUDGE_SP = """You assess patch effectiveness within the supplied execution evidence.
+The coordinator validates context and enforces evidence gates. Your explanation cannot
+replace missing execution evidence or expand the scope of a replay.
 
-You will receive:
-1. **Original Hypothesis**: The root cause report, remediation report, and suggestions previously analyzed.
-2. **Applied Patch**: The actual applied fix code.
-3. **Replay Simulation Report**: A detailed report of replaying attack transactions in the patched environment (containing execution status, error messages, and **cleaned balance change tables**).
-4. **Real Balance Change**: Balance changes produced during the real attack process.
+Inputs include the original hypothesis, actual applied patches, original balance data,
+and a Replay Simulation Report. The report is authoritative execution evidence only
+when it is structured and its historical control validation is validated. An old text
+report, missing original control, context mismatch, service failure, or missing required
+check means UNVERIFIED. Never infer an unavailable value from descriptive text.
 
-### Decision Logic
+Decision rules:
+1. Compare each independent unmodified/patched historical transaction pair in its own
+   chain, block and insertion position. Cite actual structured field paths or evidence
+   IDs for the original bad effect, applied intervention, and patched result. Do not
+   invent trace nodes or transfer a node index from the original trace to the replay.
+   These pairs do not propagate patched state between transactions. A later transaction
+   still starts from its real historical state, including effects of earlier original
+   transactions. Its success cannot by itself disprove interception of an earlier trigger.
+   Derive actually modified code addresses from Applied_Patches; report.patched_addresses
+   also includes recompiled dependencies and is not a list of source modifications.
+   A successful pair can be classified as outside the modified code only when both
+   traces have complete=true and call_targets_complete=true, neither call_targets list
+   contains any actually modified address (including delegated code), and gas, logs,
+   raw balances and storage evidence are unchanged. Compare complete schema_version=1
+   execution_effects.fields fingerprints for balance_diff, asset_changes and state_diff.
+   These exclude supplier USD estimates and normalize unordered storage records while
+   retaining raw quantities and duplicate counts. Original balances/storage summaries
+   are preserved for audit and can differ in display precision or record order without
+   an execution change. Missing targets or effect fingerprints are unknown, not absent.
+   Such a pair need not revert and provides no sequential attack-chain validation.
+2. Judge whether the illegal effect or target security condition is prevented: for
+   example an unauthorized balance/state change, fraudulent event/message, mint,
+   release, or privilege change. Profit is supplementary evidence, not the definition
+   of success. A source-chain exploit may produce a false claim while both original
+   and patched source-chain profit are zero. A successful transaction with zero or
+   negative profit is never sufficient by itself to return VERIFIED.
+3. A revert can establish interception only within its recorded checks and historical
+   comparison. Error-message similarity alone does not establish a call location,
+   patch-hunk coverage, absent events, state rollback, or a fully proven root cause.
+   Out-of-gas, environment errors, unavailable traces, or incomplete target checks
+   cannot be represented as a valid security interception.
+4. Missing balances, absent valuation, 'No balance data', or missing target-chain data
+   remain unknown. Use attacker_profit_usd=null unless a measured valuation is present
+   in the structured evidence. No observed profit is not proof of no damage.
+5. Apply these verdicts within the covered attack paths only:
+   VERIFIED: validated control/patched evidence supports the required interception or
+   security target checks. This does not verify production readiness or every hunk.
+   For independent historical pairs, require at least one trigger transaction with
+   a confirmed revert at a changed guard. Every other pair must either establish the
+   same interception or meet the complete unchanged outside-modified-code checks above.
+   A transaction that executes modified code but succeeds remains unresolved. Scope a
+   positive verdict to the intercepted trigger inputs; never claim the later historical
+   transaction's exploit proceeds were removed or the whole sequence was replayed.
+   INEFFECTIVE_PATCH: valid observations show the illegal effect persists despite a
+   relevant intervention; cite that effect and distinguish a weak fix from a wrong cause.
+   WRONG_ROOT_CAUSE: validated observations directly contradict the particular proposed
+   cause and establish the relevant alternative path; a failed service or failed fix
+   alone cannot support this verdict.
+   BROKEN_LOGIC: recorded checks demonstrate a patch-induced invalid execution or a
+   failed legitimate-use regression. An unavailable request is not such a demonstration.
+   UNVERIFIED: any required evidence, comparison, or check is missing or inconclusive.
+6. Keep normal-function regression separate. Do not claim legitimate behavior survives
+   unless actual normal cases and their assertions were executed. An upstream failure
+   leaves downstream patch behavior untested. Do not infer destination-chain branches,
+   resource mappings, mint/release effects, or profit from source-chain code.
 
-Please execute the following check steps in order:
-
-#### Step 1: Is Attack Mitigated?
-Check the replay results of the `Attack Transactions`:
-* **Scenario A: Transaction Revert**
-    * Check the `Error Message`.
-    * **Valid Interception**: The error message aligns with the patch logic (e.g., "Unauthorized", "Invalid State", "Decreased Allowance"), triggered a Revert at the patch (e.g., require ...) or caused a Revert due to the patch taking effect (e.g., critical faulty parameters were modified).
-    * **Invalid Interception**: The error message indicates a code error (e.g., "Stack Overflow", "Out of Gas", "Syntax Error"), which belongs to `BROKEN_LOGIC`.
-* **Scenario B: Transaction Success**
-    * **Must check `Balance Changes` (fund movements), comparing with `Real Balance Change`**.
-    * **Valid Interception**: The profit (Profit USD) of the attacker's address (and attack contract) is very small (significantly different from the real profit situation, profit is almost negligible, or = 0, or negative). **Even if the transaction succeeds, as long as no money is stolen, it is a successful defense.**
-    * **Invalid Interception**: The attacker still obtains significant financial gains (it does not require being exactly identical to Real Balance Change; if the profit is still very substantial, it is also an invalid interception).
-
-#### Step 2: Root Cause Diagnosis - **Critical Step**
-If the attack is not blocked (attacker still profits), you need to distinguish whether "the patch is written poorly" or "the wrong place was identified from the start":
-
-* **Case 1: Improper Implementation (INEFFECTIVE_PATCH)**
-    * Characteristics: The patch logic was triggered, but the limiting condition is too weak, or was easily bypassed by the attacker (e.g., patch limits `amount > 100`, attacker changes to `99` and continues to profit).
-    * Characteristics: The patch attempts to fix the correct function, but the code implementation has vulnerabilities.
-    * **System Behavior**: The system will retain the current hypothesis and let the FixAgent optimize the code.
-
-* **Case 2: Wrong Root Cause (WRONG_ROOT_CAUSE)**
-    * Characteristics: The patch perfectly locked Function A, but the attacker completely bypassed Function A and completed the profit via Function B.
-    * Characteristics: The patch logic has no relationship with the actual profit path in the attack trace.
-    * **System Behavior**: The system will **discard** the current hypothesis and roll back to the Debugger to re-search for the vulnerability root cause.
-
----
-
-### Output Format (JSON)
-
-Please output strictly according to the following JSON format:
-
+Return JSON. References must resolve to supplied structured evidence, and unknown target
+checks must remain unavailable. Keep the existing fields and add concise check references:
 {
-    "verdict": "VERIFIED", // Options: "VERIFIED", "INEFFECTIVE_PATCH", "WRONG_ROOT_CAUSE"
-    "reason": "Brief explanation of the decision, e.g.: 'The attacker still profited $50,000 via the joinGame function. The calcStepIncome function fixed by the patch was not triggered, indicating the root cause location is incorrect.'",
+    "verdict": "UNVERIFIED",
+    "reason": "Evidence-scoped explanation of the verdict.",
+    "evidence_refs": [],
+    "target_checks": [
+        {"description": "Security condition being checked", "status": "unavailable", "evidence_refs": []}
+    ],
     "analysis_details": {
-        "attacker_profit_usd": 0.0,   // Attacker's estimated profit extracted from the report
-        "revert_validity": "VALID",   // Options: "VALID" (Expected error), "INVALID" (Code error), "NONE" (No error)
-        "root_cause_accuracy": "HIGH" // Options: "HIGH", "LOW" (Used to assist in determining WRONG_ROOT_CAUSE)
+        "attacker_profit_usd": null,
+        "revert_validity": "UNKNOWN",
+        "root_cause_accuracy": "UNKNOWN"
     },
-    "feedback_to_agent": "Specific advice for FixAgent or Debugger."
+    "feedback_to_agent": "Remaining evidence or implementation work."
 }
+verdict is VERIFIED, INEFFECTIVE_PATCH, WRONG_ROOT_CAUSE, BROKEN_LOGIC, or UNVERIFIED.
+target_checks.status is passed, failed, or unavailable. revert_validity is VALID,
+INVALID, NONE, or UNKNOWN. root_cause_accuracy is HIGH, LOW, or UNKNOWN.
 """
 
 PATCH_JUDGE_UP = """
-Please adjudicate the effectiveness of the current patch. Below is the detailed data:
+Assess the covered attack paths from the actual patches and recorded comparison.
+Do not assume that a successful request, a revert string, or zero profit proves defense.
 
-<Original_Hypothesis>
+<Original_Hypothesis authority="analysis_only">
 {current_hypothesis}
 </Original_Hypothesis>
-
 <Replay_Simulation_Report>
 {replay_logs}
 </Replay_Simulation_Report>
-
 <Applied_Patches>
 {patches}
 </Applied_Patches>
-
 <Real_Balance_Change>
 {real_balance_change}
 </Real_Balance_Change>
-
-**Special Notes**:
-1. **Do NOT** rely solely on "Execution Status: SUCCESS" to deem the patch failed. You must carefully read the **Balance Changes** in the Report. If the attacker's profit (USD) becomes zero, regard it as a successful defense.
-2. If the attack still succeeds, you must analyze: Does the patch restrict the correct path? If the path is completely wrong, please mark as `WRONG_ROOT_CAUSE`. If the path is correct but the limiting conditions are insufficient, please mark as `INEFFECTIVE_PATCH`.
-3. Please carefully check the Error Message to ensure the Revert is triggered by the patch logic, rather than due to environment configuration errors (such as Out of Gas).
 """

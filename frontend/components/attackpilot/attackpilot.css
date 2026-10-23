@@ -1109,6 +1109,20 @@
   flex: 0 0 auto;
 }
 
+.attackpilot-root .patch-status-icon {
+  display: block;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.attackpilot-root .patch-status-icon.is-verified {
+  color: var(--green);
+}
+
+.attackpilot-root .patch-status-icon.is-failed {
+  color: var(--red);
+}
+
 .attackpilot-root .patch-summary {
   min-width: 0;
   flex: 1;

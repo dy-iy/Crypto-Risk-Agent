@@ -1,0 +1,83 @@
+.attackpilot-root .ap-briefing-page .ap-briefing-heading {
+  align-items: flex-start;
+  gap: 36px;
+  margin-bottom: 48px;
+}
+
+.attackpilot-root .ap-briefing-page .ap-briefing-intro { max-width: 780px; min-width: 0; }
+.attackpilot-root .ap-briefing-page .ap-eyebrow { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.attackpilot-root .ap-briefing-page .ap-briefing-intro h1 { max-width: 740px; text-wrap: balance; }
+.attackpilot-root .ap-briefing-page .ap-briefing-intro > p { max-width: 680px; margin: 18px 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.9; }
+.attackpilot-root .ap-briefing-page .ap-briefing-actions { flex-shrink: 0; padding-top: 2px; }
+.attackpilot-root .ap-briefing-page .ap-briefing-actions .ant-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+.attackpilot-root .ap-briefing-page .ap-briefing-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 32px;
+  padding: 34px 0 38px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.attackpilot-root .ap-briefing-page .ap-briefing-overview-item { min-width: 0; }
+.attackpilot-root .ap-briefing-page .ap-briefing-overview-item > svg { margin-bottom: 17px; color: var(--accent); stroke-width: 1.7; }
+.attackpilot-root .ap-briefing-page :is(.ap-briefing-overview-item, .ap-briefing-principles) h2 { margin: 0 0 9px; color: var(--text-primary); font-size: 15px; font-weight: 600; line-height: 1.6; }
+.attackpilot-root .ap-briefing-page :is(.ap-briefing-overview-item, .ap-briefing-principles) p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.9; }
+
+.attackpilot-root .ap-briefing-page .ap-briefing-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 64px;
+  padding: 48px 0 52px;
+}
+
+.attackpilot-root .ap-briefing-page .ap-briefing-details > section { min-width: 0; }
+.attackpilot-root .ap-briefing-page .ap-briefing-details > section > h2 { margin: 0 0 27px; color: var(--text-primary); font-size: 19px; font-weight: 600; line-height: 1.5; letter-spacing: -.3px; }
+.attackpilot-root .ap-briefing-page .ap-briefing-step-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.attackpilot-root .ap-briefing-page .ap-briefing-step-list li { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 18px; min-width: 0; padding-bottom: 26px; }
+.attackpilot-root .ap-briefing-page .ap-briefing-step-list li:last-child { padding-bottom: 0; }
+.attackpilot-root .ap-briefing-page .ap-briefing-step-list li:not(:last-child)::after { position: absolute; top: 36px; bottom: 7px; left: 16px; width: 1px; background: var(--border); content: ""; }
+.attackpilot-root .ap-briefing-page .ap-briefing-step-number { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: var(--bg-surface); color: var(--text-muted); font-family: var(--font-mono, monospace); font-size: 11px; }
+.attackpilot-root .ap-briefing-page .ap-briefing-step-list h3 { margin: 3px 0 6px; color: var(--text-primary); font-size: 14px; font-weight: 600; line-height: 1.6; }
+.attackpilot-root .ap-briefing-page .ap-briefing-step-list p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.8; }
+.attackpilot-root .ap-briefing-page .ap-briefing-api-list { margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.attackpilot-root .ap-briefing-page .ap-briefing-api-list > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: start; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--border); }
+.attackpilot-root .ap-briefing-page .ap-briefing-api-list dt { min-width: 0; color: var(--text-primary); font-size: 12px; line-height: 1.8; }
+.attackpilot-root .ap-briefing-page .ap-briefing-api-list code { padding: 0; background: transparent; color: inherit; font-family: var(--font-mono, monospace); font-size: inherit; overflow-wrap: anywhere; }
+.attackpilot-root .ap-briefing-page .ap-briefing-api-list dd { min-width: 0; margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.8; }
+
+.attackpilot-root .ap-briefing-page .ap-briefing-principles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 60px; padding: 36px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
+.attackpilot-root .ap-briefing-page .ap-briefing-principles article { display: flex; align-items: flex-start; gap: 18px; min-width: 0; }
+.attackpilot-root .ap-briefing-page .ap-briefing-principle-icon { display: grid; flex-shrink: 0; width: 34px; height: 34px; place-items: center; border-radius: 8px; background: var(--bg-card); color: var(--text-muted); }
+.attackpilot-root .ap-briefing-page .ap-briefing-principle-icon svg { stroke-width: 1.7; }
+.attackpilot-root .ap-briefing-page .ap-briefing-principles h2 { margin-bottom: 5px; font-size: 14px; }
+.attackpilot-root .ap-briefing-page .ap-briefing-principles p { font-size: 12px; }
+
+@media (max-width: 1100px) {
+  .attackpilot-root .ap-briefing-page .ap-briefing-heading { flex-direction: column; gap: 22px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-overview { gap: 24px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-details { gap: 36px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-api-list > div { grid-template-columns: minmax(0, 1fr); gap: 4px; padding-block: 12px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-principles { gap: 28px 32px; padding: 28px; }
+}
+
+@media (max-width: 760px) {
+  .attackpilot-root .ap-briefing-page .ap-briefing-heading { margin-bottom: 32px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-intro > p { margin-top: 14px; font-size: 13px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; padding-block: 28px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-overview-item > svg { margin-bottom: 11px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-details { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-block: 36px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-details > section > h2 { margin-bottom: 22px; font-size: 18px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-api-list > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; padding-block: 16px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-principles { grid-template-columns: minmax(0, 1fr); gap: 26px; padding: 26px; }
+}
+
+@media (max-width: 440px) {
+  .attackpilot-root .ap-briefing-page .ap-eyebrow { font-size: 10px; letter-spacing: 0; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-overview { gap: 28px 20px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-overview-item p { font-size: 12px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-step-list li { gap: 14px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-api-list > div { grid-template-columns: minmax(0, 1fr); gap: 4px; padding-block: 13px; }
+  .attackpilot-root .ap-briefing-page .ap-briefing-principles { padding: 22px 20px; }
+}

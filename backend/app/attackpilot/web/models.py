@@ -16,15 +16,9 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class TaskCreateRequest(BaseModel):
-    dapp_name: str
-
-
 class TxReviewRequest(BaseModel):
     tx_hash: str
     chain: str = "ethereum"
-    tx_hashes: List[str] = Field(default_factory=list)
-    modules: List[str] = Field(default_factory=list)
 
 
 class TxDetectRequest(BaseModel):
@@ -178,13 +172,6 @@ class MsgType(str, Enum):
     TOOL_CALL = "tool"     # 工具调用
     RESULT = "result"      # 最终结果
 
-# class LogMessage(BaseModel):
-#     agent: str
-#     level: LogLevel
-#     message_type: MsgType
-#     message: str
-#     is_truncated: bool = False
-#     timestamp: Optional[str] = None
 class LogMessage(BaseModel):
     agent: str
     level: LogLevel

@@ -1,13 +1,21 @@
 import asyncio
+import hashlib
+import json
 import sys
 import uuid
-import traceback
+import re
 from typing import Dict, List, Optional
+import httpx
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from tqdm import tqdm
 
-from app.attackpilot.daos.tenderly import MixTraceTree
+from app.attackpilot.daos.tenderly import MixTraceTree, TenderlyDao
+from app.attackpilot.daos.contract import ContractDao
+from app.attackpilot.downloaders.contract import ContractSourceDownloader
+from app.attackpilot.entities.contract import ContractEntity, ContractEntityForCompile
 from app.attackpilot.entities.trace import MixTraceItem
+from app.attackpilot.errors import HistoricalReplayContextError, HistoricalReplayValidationError
 from app.attackpilot.process.trace.trace import TraceLoader, TraceParser, TraceRender
 from app.attackpilot.process.trace.debug_simulator import DebugSimulator
 from app.attackpilot.settings import SCAN_APIKEYS, JSONRPCS
@@ -52,6 +60,8 @@ class SessionContext:
         self.tx2micro: Dict[str, MixTraceTree] = {}
         self.tx2init: Dict[str, str] = {}
         self.loader: Optional[TraceLoader] = None
+        self._source_refresh_attempted_addresses = set()
+        self._source_refresh_results = {}
 
 
 class TraceSessionManager:
@@ -120,6 +130,67 @@ def _get_target_tree(session: SessionContext, tx_hash: str) -> MixTraceTree:
     return tx2micro
 
 
+async def _resolve_function_source(tree, item):
+    """Recover an external entry function, without inventing trace PC locations.
+
+    The patcher separately validates the compiled runtime against historical
+    code before any patch generation. This mapping identifies a source function,
+    not proof that every instruction in its body executed.
+    """
+    if getattr(item, 'call_type', None) not in {'CALL', 'STATICCALL', 'DELEGATECALL', 'CALLCODE'}:
+        return None
+    address = item.to_addr.lower()
+    contract = tree.contracts.get(address)
+    if contract is None or not contract.has_source_code or contract.public is not True:
+        return None
+    files = contract.contract_info
+    if (any(not isinstance(f, dict) or type(f.get('id')) is not int
+            or not isinstance(f.get('path'), str) or not f['path']
+            or not isinstance(f.get('source'), str) or not f['source'].strip() for f in files)
+            or len({f['path'] for f in files}) != len(files)
+            or len({f['id'] for f in files}) != len(files)):
+        return None
+    calldata = getattr(item, 'input_data', '')
+    if not isinstance(calldata, str) or re.fullmatch(r'0x(?:[0-9a-fA-F]{2}){4,}', calldata) is None:
+        return None
+    entity_data = {
+        'address': address, 'contract_name': contract.contract_name,
+        'compiler_version': contract.compiler_version, 'evm_version': contract.evm_version,
+        'optimizations_used': contract.optimizations_used, 'optimization_runs': contract.optimization_runs,
+        'compiler_settings': contract.compiler_settings, 'libraries': contract.libraries,
+        'full_file_map': {str(f['id']): f for f in files},
+        'sources': {f['path']: f['source'] for f in files},
+    }
+    digest = hashlib.sha256(json.dumps(entity_data, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    key = (address, calldata[:10].lower(), digest)
+    if not hasattr(tree, '_function_source_cache'):
+        tree._function_source_cache = {}
+    cache = tree._function_source_cache
+    if key not in cache:
+        try:
+            result = await ContractDao(None).resolve_source_function(ContractEntityForCompile(entity_data), calldata)
+            matching = [f for f in files if f['path'] == result['filename']]
+            if len(matching) != 1:
+                raise ValueError('The compiler source file is not uniquely available')
+            file = matching[0]
+            raw = file['source'].encode('utf-8')
+            start, length = result['code_start'], result['code_length']
+            snippet = raw[start:start + length].decode('utf-8')
+            cache[key] = {k: v for k, v in result.items() if k != 'compiled'} | {
+                'file_index': file['id'], 'function_source': snippet, 'contract_source': file['source'],
+            }
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            cache[key] = None
+    resolved = cache[key]
+    if resolved:
+        item.function_source = resolved['function_source']
+        item.contract_source = resolved['contract_source']
+        item.function_name = resolved['function_name']
+        item.source_resolution = {k: v for k, v in resolved.items()
+                                  if k not in {'function_source', 'contract_source'}}
+    return resolved
+
+
 # --- MCP Tools ---
 
 @mcp.tool()
@@ -130,6 +201,8 @@ async def init_debug_session(dapp: Dict) -> Dict:
     Args:
         dapp: fault issue
     """
+    session_id = None
+    initialized = False
     try:
         _platform = dapp.get("platform", "Ethereum")  # Default to eth if missing
         session_id = await session_manager.create_session(_platform)
@@ -138,8 +211,7 @@ async def init_debug_session(dapp: Dict) -> Dict:
         apikey_bucket = global_resources.get_apikey_bucket(_platform)
         rpc_bucket = global_resources.get_rpc_bucket(_platform)
 
-        raw_tx_list = list(set(dapp.get("transaction_hash", [])))
-        tx_list = [str(tx).lower() for tx in raw_tx_list]
+        tx_list = list(dict.fromkeys(str(tx).lower() for tx in dapp.get("transaction_hash", [])))
         session.tx_list = tx_list
 
         # Load traces
@@ -159,14 +231,45 @@ async def init_debug_session(dapp: Dict) -> Dict:
 
         if tx_list:
             session.current_tx = tx_list[0]
+        if not session.tx2init:
+            raise ValueError("No usable transaction traces were loaded for the debug session.")
 
+        initialized = True
         return {
             "session_id": session_id,
             "tx2init": session.tx2init,
             "current_tx": session.current_tx
         }
-    except Exception as e:
-        return {"error": f"Failed to init session: {str(e)}", "traceback": traceback.format_exc()}
+    except (HistoricalReplayValidationError, HistoricalReplayContextError) as caught:
+        exc = caught if isinstance(caught, HistoricalReplayValidationError) else HistoricalReplayValidationError(
+            'unavailable', 'missing_evidence', details={'field': 'rpc.historical_context'},
+        )
+        details = dict(HistoricalReplayValidationError(
+            exc.status, exc.reason_code, details=exc.details).details)
+        # Only validated provenance crosses the MCP boundary; provider bodies
+        # and tracebacks must not replace this deterministic failure category.
+        tx_hash = exc.details.get("original_transaction_hash")
+        if isinstance(tx_hash, str) and re.fullmatch(r"0x[0-9a-fA-F]{64}", tx_hash):
+            details["original_transaction_hash"] = tx_hash.lower()
+        network_id = exc.details.get("network_id")
+        if isinstance(network_id, str) and re.fullmatch(r"[0-9]{1,12}", network_id):
+            details["network_id"] = network_id
+        for key in ("block_number", "transaction_index"):
+            value = exc.details.get(key)
+            if type(value) is int and 0 <= value <= 2**64 - 1:
+                details[key] = value
+        return {
+            "error": str(exc),
+            "error_code": "historical_replay_validation",
+            "status": exc.status,
+            "reason_code": exc.reason_code,
+            "details": details,
+        }
+    except Exception:
+        raise ToolError("Failed to initialize the trace session.") from None
+    finally:
+        if session_id is not None and not initialized:
+            await session_manager.destroy_session(session_id)
 
 
 @mcp.tool()
@@ -180,8 +283,8 @@ async def expand_node(session_id: str, index: int, depth: int = 1) -> str:
         debugger = _get_debugger(session)
         debugger.expand_node(index, depth)
         return f"Expanded node {index} for tx {session.current_tx}."
-    except Exception as e:
-        return f"Error expanding node: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to expand the requested trace node.") from None
 
 
 @mcp.tool()
@@ -195,8 +298,29 @@ async def collapse_node(session_id: str, index: int) -> str:
         debugger = _get_debugger(session)
         debugger.collapse_node(index)
         return f"Collapsed node {index} for tx {session.current_tx}."
-    except Exception as e:
-        return f"Error collapsing node: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to collapse the requested trace node.") from None
+
+
+def _source_unavailable_diagnostic(tree, item, *, function=False):
+    contract = tree.contracts.get(item.to_addr.lower())
+    lookup = getattr(contract, 'source_lookup', None)
+    lookup = lookup if isinstance(lookup, dict) else {}
+    status = lookup.get('status', 'unknown')
+    if function and contract is not None and contract.has_source_code:
+        reason = 'function_source_mapping_unavailable'
+    elif status == 'failed':
+        reason = 'source_fetch_failed'
+    elif status == 'unverified':
+        reason = 'source_not_verified'
+    else:
+        reason = 'contract_source_unavailable'
+    detail = f"reason_code={reason}, source_status={status}"
+    for key in ('retryable', 'refresh_attempted'):
+        if type(lookup.get(key)) is bool:
+            detail += f", {key}={str(lookup[key]).lower()}"
+    kind = 'Function' if function else 'Contract'
+    return f"{kind} source unavailable for address {item.to_addr} ({detail})."
 
 
 @mcp.tool()
@@ -210,18 +334,34 @@ async def get_function_source_code(session_id: str, index: int) -> str:
 
         mix_trace_item = mix_tree.node_map.get(index)
         if not mix_trace_item:
-            return f"Error: Node {index} not found in mix trace tree."
+            raise ValueError("Trace node not found.")
+
+        address = mix_trace_item.to_addr.lower()
+        contract = mix_tree.contracts.get(address)
+        # Enrichment can put diagnostic text in source fields when lookup fails.
+        if contract is None or not contract.has_source_code:
+            await _refresh_patch_source(session, mix_tree, address)
+            contract = mix_tree.contracts.get(address)
+            if contract is None or not contract.has_source_code:
+                return _source_unavailable_diagnostic(mix_tree, mix_trace_item, function=True)
+        resolution = getattr(mix_trace_item, 'source_resolution', None)
+        if not mix_trace_item.function_source:
+            await _resolve_function_source(mix_tree, mix_trace_item)
+            resolution = getattr(mix_trace_item, 'source_resolution', None)
+        if not mix_trace_item.function_source:
+            return _source_unavailable_diagnostic(mix_tree, mix_trace_item, function=True)
 
         return (
-            f"File: {mix_trace_item.contract_name}\n"
-            f"Contract: {mix_trace_item.address}\n"
+            f"File: {resolution['filename'] if resolution else mix_trace_item.contract_name}\n"
+            f"Contract: {mix_trace_item.to_addr}\n"
             f"Function Name: {mix_trace_item.function_name}\n"
+            f"Source mapping: {resolution['source_mapping'] if resolution else 'provider_trace_location'}\n"
             f"Call Site (Caller): {mix_trace_item.caller_source}\n"
             f"--------------------------------------------------\n"
             f"{mix_trace_item.function_source}"
         )
-    except Exception as e:
-        return f"Error getting function source: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to read the requested function source.") from None
 
 
 @mcp.tool()
@@ -235,14 +375,27 @@ async def get_contract_source_code(session_id: str, index: int) -> str:
 
         node = debugger.node_map.get(index)
         if not node:
-            return f"Error: Node {index} not found."
+            raise ValueError("Trace node not found.")
 
+        tree = _get_mix_tree(session)
+        address = node.mix_trace_item.to_addr.lower()
+        contract = tree.contracts.get(address)
+        if contract is None or not contract.has_source_code:
+            await _refresh_patch_source(session, tree, address)
+            contract = tree.contracts.get(address)
+            if contract is None or not contract.has_source_code:
+                return _source_unavailable_diagnostic(tree, node.mix_trace_item)
         if not node.mix_trace_item.contract_source:
-            return f"No source files found for address {node.mix_trace_item.address}."
+            await _resolve_function_source(tree, node.mix_trace_item)
+            if not node.mix_trace_item.contract_source:
+                contract = tree.contracts.get(node.mix_trace_item.to_addr.lower())
+                if contract is not None and contract.has_source_code:
+                    return '\n\n'.join(f"File: {file['path']}\n{file['source']}" for file in contract.contract_info)
+                return _source_unavailable_diagnostic(tree, node.mix_trace_item)
 
         return node.mix_trace_item.contract_source
-    except Exception as e:
-        return f"Error getting contract source: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to read the requested contract source.") from None
 
 
 @mcp.tool()
@@ -261,10 +414,12 @@ async def get_mixed_execution_flow(session_id: str, index: int) -> str:
         mix_trace_tree = _get_mix_tree(session)
 
         root_node = TraceParser(mix_trace_tree).get_internal_flow(index)
+        if root_node is None:
+            raise ValueError("Trace node not found.")
         return TraceRender(root_node).render()
 
-    except Exception as e:
-        return f"Error generating flow: {str(e)}\n{traceback.format_exc()}"
+    except Exception:
+        raise ToolError("Unable to read the requested execution flow.") from None
 
 
 @mcp.tool()
@@ -280,7 +435,7 @@ async def get_node_detailed_state(session_id: str, index: int) -> str:
         mix_tree = _get_mix_tree(session)
 
         if index not in mix_tree.node_map:
-            return f"Error: Index {index} not found in current transaction tree."
+            raise ValueError("Trace node not found.")
 
         item: MixTraceItem = mix_tree.node_map.get(index)
 
@@ -338,8 +493,8 @@ async def get_node_detailed_state(session_id: str, index: int) -> str:
 
         return "\n".join(lines)
 
-    except Exception as e:
-        return f"Error getting detailed state: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to read the requested trace state.") from None
 
 
 @mcp.tool()
@@ -354,8 +509,8 @@ async def update_comments(session_id: str, comments_json: dict) -> str:
 
         debugger.update_comments(comments_json)
         return "Comments updated."
-    except Exception as e:
-        return f"Error updating comments: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to update the requested trace comments.") from None
 
 
 @mcp.tool()
@@ -385,8 +540,8 @@ async def get_current_tree(session_id: str) -> str:
         session = _get_session_context(session_id)
         debugger = _get_debugger(session)
         return debugger.render()
-    except Exception as e:
-        return f"Error in render: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to render the current transaction trace.") from None
 
 
 @mcp.tool()
@@ -397,16 +552,74 @@ async def set_current_tx(session_id: str, tx_hash: str) -> str:
     try:
         session = _get_session_context(session_id)
         if tx_hash not in session.active_sessions:
-            return f"Error: Transaction {tx_hash} is not initialized in this session."
+            raise ValueError("Transaction is not initialized in this session.")
 
         session.current_tx = tx_hash
         return f"Current transaction set to {tx_hash}"
-    except Exception as e:
-        return f"Error setting current tx: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to select the requested transaction.") from None
+
+
+async def _refresh_patch_source(session, tree, address):
+    """Retry only a transient source lookup, without loading another replay."""
+    contract = tree.contracts.get(address)
+    lookup = getattr(contract, 'source_lookup', None)
+    if (contract is None or contract.has_source_code or not isinstance(lookup, dict)
+            or lookup.get('status') != 'failed' or lookup.get('retryable') is not True):
+        return False
+    if not hasattr(session, '_source_refresh_attempted_addresses'):
+        session._source_refresh_attempted_addresses = set()
+    if not hasattr(session, '_source_refresh_results'):
+        session._source_refresh_results = {}
+    raw = session._source_refresh_results.get(address)
+    if raw is None:
+        if address in session._source_refresh_attempted_addresses:
+            return False
+        session._source_refresh_attempted_addresses.add(address)
+        bucket = getattr(getattr(session, 'loader', None), 'apikey_bucket', None)
+        if bucket is None:
+            contract.source_lookup = {**lookup, 'retryable': False, 'refresh_attempted': False,
+                                      'refresh_reason_code': 'source_configuration_unavailable'}
+            return False
+    try:
+        if raw is None:
+            apikey = await bucket.get()
+            if not isinstance(apikey, str) or not apikey.strip():
+                raise ValueError('Source configuration unavailable')
+            raw = await ContractSourceDownloader(apikey=apikey).download(contract_address=address)
+        if not isinstance(raw, dict) or not isinstance(raw.get('SourceCode'), str):
+            raise ValueError('Invalid source response')
+        if not raw['SourceCode'].strip():
+            contract.source_lookup = {'status': 'unverified', 'reason_code': 'source_not_verified',
+                                      'retryable': False, 'refresh_attempted': True}
+            return False
+        refreshed = ContractEntity(TenderlyDao._source_contract(raw, address, contract.to_dict()))
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        retryable = isinstance(exc, (httpx.TransportError, TimeoutError)) or (
+            isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {408, 429, 500, 502, 503, 504})
+        contract.source_lookup = {'status': 'failed', 'reason_code': 'source_fetch_failed',
+                                  'retryable': retryable, 'refresh_attempted': True}
+        return False
+    refreshed.source_lookup['refresh_attempted'] = True
+    session._source_refresh_results[address] = raw
+    tree.contracts[address] = refreshed
+    cache = getattr(tree, '_function_source_cache', {})
+    for key in list(cache):
+        if isinstance(key, tuple) and key and key[0] == address:
+            del cache[key]
+    for node in tree.node_map.values():
+        if str(getattr(node, 'to_addr', '')).lower() == address:
+            node.function_source = ''
+            node.contract_source = ''
+            if hasattr(node, 'source_resolution'):
+                del node.source_resolution
+    return True
 
 
 @mcp.tool()
-async def get_patch_items(session_id: str, faulty_index: str) -> Dict:
+async def get_patch_items(session_id: str, faulty_index: str, refresh_source: bool = False) -> Dict:
     """
     Based on the index, obtain the source code information and compilation configuration of the specified node, which is used for patch generation and compilation.
     """
@@ -428,15 +641,32 @@ async def get_patch_items(session_id: str, faulty_index: str) -> Dict:
             contract = contracts.get(contract_address, None)
             if contract is None:
                 return {}
+            if refresh_source or contract_address in getattr(session, '_source_refresh_results', {}):
+                await _refresh_patch_source(session, mix_trace_tree, contract_address)
+                contract = contracts[contract_address]
 
             file_index = -1
-            if hasattr(item, "function_loc") and item.function_loc:
+            source_mapping = getattr(item, 'source_resolution', None)
+            refreshed_source = (isinstance(contract.source_lookup, dict)
+                                and contract.source_lookup.get('status') == 'available'
+                                and contract.source_lookup.get('refresh_attempted') is True)
+            if refreshed_source and isinstance(source_mapping, dict):
+                file_index = source_mapping.get('file_index', -1)
+            elif not refreshed_source and hasattr(item, "function_loc") and item.function_loc:
                 file_index = item.function_loc.file_index
+
+            if file_index not in contract.file_map:
+                resolved = await _resolve_function_source(mix_trace_tree, item)
+                if resolved:
+                    file_index = resolved['file_index']
+                    source_mapping = item.source_resolution
 
             return {
                 "address": contract_address,
                 "file_index": file_index,
                 "contract_info": contract.contract_info,
+                "source_lookup": contract.source_lookup,
+                "source_mapping": source_mapping,
                 "contract_name": contract.contract_name,
                 "compiler_version": contract.compiler_version,
                 "evm_version": contract.evm_version,
@@ -446,9 +676,8 @@ async def get_patch_items(session_id: str, faulty_index: str) -> Dict:
                 "libraries": contract.libraries
             }
         return {}
-    except Exception as e:
-        print(f"Error in get_patch_items: {e}", file=sys.stderr)
-        return {}
+    except Exception:
+        raise ToolError("Unable to map the requested patch source.") from None
 
 
 @mcp.tool()
@@ -488,17 +717,17 @@ async def switch_transaction(session_id: str, target_tx_hash: str, insight: str,
         target_tx_hash = target_tx_hash.lower()
 
         if target_tx_hash not in session.tx_list:
-            return "Error: Target transaction can't find."
+            raise ValueError("Target transaction is outside this session.")
 
         if target_tx_hash not in session.active_sessions:
-            return f"Error: Target transaction {target_tx_hash} not loaded in session."
+            raise ValueError("Target transaction is not initialized in this session.")
 
         prev_tx = session.current_tx
         session.current_tx = target_tx_hash
 
         return f"Switched from {prev_tx} to {target_tx_hash}. Insight recorded."
-    except Exception as e:
-        return f"Error switching transaction: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to switch to the requested transaction.") from None
 
 
 @mcp.tool()
@@ -518,7 +747,7 @@ async def analyze_unverified_contract(session_id: str, index: int) -> str:
 
         node_item = mix_tree.node_map.get(index)
         if not node_item:
-            return f"Error: Node {index} not found."
+            raise ValueError("Trace node not found.")
 
         target_address = node_item.to_addr.lower()
 
@@ -542,9 +771,8 @@ async def analyze_unverified_contract(session_id: str, index: int) -> str:
         header = f"### Analysis Report for {target_address}\n"
         return header + analysis_report
 
-    except Exception as e:
-        import traceback
-        return f"Error analyzing unverified contract: {str(e)}\n{traceback.format_exc()}"
+    except Exception:
+        raise ToolError("Unable to analyze the unverified contract.") from None
 
 
 @mcp.tool()
@@ -553,8 +781,8 @@ async def close_session(session_id: str) -> str:
     try:
         await session_manager.destroy_session(session_id)
         return f"Session {session_id} closed successfully"
-    except Exception as e:
-        return f"Error closing session: {str(e)}"
+    except Exception:
+        raise ToolError("Unable to close the trace session.") from None
 
 
 if __name__ == "__main__":

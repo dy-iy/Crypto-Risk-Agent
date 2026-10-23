@@ -1,22 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { App as AntdApp, Button, Empty, Input, Select, Space, Tag, Tooltip, Typography } from "antd";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { App as AntdApp, Button, Empty, Input, Select, Tooltip } from "antd";
 import {
   AlertTriangle,
-  Bug,
   CheckCircle2,
-  ChevronDown,
+  ChevronRight,
   CirclePause,
   CirclePlay,
-  Code2,
+  FileWarning,
   FileText,
   Search,
   TerminalSquare,
   Wrench,
 } from "lucide-react";
 import { LogLevel, LogMessage, MsgType, TaskEvent } from "../types";
-import { getTaskLogs } from "../services/api";
-import MarkdownRenderer from "./MarkdownRenderer";
+import { errorMessage, getTaskLogs } from "../services/api";
 import { agentDisplayName, logLevelLabel, messageTypeLabel, taskStatusLabel } from "../utils/presentation";
+import "../logs.css";
 
 interface LogStreamProps {
   events: TaskEvent[];
@@ -24,6 +23,8 @@ interface LogStreamProps {
   onSelectLog: (log: LogMessage) => void;
   taskId?: string;
   rawMode?: boolean;
+  followLatest?: boolean;
+  onAgentChange?: (agent: string | "all") => void;
 }
 
 function isLogEvent(event: TaskEvent): event is LogMessage {
@@ -63,7 +64,7 @@ function getControlText(event: TaskEvent) {
   return "";
 }
 
-const ROW_HEIGHT = 132;
+const ROW_HEIGHT = 112;
 const OVERSCAN = 8;
 
 function getEventKey(event: TaskEvent, index: number) {
@@ -82,50 +83,68 @@ function mergeEvents(persisted: LogMessage[], liveEvents: TaskEvent[]) {
   });
 }
 
-const LogStream: React.FC<LogStreamProps> = ({ events, selectedAgent, onSelectLog, taskId, rawMode = false }) => {
+function getPreview(content: string, query: string) {
+  const text = content.replace(/```[^\n]*\n|```/g, " ").replace(/(^|\n)\s{0,3}#{1,6}\s+/g, "$1").replace(/\s+/g, " ").trim();
+  const match = query ? text.toLowerCase().indexOf(query.toLowerCase()) : -1;
+  const start = match > 80 ? match - 60 : 0;
+  return `${start ? "…" : ""}${text.slice(start, start + 360)}${text.length > start + 360 ? "…" : ""}`;
+}
+
+function highlightPreview(content: string, query: string) {
+  if (!query) return content;
+  const index = content.toLowerCase().indexOf(query.toLowerCase());
+  if (index < 0) return content;
+  return <>{content.slice(0, index)}<mark>{content.slice(index, index + query.length)}</mark>{content.slice(index + query.length)}</>;
+}
+
+const LogStream: React.FC<LogStreamProps> = ({ events, selectedAgent, onSelectLog, taskId, rawMode = false, followLatest = !rawMode, onAgentChange }) => {
   const { message } = AntdApp.useApp();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [following, setFollowing] = useState({ active: followLatest, agent: selectedAgent });
+  const autoScroll = following.active && following.agent === selectedAgent;
+  const setAutoScroll = (active: boolean) => setFollowing({ active, agent: selectedAgent });
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<"all" | LogLevel>("all");
   const [messageType, setMessageType] = useState<"all" | MsgType>("all");
+  const filterKey = JSON.stringify([query, level, messageType, selectedAgent]);
   const [persistedEvents, setPersistedEvents] = useState<LogMessage[]>([]);
   const [nextBeforeId, setNextBeforeId] = useState<number | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingPage, setLoadingPage] = useState(false);
+  const [initialPageError, setInitialPageError] = useState("");
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(640);
+  const pendingAnchorRef = useRef<{ key: string; offset: number } | null>(null);
+  const requestGenerationRef = useRef(0);
+  const pageRequestRef = useRef(false);
+  const pageControllerRef = useRef<AbortController | null>(null);
+  const appliedFilterRef = useRef(filterKey);
+  const visibleEventsRef = useRef<TaskEvent[]>([]);
+
+  const resetScroll = () => {
+    setAutoScroll(false);
+    setScrollTop(0);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  };
 
   const sourceEvents = useMemo(
     () => (rawMode ? mergeEvents(persistedEvents, events) : events),
     [events, persistedEvents, rawMode],
   );
 
-  const loadLogPage = async (cursor?: number | null, replace = false) => {
-    if (!taskId || loadingPage) return;
-    try {
-      setLoadingPage(true);
-      const page = await getTaskLogs(taskId, { limit: 240, before_id: cursor ?? undefined });
-      setPersistedEvents((prev) => (replace ? page.events : [...page.events, ...prev]));
-      setNextBeforeId(page.next_before_id ?? null);
-      setHasMore(page.has_more);
-    } catch {
-      message.error("日志分页加载失败，请重试。");
-    } finally {
-      setLoadingPage(false);
-    }
-  };
-
   useEffect(() => {
     if (!rawMode || !taskId) return;
     let alive = true;
-    getTaskLogs(taskId, { limit: 240 }).then(page => {
+    const controller = new AbortController();
+    pageControllerRef.current = controller;
+    getTaskLogs(taskId, { limit: 240 }, controller.signal).then(page => {
       if (!alive) return;
       setPersistedEvents(page.events);
       setNextBeforeId(page.next_before_id ?? null);
       setHasMore(page.has_more);
-    }).catch(() => { /* Existing live events remain visible; retry through the page controls. */ });
-    return () => { alive = false; };
+      setInitialPageError("");
+    }).catch(error => { if (alive) setInitialPageError(errorMessage(error)); });
+    return () => { alive = false; requestGenerationRef.current += 1; pageControllerRef.current?.abort(); };
   }, [rawMode, taskId]);
 
   const filteredEvents = useMemo(() => {
@@ -136,17 +155,50 @@ const LogStream: React.FC<LogStreamProps> = ({ events, selectedAgent, onSelectLo
         if (level !== "all" && event.level !== level) return false;
         if (messageType !== "all" && event.message_type !== messageType) return false;
         if (normalizedQuery) {
-          const haystack = `${event.agent} ${event.level} ${event.message_type} ${event.message}`.toLowerCase();
+          const haystack = `${event.agent} ${agentDisplayName(event.agent)} ${event.level} ${logLevelLabel(event.level)} ${event.message_type} ${messageTypeLabel(event.message_type)} ${event.message}`.toLowerCase();
           return haystack.includes(normalizedQuery);
         }
         return true;
       }
 
-      if (selectedAgent !== "all") return false;
+      if (selectedAgent !== "all" || level !== "all" || messageType !== "all") return false;
+      if (!getControlText(event)) return false;
       if (normalizedQuery) return getControlText(event).toLowerCase().includes(normalizedQuery);
       return true;
     });
   }, [level, messageType, query, selectedAgent, sourceEvents]);
+
+  const agents = useMemo(() => Array.from(new Set(sourceEvents.filter(isLogEvent).map(event => event.agent))), [sourceEvents]);
+
+  const loadLogPage = async (cursor?: number | null) => {
+    if (!taskId || pageRequestRef.current) return;
+    const generation = requestGenerationRef.current;
+    const controller = new AbortController();
+    pageControllerRef.current?.abort();
+    pageControllerRef.current = controller;
+    pageRequestRef.current = true;
+    try {
+      setLoadingPage(true);
+      const page = await getTaskLogs(taskId, { limit: 240, before_id: cursor ?? undefined }, controller.signal);
+      if (generation !== requestGenerationRef.current) return;
+      const top = scrollRef.current?.scrollTop || 0;
+      const firstIndex = Math.floor(top / ROW_HEIGHT);
+      const anchor = appliedFilterRef.current === filterKey ? visibleEventsRef.current[firstIndex] : null;
+      pendingAnchorRef.current = anchor ? { key: getEventKey(anchor, firstIndex), offset: top % ROW_HEIGHT } : null;
+      setAutoScroll(false);
+      setPersistedEvents((prev) => [...page.events, ...prev]);
+      setNextBeforeId(page.next_before_id ?? null);
+      setHasMore(page.has_more);
+      setInitialPageError("");
+    } catch {
+      if (generation === requestGenerationRef.current) message.error("日志分页加载失败，请重试。");
+    } finally {
+      if (generation === requestGenerationRef.current) {
+        pageRequestRef.current = false;
+        setLoadingPage(false);
+      }
+    }
+  };
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -159,14 +211,26 @@ const LogStream: React.FC<LogStreamProps> = ({ events, selectedAgent, onSelectLo
     return () => resizeObserver.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  useLayoutEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    visibleEventsRef.current = filteredEvents;
+    if (appliedFilterRef.current !== filterKey) {
+      appliedFilterRef.current = filterKey;
+      pendingAnchorRef.current = null;
+      node.scrollTop = 0;
+      return;
     }
-  }, [autoScroll, filteredEvents.length]);
+    const anchor = pendingAnchorRef.current;
+    pendingAnchorRef.current = null;
+    if (anchor) {
+      const index = filteredEvents.findIndex((event, i) => getEventKey(event, i) === anchor.key);
+      if (index >= 0) node.scrollTop = index * ROW_HEIGHT + anchor.offset;
+    } else if (autoScroll) node.scrollTop = node.scrollHeight;
+  }, [autoScroll, filterKey, filteredEvents]);
 
   const virtualRange = useMemo(() => {
-    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+    const start = Math.max(0, Math.min(filteredEvents.length - 1, Math.floor(scrollTop / ROW_HEIGHT)) - OVERSCAN);
     const visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN * 2;
     const end = Math.min(filteredEvents.length, start + visibleCount);
     return { start, end };
@@ -177,21 +241,29 @@ const LogStream: React.FC<LogStreamProps> = ({ events, selectedAgent, onSelectLo
   const bottomPadding = Math.max(0, (filteredEvents.length - virtualRange.end) * ROW_HEIGHT);
 
   return (
-    <section className="stream-panel">
+    <section className="stream-panel log-reader">
       <div className="stream-toolbar">
-        <Space size={8} wrap>
+        <div className="log-reader-filters">
           <Input
             allowClear
             className="stream-search"
             prefix={<Search size={14} />}
             placeholder="搜索日志"
+            aria-label="搜索日志"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { resetScroll(); setQuery(event.target.value); }}
           />
+          {rawMode && onAgentChange ? <Select
+            aria-label="日志智能体"
+            value={selectedAgent}
+            onChange={(value) => { resetScroll(); onAgentChange(value); }}
+            options={[{ label: "全部智能体", value: "all" }, ...agents.map(agent => ({ label: agentDisplayName(agent), value: agent }))]}
+          /> : null}
           <Select
             size="middle"
             value={level}
-            onChange={setLevel}
+            aria-label="日志级别"
+            onChange={(value) => { resetScroll(); setLevel(value); }}
             options={[
               { label: "全部级别", value: "all" },
               { label: "信息", value: LogLevel.INFO },
@@ -203,7 +275,8 @@ const LogStream: React.FC<LogStreamProps> = ({ events, selectedAgent, onSelectLo
           <Select
             size="middle"
             value={messageType}
-            onChange={setMessageType}
+            aria-label="日志类型"
+            onChange={(value) => { resetScroll(); setMessageType(value); }}
             options={[
               { label: "全部类型", value: "all" },
               { label: "文本", value: MsgType.TEXT },
@@ -212,88 +285,96 @@ const LogStream: React.FC<LogStreamProps> = ({ events, selectedAgent, onSelectLo
               { label: "结果", value: MsgType.RESULT },
             ]}
           />
-        </Space>
+        </div>
         <Tooltip title={autoScroll ? "暂停自动滚动" : "恢复自动滚动"}>
           <Button
+            aria-label={autoScroll ? "暂停自动滚动" : "恢复自动滚动"}
+            aria-pressed={autoScroll}
             icon={autoScroll ? <CirclePause size={15} /> : <CirclePlay size={15} />}
-            onClick={() => setAutoScroll((value) => !value)}
-          />
+            onClick={() => setAutoScroll(!autoScroll)}
+          >跟随最新</Button>
         </Tooltip>
       </div>
 
       {rawMode ? (
         <div className="raw-recovery-bar">
-          <Space size={8} wrap>
-            <Tag color="cyan">{filteredEvents.length} 条可见</Tag>
-            <Tag>{persistedEvents.length} 条已恢复</Tag>
+          <div className="log-reader-counts">
+            <span><strong>{filteredEvents.length}</strong> 条可见</span>
+            <span>{persistedEvents.length} 条已恢复</span>
+            {initialPageError && <span role="alert">日志恢复失败：{initialPageError}</span>}
+          </div>
+          <div className="log-reader-page-actions">
+            {query || level !== "all" || messageType !== "all" || selectedAgent !== "all" ? <Button size="small" type="text" onClick={() => {
+              resetScroll(); setQuery(""); setLevel("all"); setMessageType("all"); onAgentChange?.("all");
+            }}>重置筛选</Button> : null}
             <Button
               size="small"
               loading={loadingPage}
-              disabled={!hasMore}
-              onClick={() => loadLogPage(nextBeforeId)}
+              disabled={!hasMore && !initialPageError}
+              onClick={() => loadLogPage(initialPageError ? null : nextBeforeId)}
             >
-              加载更早日志
+              {initialPageError ? "重试日志加载" : "加载更早日志"}
             </Button>
-          </Space>
-          <Typography.Text type="secondary">长任务日志采用虚拟列表展示。</Typography.Text>
+          </div>
         </div>
       ) : null}
 
       <div
         ref={scrollRef}
-        className="log-stream virtual-log-stream"
-        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+        className="log-stream virtual-log-stream log-reader-viewport"
+        aria-label="日志列表"
+        onWheel={(event) => { if (event.deltaY < 0) setAutoScroll(false); }}
+        onTouchStart={() => setAutoScroll(false)}
+        onScroll={(event) => {
+          const node = event.currentTarget;
+          setScrollTop(node.scrollTop);
+          if (node.scrollHeight - node.scrollTop - node.clientHeight > ROW_HEIGHT) setAutoScroll(false);
+        }}
       >
         {filteredEvents.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有符合条件的事件" />
         ) : (
-          <div>
+          <div className="log-reader-items">
             <div style={{ height: topPadding }} />
             {virtualEvents.map((event, index) => {
             const realIndex = virtualRange.start + index;
             if (!isLogEvent(event)) {
               const isWarning = event.type === "LOG_DROPPED" || event.type === "HEARTBEAT_TIMEOUT";
               return (
-                <div key={getEventKey(event, realIndex)} className={isWarning ? "control-event warning" : "control-event"}>
-                  {isWarning ? <AlertTriangle size={14} /> : <ChevronDown size={14} />}
+                <div key={getEventKey(event, realIndex)} className="log-stream-row" style={{ height: ROW_HEIGHT }}>
+                <div className={isWarning ? "control-event warning" : "control-event"}>
+                  {isWarning ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
                   <span>{getControlText(event)}</span>
+                </div>
                 </div>
               );
             }
 
-            const contentPreview = event.message.length > 900 ? `${event.message.slice(0, 900)}...` : event.message;
+            const contentPreview = getPreview(event.message, query.trim());
             return (
+              <div key={getEventKey(event, realIndex)} className="log-stream-row" style={{ height: ROW_HEIGHT }}>
               <button
-                key={getEventKey(event, realIndex)}
                 className={`log-event ${getLevelClass(event.level)}`}
                 onClick={() => onSelectLog(event)}
                 type="button"
+                title="查看完整日志"
               >
                 <div className="log-event-meta">
                   <span className="log-time">{formatTime(event.timestamp)}</span>
-                  <Tag className="agent-tag">{agentDisplayName(event.agent)}</Tag>
-                  <Tag className={`level-tag ${getLevelClass(event.level)}`}>{logLevelLabel(event.level)}</Tag>
-                  <span className="message-type">
+                  <span className="log-reader-agent" title={agentDisplayName(event.agent)}>{agentDisplayName(event.agent)}</span>
+                  <span className={`log-reader-level ${getLevelClass(event.level)}`}>{logLevelLabel(event.level)}</span>
+                  <span className="message-type" title={messageTypeLabel(event.message_type)} aria-label={messageTypeLabel(event.message_type)}>
                     {getTypeIcon(event.message_type)}
-                    {messageTypeLabel(event.message_type)}
+                    <span>{messageTypeLabel(event.message_type)}</span>
                   </span>
-                  {event.is_truncated ? <Tag color="warning">内容已截断</Tag> : null}
-                  {event.level === LogLevel.ERROR ? <Bug size={14} className="text-red" /> : null}
+                  {event.is_truncated ? <FileWarning size={14} className="log-reader-truncated" aria-label="内容已截断" /> : null}
+                  <ChevronRight size={14} className="log-reader-open" aria-hidden="true" />
                 </div>
                 <div className="log-event-body">
-                  {event.message_type === MsgType.MARKDOWN || event.message_type === MsgType.RESULT ? (
-                    <MarkdownRenderer content={contentPreview} compact />
-                  ) : (
-                    <Typography.Text>{contentPreview}</Typography.Text>
-                  )}
+                  {highlightPreview(contentPreview, query.trim())}
                 </div>
-                {event.message_type === MsgType.TOOL_CALL ? (
-                  <div className="tool-hint">
-                    <Code2 size={13} />
-                    工具调用事件
-                  </div>
-                ) : null}
               </button>
+              </div>
             );
           })}
             <div style={{ height: bottomPadding }} />

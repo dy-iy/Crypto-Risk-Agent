@@ -1,13 +1,35 @@
 import re
-from typing import Dict, Tuple, List, Optional
+from difflib import SequenceMatcher
+from typing import Dict, Tuple, List
+
+
+def build_applied_patch_record(original: Dict[str, str], updated: Dict[str, str]) -> str:
+    """Render only source changes that were actually applied, independently of prose."""
+    records = []
+    for file_id in sorted(original):
+        before, after = original[file_id], updated.get(file_id)
+        if not isinstance(before, str) or not isinstance(after, str):
+            continue
+        old_lines, new_lines = before.splitlines(), after.splitlines()
+        if old_lines == new_lines:
+            continue
+        blocks = []
+        for group in SequenceMatcher(None, old_lines, new_lines, autojunk=False).get_grouped_opcodes(8):
+            first, last = group[0], group[-1]
+            old = "\n".join(old_lines[first[1]:last[2]])
+            new = "\n".join(new_lines[first[3]:last[4]])
+            blocks.append(f"<<<<<<< SEARCH\n{old}\n=======\n{new}\n>>>>>>> REPLACE")
+        records.append(f"# File: {file_id}\n" + "\n\n".join(blocks))
+    return "\n\n".join(records)
 
 
 class SolidityCodePatcher:
     def __init__(self, sources_map: Dict[str, str]):
         self.sources = {k: v.splitlines() for k, v in sources_map.items()}
-        self.modified_sources = self.sources.copy()
+        self.modified_sources = {key: list(lines) for key, lines in self.sources.items()}
 
     def apply_patches(self, llm_response: str) -> Tuple[bool, str, Dict[str, str]]:
+        self.modified_sources = {key: list(lines) for key, lines in self.sources.items()}
         llm_response = llm_response.replace('\r\n', '\n')
 
         file_blocks = self._split_by_file(llm_response)
@@ -31,6 +53,8 @@ class SolidityCodePatcher:
                 if not success:
                     overall_success = False
 
+        if not overall_success:
+            self.modified_sources = {key: list(lines) for key, lines in self.sources.items()}
         final_sources = {k: "\n".join(lines) for k, lines in self.modified_sources.items()}
         return overall_success, "\n".join(logs), final_sources
 
@@ -56,15 +80,16 @@ class SolidityCodePatcher:
     def _apply_single_block(self, file_id: str, patch_text: str) -> Tuple[bool, str]:
         current_lines = self.modified_sources[file_id]
 
-        # 极度宽容的正则：允许 SEARCH 后有空格，允许换行符差异
+        # Normalize the block delimiters without changing source tokens.
         pattern = re.compile(
             r'<<<<<<< SEARCH\s*\n(.*?)\n=======\s*\n(.*?)\n>>>>>>> REPLACE',
             re.DOTALL
         )
         matches = pattern.findall(patch_text)
 
-        if not matches:
-            return True, "No valid SEARCH/REPLACE patterns found in this block."
+        marker_count = len(re.findall(r"^(?:<<<<<<< SEARCH|=======|>>>>>>> REPLACE)[ \t]*$", patch_text, re.MULTILINE))
+        if not matches or marker_count != 3 * len(matches):
+            return False, "Missing or malformed SEARCH/REPLACE block."
 
         applied_count = 0
 
@@ -84,12 +109,12 @@ class SolidityCodePatcher:
 
             if status == -1:
                 return False, (
-                    "SEARCH block not found (after stripping comments & trimming).\n"
+                    "SEARCH block does not match the source exactly (apart from indentation).\n"
                     f"Context:\n{search_block}"
                 )
             if status == -2:
                 return False, (
-                    "SEARCH block is ambiguous (multiple occurrences found after stripping comments)."
+                    "SEARCH block is ambiguous (multiple source occurrences)."
                 )
 
             target_indent = self._get_indent_string(current_lines[match_start])
@@ -110,52 +135,14 @@ class SolidityCodePatcher:
         if not search_lines:
             return -1, -1, -1
 
-        search_code_tokens: List[str] = []
-        in_block_comment = False
-        for line in search_lines:
-            code_part, in_block_comment = self._strip_comments_from_line(line, in_block_comment)
-            normalized = self._normalize_line(code_part)
-            if normalized:
-                search_code_tokens.append(normalized)
-
-        if not search_code_tokens:
-            return -1, -1, -1
-
-        code_entries: List[Tuple[int, str]] = []
-        in_block_comment = False
-        for idx, line in enumerate(source_lines):
-            code_part, in_block_comment = self._strip_comments_from_line(line, in_block_comment)
-            normalized = self._normalize_line(code_part)
-            if normalized:
-                code_entries.append((idx, normalized))
-
-        if len(search_code_tokens) > len(code_entries):
-            return -1, -1, -1
-
-        found_spans: List[Tuple[int, int]] = []
-        n_search = len(search_code_tokens)
-
-        for i in range(len(code_entries) - n_search + 1):
-            if code_entries[i][1] != search_code_tokens[0]:
-                continue
-
-            match = True
-            for j in range(1, n_search):
-                if code_entries[i + j][1] != search_code_tokens[j]:
-                    match = False
-                    break
-
-            if match:
-                start_original = code_entries[i][0]
-                end_original = code_entries[i + n_search - 1][0]
-                found_spans.append((start_original, end_original))
-
-        if len(found_spans) == 1:
-            return found_spans[0][0], found_spans[0][1], 0
-        elif len(found_spans) > 1:
-            return -1, -1, -2
-        else:
-            return -1, -1, -1
+        # Only indentation may differ. Removing comments or whitespace inside
+        # literals can target a different expression ("a b" != "ab").
+        normalized_search = [line.strip() for line in search_lines]
+        spans = [index for index in range(len(source_lines) - len(search_lines) + 1)
+                 if [line.strip() for line in source_lines[index:index + len(search_lines)]] == normalized_search]
+        if len(spans) == 1:
+            return spans[0], spans[0] + len(search_lines) - 1, 0
+        return -1, -1, -2 if spans else -1
 
     def _reindent_block(self, lines: List[str], target_indent: str) -> List[str]:
         if not lines:
@@ -179,9 +166,6 @@ class SolidityCodePatcher:
 
         return reindented_lines
 
-    def _normalize_line(self, line: str) -> str:
-        return "".join(line.split())
-
     def _get_indent_string(self, line: str) -> str:
         return line[:len(line) - len(line.lstrip())]
 
@@ -195,35 +179,3 @@ class SolidityCodePatcher:
             end -= 1
 
         return lines[start:end]
-
-    def _strip_comments_from_line(self, line: str, in_block_comment: bool) -> Tuple[str, bool]:
-        if not line:
-            return "", in_block_comment
-
-        i = 0
-        n = len(line)
-        result_chars: List[str] = []
-
-        while i < n:
-            if in_block_comment:
-                end_pos = line.find("*/", i)
-                if end_pos == -1:
-                    return "".join(result_chars), True
-                else:
-                    in_block_comment = False
-                    i = end_pos + 2
-                    continue
-
-            if i + 1 < n:
-                two = line[i:i + 2]
-                if two == "//":
-                    break
-                if two == "/*":
-                    in_block_comment = True
-                    i += 2
-                    continue
-
-            result_chars.append(line[i])
-            i += 1
-
-        return "".join(result_chars), in_block_comment

@@ -38,7 +38,7 @@ await build({
 });
 const js = await readFile(path.join(output, 'check.js'));
 const hostStyles = await postcss([tailwind({base: root})]).process(await readFile(path.join(root,'app/globals.css'),'utf8'), {from:path.join(root,'app/globals.css')});
-const css = hostStyles.css + '\n' + await readFile(path.join(output, 'check.css'), 'utf8') + '\n.fixture-host{margin-left:248px;padding:24px}.report-language-toolbar{margin:12px 0}@media(max-width:900px){.fixture-host{margin:0;padding:12px}}';
+const css = hostStyles.css + '\n' + await readFile(path.join(output, 'check.css'), 'utf8') + '\n.fixture-host{min-height:100vh}.report-language-toolbar{margin:12px 0}';
 const logo = await readFile(path.join(root,'public/attackpilot/riskpilot_logo.png'));
 const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/check.css"></head><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif"><div id="root"></div><script type="module" src="/check.js"></script></body></html>';
 const errors = [], missing = [], mutations = [];
@@ -79,7 +79,7 @@ try {
   const visit = async route => { await page.goto('https://attackpilot.test'+route,{waitUntil:'networkidle0'}); };
   const contains = text => page.waitForFunction(value=>document.body.innerText.includes(value),{},text);
   const clickText = async text => {
-    const found = await page.evaluate(value=>{const item=[...document.querySelectorAll('button,a')].find(node=>node.textContent.trim()===value);item?.click();return !!item;},text);
+    const found = await page.evaluate(value=>{const item=[...document.querySelectorAll('button,a')].find(node=>node.textContent.trim()===value || node.getAttribute('aria-label')===value);item?.click();return !!item;},text);
     assert.ok(found, `Clickable text missing: ${text}`);
   };
   const checkWidth = async label => {
@@ -104,6 +104,7 @@ try {
   await clickText('填入示例交易');
   await page.waitForSelector('.ant-modal .ant-select');
   await page.click('.ant-modal .ant-select');
+  await page.type('.ant-modal .ant-select input', 'ApeCoin');
   await page.waitForSelector('.ant-select-item-option');
   await page.evaluate(()=>[...document.querySelectorAll('.ant-select-item-option')].find(el=>el.textContent.includes('ApeCoin'))?.click());
   await clickText('填入全部交易');
@@ -135,6 +136,15 @@ try {
   assert.ok(Number(typography.heading)>=600,'Report headings lost emphasis'); assert.equal(typography.list,'disc');
   await clickLabel('原文'); await contains('模型原始报告');
   await clickLabel('中文'); await contains('离线中文报告夹具');
+  await clickText('智能体摘要'); await page.waitForSelector('.ap-detail-drawer .agent-row', {visible:true});
+  await page.click('.ap-detail-drawer .agent-row'); await page.waitForSelector('.ap-detail-agent-filter');
+  await page.waitForSelector('.ap-detail-drawer', {hidden:true});
+  await clickText('显示全部智能体');
+  await page.waitForFunction(()=>!document.querySelector('.ap-detail-agent-filter'));
+  await page.click('.ap-report-appendix summary');
+  await page.waitForFunction(()=>document.querySelector('.ap-report-appendix details')?.open);
+  await checkWidth('expanded report evidence'); await page.click('.ap-report-appendix summary');
+  await page.evaluate(()=>scrollTo(0,0));
   await checkWidth('desktop detail'); await page.screenshot({path:path.join(output,'detail-desktop.png'),fullPage:true});
   await clickText('访客'); await dismissContext(); await clickText('取证助手'); await contains('助手会基于当前交易');
   await page.type('.assistant-composer textarea','这份报告有哪些关键证据？'); await clickText('发送'); await contains('离线模拟取证回答');
@@ -142,6 +152,11 @@ try {
   await page.evaluate(id=>{history.pushState({},'', '/attackpilot/tasks/'+id);window.dispatchEvent(new PopStateEvent('popstate'));},liveId);
   await contains('验证已跳过'); await dismissContext();
   await visit('/attackpilot/knowledge'); await contains('漏洞'); await checkWidth('desktop knowledge');
+  const nextLesson=await page.$eval('.knowledge-subject:nth-child(2) strong',node=>node.textContent);
+  await page.click('.knowledge-subject:nth-child(2)');
+  await page.waitForFunction(text=>document.querySelector('#knowledge-lesson-title')?.textContent===text,{},nextLesson);
+  assert.equal(await page.$eval('.knowledge-section ol',node=>getComputedStyle(node).listStyleType),'decimal');
+  await page.screenshot({path:path.join(output,'knowledge-desktop.png'),fullPage:true});
   await visit('/attackpilot/briefing'); await contains('证据驱动的链上攻击复盘平台'); await checkWidth('desktop briefing');
   await page.screenshot({path:path.join(output,'briefing-desktop.png'),fullPage:true});
   for (const [name,route] of [['review','/attackpilot'],['tasks','/attackpilot/tasks'],['detail','/attackpilot/tasks/'+fixture.task_id],['knowledge','/attackpilot/knowledge'],['briefing','/attackpilot/briefing']]) {

@@ -1,0 +1,214 @@
+.attackpilot-root .log-detail-drawer .ant-drawer-body {
+  min-width: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.attackpilot-root .log-detail-drawer .ant-drawer-header {
+  padding: 20px 28px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-reader {
+  min-width: 0;
+  padding: 28px 36px 64px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  min-width: 0;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-identity {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  min-width: 0;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-identity strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-tags .ant-tag {
+  margin: 0;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-time,
+.attackpilot-root .log-detail-drawer .ap-log-detail-id {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-id {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-id > span:first-child {
+  flex: 0 0 auto;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-id .ant-typography {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-toolbar {
+  display: flex;
+  align-items: center;
+  padding-block: 20px 4px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content {
+  min-width: 0;
+  padding-top: 24px;
+  color: var(--text-primary);
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content {
+  min-width: 0;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content :is(h1, h2, h3, h4) {
+  margin-block: 28px 12px;
+  line-height: 1.55;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content h1 {
+  font-size: 25px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content h2 {
+  font-size: 21px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content h3 {
+  font-size: 17px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content p {
+  margin-bottom: 16px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content li {
+  margin-block: 6px;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content code {
+  color: var(--text-primary) !important;
+  background: var(--bg-deep) !important;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content pre {
+  max-width: 100%;
+  max-height: none;
+  margin: 16px 0;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.8;
+  tab-size: 2;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content pre code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent !important;
+  white-space: inherit;
+  overflow-wrap: inherit;
+  word-break: inherit;
+  line-height: inherit;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .ap-log-detail-source {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content :is(td, th) {
+  min-width: 110px;
+  max-width: 360px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .attackpilot-root .log-detail-drawer .ant-drawer-header {
+    padding: 16px;
+  }
+
+  .attackpilot-root .log-detail-drawer .ap-log-detail-reader {
+    padding: 20px 20px 44px;
+  }
+
+  .attackpilot-root .log-detail-drawer .ap-log-detail-meta {
+    gap: 10px;
+    padding-bottom: 20px;
+  }
+
+  .attackpilot-root .log-detail-drawer .ap-log-detail-time {
+    flex-basis: 100%;
+  }
+
+  .attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content h1 {
+    font-size: 22px;
+  }
+
+  .attackpilot-root .log-detail-drawer .ap-log-detail-content .markdown-content h2 {
+    font-size: 19px;
+  }
+
+  .attackpilot-root .log-detail-drawer .ap-log-detail-content pre {
+    padding: 14px;
+    font-size: 12px;
+  }
+}

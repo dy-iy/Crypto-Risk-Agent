@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import urllib.parse
 from typing import Dict
 
@@ -8,13 +9,34 @@ from app.attackpilot.settings import CACHE_DIR
 
 
 class ContractBytecodeDownloader(JSONRPCDownloader):
+    @staticmethod
+    def _block_tag(quantity):
+        if type(quantity) is int and quantity >= 0:
+            return hex(quantity)
+        if isinstance(quantity, str):
+            if quantity in {'latest', 'earliest', 'pending', 'safe', 'finalized'}:
+                return quantity
+            if re.fullmatch(r'0x[0-9a-fA-F]+', quantity):
+                return hex(int(quantity, 16))
+        raise ValueError('读取合约代码须指定有效历史区块或区块标签。')
+
+    @classmethod
+    def _cache_path(cls, contract_address, quantity='latest'):
+        if not isinstance(contract_address, str) or not re.fullmatch(r'0x[0-9a-fA-F]{40}', contract_address):
+            raise ValueError('合约地址无效。')
+        tag = cls._block_tag(quantity)
+        folder = os.path.join(CACHE_DIR, 'bytecode')
+        if tag != 'latest':
+            folder = os.path.join(folder, tag)
+        return os.path.join(folder, contract_address.lower() + '.json')
+
     def get_request_param(self, contract_address: str, quantity: str = 'latest') -> Dict:
         data = {
             "id": 1,
             "jsonrpc": "2.0",
             "params": [
                 contract_address.lower(),
-                quantity,
+                self._block_tag(quantity),
             ],
             "method": "eth_getCode"
         }
@@ -23,23 +45,27 @@ class ContractBytecodeDownloader(JSONRPCDownloader):
             "json": data,
         }
 
-    async def _preprocess(self, contract_address: str, **kwargs):
-        path = os.path.join(CACHE_DIR, 'bytecode', '%s.json' % contract_address)
+    async def _preprocess(self, contract_address: str, quantity='latest', **kwargs):
+        path = self._cache_path(contract_address, quantity)
         if not os.path.exists(path):
             return None
-        with open(path, 'r') as f:
-            return json.load(f)
+        try:
+            with open(path, 'r') as f:
+                code = json.load(f)
+        except (OSError, ValueError, UnicodeError):
+            return None
+        return code if isinstance(code, str) and re.fullmatch(r'0x(?:[0-9a-fA-F]{2})*', code) else None
 
     async def _process(self, result: str, **kwargs):
         result = json.loads(result)
         result = result['result']
+        if not isinstance(result, str) or not re.fullmatch(r'0x(?:[0-9a-fA-F]{2})*', result):
+            raise ValueError('RPC 未返回有效合约字节码，未写入缓存。')
 
         # cache data
         contract_address = kwargs['contract_address']
-        path = os.path.join(CACHE_DIR, 'bytecode')
-        if not os.path.exists(path):
-            os.makedirs(path)
-        path = os.path.join(path, '%s.json' % contract_address)
+        path = self._cache_path(contract_address, kwargs.get('quantity', 'latest'))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w') as f:
             json.dump(result, f)
         return result
@@ -58,13 +84,21 @@ class ContractSourceDownloader(EtherscanDownloader):
         path = os.path.join(CACHE_DIR, 'source', '%s.json' % contract_address)
         if not os.path.exists(path):
             return None
-        with open(path, 'r') as f:
-            return json.load(f)
+        try:
+            with open(path, 'r') as f:
+                cached = json.load(f)
+        except (OSError, ValueError, UnicodeError):
+            return None
+        # An empty response only described verification at lookup time. Do not
+        # let it permanently hide a source verified after that request.
+        return cached if (isinstance(cached, dict) and isinstance(cached.get('SourceCode'), str)
+                          and cached['SourceCode'].strip()) else None
 
     async def _process(self, result: str, **kwargs):
         payload = json.loads(result)
         items = payload.get('result') if isinstance(payload, dict) else None
-        if not isinstance(items, list) or not items or not isinstance(items[0], dict):
+        if (not isinstance(items, list) or not items or not isinstance(items[0], dict)
+                or not isinstance(items[0].get('SourceCode'), str)):
             # Explorer quota/auth errors can be HTTP 200 with a string result.
             # Do not cache the first character of that error as contract data.
             raise ValueError('区块浏览器未返回有效合约源码数据，请检查授权与配额')

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { LanguageMode, MacroAnalysisResponse, MacroTransactionSummary, TransactionRoleEvidence } from "../types";
 import { t } from "../utils/i18n";
+import { formatUsdDelta as formatUsd } from "../utils/presentation";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 interface MacroAnalysisPanelProps {
@@ -25,12 +26,6 @@ interface MacroAnalysisPanelProps {
 function shortHash(value?: string | null) {
   if (!value) return "暂无";
   return value.length > 18 ? `${value.slice(0, 10)}...${value.slice(-6)}` : value;
-}
-
-function formatUsd(value?: number | null) {
-  if (value == null || Number.isNaN(value)) return "暂无";
-  const sign = value > 0 ? "+" : "";
-  return `${sign}$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 function getRoleIcon(role?: string | null) {

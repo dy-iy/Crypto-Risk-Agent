@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 from typing import Callable, Dict, List, Optional
 
 from app.attackpilot.agents.FixAgent import FixAgent
@@ -10,6 +11,9 @@ from app.attackpilot.settings import TOTAL_TURN, GUIDE_TURN, PATCH_TURN
 from app.attackpilot.utils.bucket import AsyncItemBucket
 from app.attackpilot.utils.patch_quality_metrics import PatchQualityMetrics
 from app.attackpilot.utils.rag_context import build_rag_query_from_dapp, retrieve_rag_context
+from app.attackpilot.errors import failure_message
+from app.attackpilot.utils.verification import adjudicate_patch_verification, patch_execution_state, verification_state
+from app.attackpilot.utils.report_evidence import report_evidence, render_verification_summary
 
 
 class DAppAnalyze:
@@ -62,7 +66,12 @@ class DAppAnalyze:
         self.metrics_collector = metrics_collector
         self.log_callback = log_callback
         self.cancellation_checker = cancellation_checker or (lambda: False)
-        self.verification = {"status": "not_run" if self._module_enabled("patch_verification") else "skipped"}
+        self.verification = verification_state() if self._module_enabled("patch_verification") else verification_state(
+            "skipped", stage="module_selection", reason_code="module_disabled",
+            reason="本次任务未启用补丁回放验证。", terminal=True,
+        )
+        self.replay_evidence = None
+        self.applied_patches = ""
 
     def _check_cancelled(self):
         if self.cancellation_checker():
@@ -75,6 +84,35 @@ class DAppAnalyze:
         if hasattr(agent, "set_cancellation_checker"):
             agent.set_cancellation_checker(self.cancellation_checker)
         return agent
+
+    async def _finish_unverified(self, hypothesis, replay_logs="", patches=""):
+        if self.metrics_collector:
+            self.metrics_collector.finalize_case(self.dapp_name, "UNVERIFIED")
+        report = await self.global_memory_administrator.get_final_result(
+            {"verdict": "UNVERIFIED", "reason": self.verification.get("reason", ""),
+             "verification": self.verification},
+            hypothesis, replay_logs or "No completed patch replay evidence is available.",
+            patches or "No finalized patch available.",
+        )
+        return report, self.get_analyze_items()
+
+    def _finish_without_hypothesis(self, reason_code, reason):
+        """An unsupported attack hypothesis is an inconclusive investigation."""
+        self.verification = verification_state(
+            "skipped" if reason_code == "no_attack_evidence" else "unverified",
+            stage="fault_localization", reason_code=reason_code, reason=reason, terminal=True,
+            retryable=False, next_action="review_attack_evidence",
+        )
+        self.replay_evidence, self.applied_patches = None, ""
+        if self.metrics_collector:
+            self.metrics_collector.finalize_case(self.dapp_name, "NO_ATTACK_EVIDENCE")
+        evidence = report_evidence({"verdict": "UNVERIFIED", "verification": self.verification}, None)
+        report = render_verification_summary(evidence) + (
+            "\n\n## 复盘结果\n\n" + reason
+            + "\n\n本次未建立可验证的攻击假设，未生成或执行补丁。"
+              "这不代表交易安全，也不代表已证明不存在攻击；需要补充交易、调用轨迹或安全条件等证据。"
+        )
+        return report, self.get_analyze_items()
 
     async def analyze(self) -> [str, Dict]:
         self._check_cancelled()
@@ -95,9 +133,9 @@ class DAppAnalyze:
         verify_feedback = "Initial state: Start analysis."
 
         if len(self.txs_need_analyze) <= 0:
-            if self.metrics_collector:
-                self.metrics_collector.finalize_case(self.dapp_name, "NO_ATTACK_TX")
-            return "empty attack transaction!", {}
+            return self._finish_without_hypothesis(
+                "no_attack_evidence", "当前证据未筛出需要继续复盘的攻击交易，补丁验证未执行。",
+            )
 
         self._check_cancelled()
         await self.transaction_debugger.init_transactions(self.txs_need_analyze)
@@ -128,38 +166,40 @@ class DAppAnalyze:
                     force_terminate=is_force_turn
                 )
                 self._check_cancelled()
+                if not isinstance(debug_result, dict):
+                    verify_feedback = "Debugger returned no structured analysis result; retry within the analysis limit."
+                    guide_turn -= 1
+                    continue
                 reason = debug_result.get("reason", "")
                 if isinstance(reason, str) and reason == "ERROR":
                     if self.metrics_collector:
                         self.metrics_collector.finalize_case(self.dapp_name, "TRACE_AGENT_ERROR")
-                    return f"ERROR_{debug_result.get('data', '')}", {}
+                    return f"ERROR_{debug_result.get('data', '')}", self.get_analyze_items() if last_valid_hypothesis else {}
 
                 if isinstance(reason, str) and reason.endswith("_NO_READY_FOR_PATCH"):
                     if last_valid_hypothesis:
                         verify_feedback = f"Debugger terminated ({reason}), falling back to last valid hypothesis."
+                        current_hypothesis = dict(last_valid_hypothesis)
                         break
                     else:
-                        final_trace = debug_result.get("final_trace", "")
-                        fail_msg = (
-                            f"Transaction Debugger terminated without producing a ready_for_patch hypothesis. "
-                            f"reason={reason}. "
-                            f"Please review the trace and prompts, then consider rerunning the analysis.\n"
-                            f"(A snapshot of the final trace is attached in the pipeline output if available.)"
+                        return self._finish_without_hypothesis(
+                            "no_attack_hypothesis", "在本次分析轮次内尚未形成可验证的攻击假设，现有证据不足以继续生成补丁。",
                         )
-                        if final_trace:
-                            await self.global_memory_administrator.update(
-                                self.transaction_debugger.name,
-                                {"final_trace_snapshot": final_trace, "termination_reason": reason}
-                            )
 
-                        if self.metrics_collector:
-                            self.metrics_collector.finalize_case(self.dapp_name, "NO_HYPOTHESIS_GENERATED")
-                        return 'FAILED: ' + fail_msg, self.get_analyze_items()
-
-                if debug_result["reason"] == "READY_FOR_PATCH" or guide_turn == 1:
-                    debug_data = debug_result.get("data", [None, None, None])
-                    if len(debug_data) < 3:
-                        print("Error: Incomplete report data from debugger")
+                if reason == "READY_FOR_PATCH" or guide_turn == 1:
+                    debug_data = debug_result.get("data")
+                    if (not isinstance(debug_data, (list, tuple)) or len(debug_data) < 3
+                            or not isinstance(debug_data[2], (str, dict)) or not debug_data[2]):
+                        verify_feedback = "Debugger returned an incomplete hypothesis; source targets and a fix report are required."
+                        if guide_turn > 1:
+                            guide_turn -= 1
+                            continue
+                        if last_valid_hypothesis:
+                            current_hypothesis = dict(last_valid_hypothesis)
+                            break
+                        return self._finish_without_hypothesis(
+                            "no_attack_hypothesis", "攻击分析未提供完整的修复目标与方案，尚无法建立可验证的攻击假设。",
+                        )
 
                     current_hypothesis = {
                         "fault_report": debug_data[0] if len(debug_data) > 0 else "",
@@ -181,11 +221,24 @@ class DAppAnalyze:
                     self.transaction_debugger.is_init = False
                 guide_turn -= 1
 
+            if not current_hypothesis:
+                if last_valid_hypothesis:
+                    current_hypothesis = dict(last_valid_hypothesis)
+                else:
+                    return self._finish_without_hypothesis(
+                        "no_attack_hypothesis", "攻击分析未形成可用于验证的结构化假设，现有交易证据仍需复核。",
+                    )
+
             # Patch loop (verify)
             if not self._module_enabled("patch_generation"):
+                self.verification = verification_state(
+                    "skipped", stage="module_selection", reason_code="module_disabled",
+                    reason="本次任务未启用补丁生成与回放验证。", terminal=True,
+                )
                 skipped_verification = {
                     "verdict": "SKIPPED",
-                    "reason": "Patch generation and verification modules were disabled by the user."
+                    "reason": "Patch generation and verification modules were disabled by the user.",
+                    "verification": self.verification,
                 }
                 if self.metrics_collector:
                     self.metrics_collector.finalize_case(self.dapp_name, "UNVERIFIED_MODULE_DISABLED")
@@ -204,23 +257,34 @@ class DAppAnalyze:
 
             while patch_turn > 0:
                 self._check_cancelled()
-                if self._module_enabled("patch_verification"):
-                    self.verification = {"status": "failed", "reason": "Patch replay has not produced an accepted result."}
                 patch_execution_success, replay_logs, patches, fix_count = await self.code_patcher.handle(current_hypothesis, verify=self._module_enabled("patch_verification"))
                 self._check_cancelled()
+                self.verification = patch_execution_state(self.code_patcher)
                 patch_fix_total_count += fix_count
 
                 if self.metrics_collector:
                     self.metrics_collector.record_fix_turns(self.dapp_name, patch_fix_total_count)
 
                 last_replay_logs = replay_logs
+                self.replay_evidence = replay_logs if isinstance(replay_logs, dict) else None
                 last_patches = patches
+                self.applied_patches = patches if isinstance(patches, str) else ""
+
+                if self.verification.get("terminal") and not patch_execution_success:
+                    # Missing source or unavailable infrastructure cannot be fixed
+                    # by asking the models to generate the same patch again.
+                    return await self._finish_unverified(current_hypothesis, replay_logs, patches)
 
                 if patch_execution_success:
                     if not self._module_enabled("patch_verification"):
+                        self.verification = verification_state(
+                            "skipped", stage="module_selection", reason_code="module_disabled",
+                            reason="补丁已生成并编译，本次任务未启用回放验证。", terminal=True,
+                        )
                         unverified_patch_result = {
                             "verdict": "PATCH_GENERATED",
-                            "reason": "Patch was generated, but replay verification was disabled by the user."
+                            "reason": "Patch was generated, but replay verification was disabled by the user.",
+                            "verification": self.verification,
                         }
                         if self.metrics_collector:
                             self.metrics_collector.finalize_case(self.dapp_name, "PATCH_GENERATED_UNVERIFIED")
@@ -231,44 +295,76 @@ class DAppAnalyze:
                             patches,
                         ), self.get_analyze_items()
 
-                    # transaction judge
+                    if not self.verification.get("replay_completed") or not replay_logs:
+                        self.verification = verification_state(
+                            "unverified", stage="replay", reason_code="replay_evidence_missing",
+                            reason="缺少完整的补丁回放结果，无法判定补丁有效性。", terminal=True,
+                            replay_attempted=self.verification.get("replay_attempted", False),
+                        )
+                        return await self._finish_unverified(current_hypothesis, replay_logs, patches)
+
+                    # A model verdict is considered only after completed replay.
                     judge_data = {
                         "real_balance_change": self.processed_data["balance_change"],
                         "replay_logs": replay_logs,
                         "current_hypothesis": current_hypothesis,
                         "patches": patches
                     }
-                    judge_result = await self.transaction_judge.handle(judge_data)
+                    try:
+                        judge_result = await self.transaction_judge.handle(judge_data)
+                    except Exception as exc:
+                        self.verification.update(
+                            status="error", stage="judge", reason_code="judge_error", terminal=True,
+                            reason=failure_message(exc, "解读补丁回放结果"),
+                        )
+                        return await self._finish_unverified(current_hypothesis, replay_logs, patches)
                     self._check_cancelled()
-                    verdict = judge_result.get("verdict")
-
-                    if verdict == "VERIFIED":  # pass
-                        self.verification = {"status": "verified", "reason": judge_result.get("reason", "")}
-                        verification_result = judge_result
+                    judge_result = judge_result if isinstance(judge_result, dict) else {"verdict": "UNVERIFIED"}
+                    execution_state = self.verification
+                    self.verification = adjudicate_patch_verification(judge_result, replay_logs, patches)
+                    for budget_key in ("request_budget", "patch_generation_budget", "runtime_generation_budget", "runtime_source_evidence"):
+                        if isinstance(execution_state.get(budget_key), dict):
+                            self.verification[budget_key] = dict(execution_state[budget_key])
+                    # Candidate repair history is diagnostic context, copied
+                    # only after the replay evidence gate has made its verdict.
+                    rejected_candidates = execution_state.get('rejected_patch_candidates')
+                    if isinstance(rejected_candidates, list) and all(isinstance(item, dict) for item in rejected_candidates):
+                        self.verification['rejected_patch_candidates'] = deepcopy(rejected_candidates)
+                    if self.verification.get("status") == "verified":
+                        verification_result = {**judge_result, "verification": dict(self.verification)}
                         is_finalized = True
                         break
-                    elif verdict == "INEFFECTIVE_PATCH":
+                    if (self.verification.get("retryable") is True
+                            and self.verification.get("next_action") == "select_trigger_transactions"):
+                        verify_feedback = (
+                            "The replay scope did not establish a test of the modified code. "
+                            "Revisit the original transaction traces and correct the fix report's "
+                            "source-mapped trigger_point transaction hashes and indexes. Preserve "
+                            "attack candidates and include any required intermediate trigger even "
+                            "if it was initially labelled auxiliary. Do not revise the same patch "
+                            "or repeat unchanged replay inputs merely because no interception was observed. "
+                            f"Coordinator reason: {self.verification.get('reason_code')}. "
+                            f"Coverage: {self.verification.get('coverage')}"
+                        )
+                        # Return to the bounded localization loop, rather than
+                        # spending a patch revision on an untested trigger.
+                        break
+                    if (self.verification.get("retryable") is True
+                            and self.verification.get("next_action") == "revise_patch"):
                         patch_turn -= 1
                         current_hypothesis["fix_feedback"] = (
-                            f"Patch failed but Hypothesis seems relevant. Judge's Advice: {judge_result.get('reason')}\n"
+                            f"Patch effectiveness remains unverified. Coordinator reason: {self.verification.get('reason_code')}: "
+                            f"{self.verification.get('reason')}\n"
+                            f"Model interpretation only: {judge_result.get('feedback_to_agent') or judge_result.get('reason')}\n"
+                            "Revise the implementation using the observed execution; keep the root cause as a hypothesis.\n"
                             f"Replay Evidence: {replay_logs}"
                         )
-                        print(f"[-] Patch Ineffective. Retrying implementation... ({patch_turn} turns left)")
+                        print(f"[-] Patch outcome remains unverified. Revising implementation... ({patch_turn} turns left)")
                         continue
-                    elif verdict == "WRONG_ROOT_CAUSE":
-                        verify_feedback = (
-                            f"Hypothesis REJECTED by Judge. The patch addressed the hypothesis but the attack persisted via a different path. "
-                            f"Judge's Analysis: {judge_result.get('reason')}. "
-                            f"You must generate a NEW hypothesis analyzing a different vulnerability."
-                        )
-                        await self.global_memory_administrator.update(self.transaction_judge.name, verify_feedback)
-                        print(f"[!] Wrong Root Cause identified. Aborting patch attempts and returning to Debugger.")
-                        break
-                    elif verdict == "BROKEN_LOGIC":  # too much protect
-                        patch_turn -= 1
-                        current_hypothesis["fix_feedback"] = (f"Last patch broke original logic:"
-                                                              f" {judge_result.get('reason')}")
-                        continue
+                    self.verification.update(terminal=True, retryable=False)
+                    if self.verification.get("next_action") == "review_same_evidence":
+                        self.verification["next_action"] = "inspect_judge_evidence"
+                    return await self._finish_unverified(current_hypothesis, replay_logs, patches)
                 else:
                     patch_turn -= 1
                     current_hypothesis["fix_feedback"] = f"Patch execution failed: {replay_logs}"
@@ -281,20 +377,34 @@ class DAppAnalyze:
                 ), self.get_analyze_items()
 
             if patch_turn <= 0:
-                verify_feedback = "Patch attempts exhausted without success. Re-evaluating attack trace."
+                verify_feedback = (
+                    "Patch revision attempts exhausted without confirmed interception. "
+                    "Re-evaluate the trace using the recorded feedback; the existing root cause has not been disproved. "
+                    + str(current_hypothesis.get("fix_feedback", ""))
+                )
 
             total_turn -= 1
 
         if last_valid_hypothesis:
+            if self.verification.get("status") in {"not_run", "unverified"}:
+                self.verification.update(status="unverified", terminal=True, retryable=False)
+                if self.verification.get("next_action") != "select_trigger_transactions":
+                    self.verification.update(
+                        next_action="inspect_analysis_feedback", reason_code="turn_limit_reached",
+                        reason="已达到修复尝试上限，尚未完成有效补丁的验证。",
+                    )
+            if self.metrics_collector:
+                self.metrics_collector.finalize_case(self.dapp_name, "UNVERIFIED")
             unverified_result = {
                 "verdict": "UNVERIFIED",
                 "reason": f"Analysis process terminated after {TOTAL_TURN} turns. "
-                          f"This report is based on the latest hypothesis but lacks verification."
+                          f"This report is based on the latest hypothesis but lacks verification.",
+                "verification": self.verification,
             }
             raw_report = await self.global_memory_administrator.get_final_result(
                 unverified_result,
                 last_valid_hypothesis,
-                last_replay_logs or "No replay logs available (Verification Timeout).",
+                last_replay_logs or "No completed patch replay evidence is available.",
                 last_patches or "No finalized patch available."
             )
 
@@ -323,6 +433,9 @@ class DAppAnalyze:
         judge_token = self.transaction_judge.token if self.transaction_judge else 0
         return {
             "verification": self.verification,
+            "replay_evidence": self.replay_evidence,
+            "applied_patches": self.applied_patches,
+            "report_generation": getattr(self.global_memory_administrator, "report_generation", {"status": "not_run"}),
             "time": {
                 "debugger": self.transaction_debugger.get_total_time(),
                 "task": self.task_organizer.get_total_time(),
