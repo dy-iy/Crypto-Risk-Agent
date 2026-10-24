@@ -94,10 +94,20 @@ def public_task(task: dict) -> dict:
     state = result.get("verification") if isinstance(result, dict) else None
     if not public.get("is_demo") and isinstance(state, dict):
         from .utils.report_evidence import report_evidence
+        try:
+            replay_cache_root = task_dir(task.get('task_id')) / 'cache'
+        except (ValueError, TypeError, AttributeError):
+            replay_cache_root = None
         normalized = report_evidence(
             {"verification": state, "verdict": state.get("judge_verdict")},
             result.get("replay_evidence"),
+            cache_root=replay_cache_root,
         )["verification"]
+        diagnostic = normalized.get('plan_diagnostic')
+        if (isinstance(diagnostic, dict) and diagnostic.get('origin') == 'unknown'
+                and isinstance(task.get('payload'), dict)):
+            diagnostic['origin'] = ('user_declared' if task['payload'].get('verification_plan') is not None
+                                    else 'investigation_derived')
         patches = result.get("applied_patches")
         if normalized.get("status") == "verified" and (
             not isinstance(patches, str)
@@ -106,6 +116,15 @@ def public_task(task: dict) -> dict:
             normalized.update(status="unverified", evidence_validated=False,
                               reason_code="applied_patch_evidence_mismatch")
             normalized["dimensions"]["attack_interception"] = {"status": "unavailable"}
+            if normalized.get('scope') in {'declared_attack_chain', 'declared_attack_chain_and_normal_cases'}:
+                normalized['execution_evidence_validated'] = False
+                for key in ('sequence_replay', 'security_properties', 'normal_regression'):
+                    normalized['dimensions'][key] = {'status': 'unavailable'}
+        if (isinstance(normalized.get('dimensions', {}).get('profit'), dict)
+                and normalized['dimensions']['profit'].get('schema_version') == 1
+                and (not isinstance(patches, str)
+                     or hashlib.sha256(patches.encode('utf-8')).hexdigest() != normalized.get('applied_patch_sha256'))):
+            normalized['dimensions']['profit'] = {'status': 'unavailable', 'usd': None}
         # Presentation is recomputed on reads. Preserve the stored historical
         # report and evidence, including when old verdicts lack current binding.
         public["result"] = {**result, "verification": normalized}

@@ -20,11 +20,23 @@ from .utils.patch_replay import (
 )
 from .utils.replay_validation import validate_simulated_transaction
 from .utils.report_evidence import _replay_coverage, report_evidence, render_verification_summary
-from .utils.verification import adjudicate_patch_verification
+from .utils.verification import adjudicate_patch_verification, replay_evidence_digest
 
 REVIEWABLE_REASONS = {"patched_trace_unavailable", "patch_revert_not_matched",
                      "patched_trace_format_unsupported", "patched_trace_invalid",
-                     "revert_propagation_unproven", "patch_guard_location_unproven"}
+                     "revert_propagation_unproven", "patch_guard_location_unproven",
+                     "modified_code_not_reached", "judge_unresolved", "judge_negative_unsubstantiated"}
+
+_INCOMPLETE_WARNING_START = (
+    "\n" + "!" * 80 + "\n"
+    "⚠️  WARNING: ANALYSIS INCOMPLETE / UNVERIFIED REPORT  ⚠️\n"
+    "The system failed to verify the fix within the allowed turns.\n"
+    "The following report is generated based on the LAST HYPOTHESIS.\n"
+    "It may contain inaccurate root causes or ineffective patches.\n"
+    "Final Status: "
+)
+_INCOMPLETE_WARNING = re.compile(
+    re.escape(_INCOMPLETE_WARNING_START) + r"([^\r\n]{1,16384})" + re.escape("\n" + "!" * 80 + "\n\n"))
 
 
 def _require(condition, message):
@@ -76,8 +88,113 @@ def _legacy_verified_prefix(original):
     })
 
 
+def _stored_report_parts(report, prefix, *, allow_warning=False):
+    """Accept the canonical summary or its exact generated incomplete wrapper."""
+    _require(isinstance(report, str), "Missing stored report")
+    if report.startswith(prefix + "\n\n"):
+        return "", report[len(prefix):]
+    match = _INCOMPLETE_WARNING.match(report) if allow_warning else None
+    _require(match is not None and not any(ord(char) < 32 or ord(char) == 127 for char in match[1]),
+             "Report prefix does not match stored verification")
+    remaining = report[match.end():]
+    _require(remaining.startswith(prefix + "\n\n"), "Report prefix does not match stored verification")
+    return report[:match.end()], remaining[len(prefix):]
+
+
+def _stable_sequence_pairs(pairs):
+    """Derived parser fields may change; execution identities and effects may not."""
+    stable = copy.deepcopy(pairs)
+    for pair in stable:
+        _require(isinstance(pair, dict), "Invalid sequential replay pair")
+        for role in ("control", "patched"):
+            execution = pair.get(role)
+            _require(isinstance(execution, dict), "Missing sequential replay execution")
+            for field in ("trace", "security_observations", "native_balance_change"):
+                execution.pop(field, None)
+    return stable
+
+
+def _refresh_sequential_replay(replay, original, patches, root):
+    """Reparse immutable bundle responses without replacing their recorded scope."""
+    from .utils.sequence_replay import resolve_sequence, sequence_pairs
+    from .utils.patch_replay import validate_sequential_evidence
+    from .utils.security_checks import plan_digest, validate_plan_authority, validate_verification_plan
+    from .workflow import _validate_runtime_artifacts
+
+    _require(original.get("schema_version") == 2 and original.get("evidence_version") == 2
+             and original.get("execution_evidence_validated") is True
+             and original.get("scope") in {"declared_attack_chain", "declared_attack_chain_and_normal_cases"}
+             and replay.get("scope") == "sequential_attack_and_regression"
+             and original.get("replay_evidence_sha256") == replay_evidence_digest(replay),
+             "Sequential replay is not bound to the stored verification")
+    _require(original.get("replay_completed") is True and replay.get("status") == "completed",
+             "Offline sequential review requires complete paired executions")
+    _require(isinstance(patches, str) and hashlib.sha256(patches.encode()).hexdigest()
+             == replay.get("applied_patch_sha256") == original.get("applied_patch_sha256")
+             and replay.get("verification_plan_sha256") == original.get("verification_plan_sha256"),
+             "Sequential replay patch or plan binding mismatch")
+    evidence_store = PatchReplayEvidenceStore(root / "cache")
+    normal = replay.get("normal_regression")
+    cases = normal.get("cases") if isinstance(normal, dict) else None
+    _require(isinstance(cases, list), "Missing sequential regression scope")
+    addresses, plan = replay["patched_addresses"], replay.get("verification_plan")
+    _require(isinstance(plan, dict) and validate_verification_plan(plan) == plan
+             and plan_digest(plan) == replay.get("verification_plan_sha256")
+             and validate_plan_authority(plan, cache_root=root / "cache"),
+             "Sequential verification plan or source evidence is invalid")
+    artifact_hashes = []
+    for group in [replay, *cases]:
+        _require(isinstance(group, dict) and isinstance(group.get("sequence"), dict)
+                 and isinstance(group.get("transactions"), list) and group["transactions"],
+                 "Invalid sequential execution group")
+        sequence, pairs = group["sequence"], group["transactions"]
+        hashes = sequence.get("ordered_transaction_hashes")
+        _require(isinstance(hashes, list) and hashes
+                 and all(isinstance(tx, str) and re.fullmatch(r"0x[0-9a-f]{64}", tx) for tx in hashes),
+                 "Invalid sequential transaction order")
+        originals = resolve_sequence(evidence_store, [{"hash": tx} for tx in hashes], int(plan["network_id"]))
+        bundles, artifacts, overrides = {}, {}, None
+        for role in ("control", "patched"):
+            descriptor = sequence.get(role)
+            _require(isinstance(descriptor, dict), "Missing sequential execution descriptor")
+            reference = descriptor.get("artifact")
+            request, response = _artifact(root, reference, role, hashes[0])
+            if role == "patched":
+                simulations = request.get("simulations")
+                objects = (simulations[0].get("state_objects") if isinstance(simulations, list)
+                           and simulations and isinstance(simulations[0], dict) else None)
+                _require(isinstance(objects, dict) and objects
+                         and all(isinstance(item, dict) and set(item) == {"code"} for item in objects.values()),
+                         "Sequential replay may override only runtime code")
+                overrides = runtime_overrides({address: item["code"] for address, item in objects.items()})
+                _require(sorted(overrides) == addresses, "Sequential patched address scope mismatch")
+            bundles[role], artifacts[role] = response.get("simulation_results"), reference
+            artifact_hashes.append(reference["sha256"])
+        rebuilt = sequence_pairs(originals, bundles, artifacts, addresses, overrides, plan)
+        _require(_stable_sequence_pairs(pairs) == _stable_sequence_pairs(rebuilt),
+                 "Sequential execution identity or effects changed from immutable evidence")
+        group["transactions"] = rebuilt
+    validation = validate_sequential_evidence(replay, cache_root=root / "cache")
+    _require(isinstance(validation, dict) and validation.get("status") == "validated",
+             "Sequential raw artifacts failed validation")
+    integrity = replay.get("runtime_integrity")
+    _require(isinstance(integrity, dict) and integrity.get("status") == "validated"
+             and integrity.get("applied_patch_sha256") == replay.get("applied_patch_sha256")
+             and isinstance(integrity.get("contracts"), dict)
+             and set(integrity["contracts"]) == set(addresses),
+             "Missing sequential runtime integrity evidence")
+    for contract in integrity["contracts"].values():
+        _require(isinstance(contract, dict) and contract.get("storage_layout_checked") is True
+                 and contract.get("immutable_checked") is True
+                 and all(isinstance(contract.get(field), str) and re.fullmatch(r"[0-9a-f]{64}", contract[field])
+                         for field in ("original_runtime_sha256", "original_compiled_runtime_sha256",
+                                       "patched_runtime_sha256")), "Invalid sequential runtime integrity evidence")
+    _validate_runtime_artifacts(replay, integrity["contracts"], task_root=root)
+    return artifact_hashes
+
+
 def revalidate_result(result: dict, task_root: Path | str, *, refresh_unverified: bool = False) -> dict:
-    """Return a revised copy only when offline evidence establishes verification.
+    """Return an independently checked revision of saved execution evidence.
 
     No files, database records, clocks, models, or remote services are modified.
     Invalid evidence raises ValueError. An explicit refresh may replace the
@@ -116,7 +233,10 @@ def revalidate_result(result: dict, task_root: Path | str, *, refresh_unverified
     root = Path(task_root).resolve()
     evidence_store = PatchReplayEvidenceStore(root / "cache")
     artifact_hashes = []
-    for pair in pairs:
+    sequential = replay.get("schema_version") == 2
+    if sequential:
+        artifact_hashes = _refresh_sequential_replay(replay, original, revised.get("applied_patches"), root)
+    for pair in ([] if sequential else pairs):
         _require(isinstance(pair, dict) and isinstance(pair.get("context"), dict)
                  and isinstance(pair.get("comparison"), dict), "Invalid replay pair")
         tx_hash = pair["original_transaction_hash"]
@@ -165,12 +285,13 @@ def revalidate_result(result: dict, task_root: Path | str, *, refresh_unverified
             gas_changed=pair["control"]["gas_used"] != pair["patched"]["gas_used"],
         )
     judge = {"verdict": original.get("judge_verdict")}
-    verification = adjudicate_patch_verification(judge, replay, revised["applied_patches"])
+    verification = (adjudicate_patch_verification(judge, replay, revised["applied_patches"], cache_root=root / "cache")
+                    if sequential else adjudicate_patch_verification(judge, replay, revised["applied_patches"]))
     verified = verification.get("status") == "verified" and verification.get("evidence_validated") is True
     _require(verified or (refresh_unverified and original.get("status") == "unverified"
                          and verification.get("status") == "unverified"),
              f"Offline evidence remains unverified: {verification.get('reason_code')}")
-    if verified:
+    if verified and not sequential:
         from .workflow import _validate_runtime_artifacts
         integrity = replay.get("runtime_integrity")
         _require(isinstance(integrity, dict) and isinstance(integrity.get("contracts"), dict),
@@ -180,12 +301,13 @@ def revalidate_result(result: dict, task_root: Path | str, *, refresh_unverified
     old_prefix = (_legacy_verified_prefix(original) if legacy_verified else
                   render_verification_summary(report_evidence(
                       {**judge, "verification": original}, result["replay_evidence"])))
-    report = result["report"]
-    _require(isinstance(report, str) and report.startswith(old_prefix + "\n\n"), "Report prefix does not match stored verification")
+    warning, suffix = _stored_report_parts(result["report"], old_prefix,
+                                          allow_warning=original.get("status") == "unverified")
     new_prefix = render_verification_summary(report_evidence({**judge, "verification": revised["verification"]}, replay))
     note = ("复核说明：已重新校验原始回执、已保存的对照与补丁回放记录，更新当前证据判定与缺口，"
             "未发起新模拟或模型调用。以下分析正文保留原始记录；其中涉及旧验证状态的表述，以本次复核状态为准。")
-    revised["report"] = new_prefix + "\n\n> " + note + report[len(old_prefix):]
+    archived_warning = "\n\n### 原始运行提示（历史记录）\n" + warning.rstrip("\n") if warning else ""
+    revised["report"] = new_prefix + "\n\n> " + note + archived_warning + suffix
     revised["evidence_revision"] = {
         "method": "offline_immutable_replay_artifacts", "trace_policy_version": TRACE_SUMMARY_POLICY_VERSION,
         "previous_status": original["status"], "previous_reason_code": original["reason_code"],
@@ -197,7 +319,7 @@ def revalidate_result(result: dict, task_root: Path | str, *, refresh_unverified
 
 
 def review_task(task_id: str, *, apply: bool = False, refresh_unverified: bool = False) -> dict:
-    """Preview one persisted task, or atomically apply a verified revision."""
+    """Preview one persisted task, or atomically apply an audited revision."""
     task_id = str(uuid.UUID(task_id))
     with closing(sqlite3.connect(settings.DATABASE_PATH.as_uri() + "?mode=ro", uri=True)) as db:
         db.row_factory = sqlite3.Row

@@ -5,7 +5,7 @@ import json
 import re
 from collections import Counter
 
-VERIFICATION_POLICY_VERSION = 2
+VERIFICATION_POLICY_VERSION = 3
 
 
 def replay_evidence_digest(value):
@@ -167,6 +167,24 @@ def _trace_call_targets(execution):
             or any(not isinstance(target, str) or not _ADDRESS.fullmatch(target) for target in targets)):
         return None
     return {target.lower() for target in targets}
+
+
+def _unavailable_trace_reason(trace):
+    """Keep an unknown execution path distinct from proven target absence."""
+    issues = trace.get('issues') if isinstance(trace, dict) else None
+    codes = {item.get('code') for item in issues
+             if isinstance(item, dict) and isinstance(item.get('code'), str)} if isinstance(issues, list) else set()
+    all_codes = trace.get('issue_codes') if isinstance(trace, dict) else None
+    if isinstance(all_codes, list):
+        codes.update(code for code in all_codes if isinstance(code, str))
+    if codes.intersection({'invalid_root', 'invalid_node', 'invalid_call_target',
+                           'invalid_status', 'status_conflict', 'invalid_children'}):
+        return ('patched_trace_invalid',
+                '补丁执行轨迹的结构或执行状态不一致，需复核原始回放记录；当前不能确认补丁效果。')
+    if codes.intersection({'unsupported_node_type', 'unrecognized_untyped_node'}):
+        return ('patched_trace_format_unsupported',
+                '补丁执行轨迹包含尚未支持的节点格式，需适配解析器后使用已有记录重新核验。')
+    return ('patched_trace_unavailable', '缺少完整补丁执行轨迹，暂时无法核实修改代码的执行路径。')
 
 
 def _terminal_revert_chain(call, reverted_calls, *, diagnostics=None):
@@ -406,7 +424,7 @@ def _validated_control(pair):
     return True
 
 
-def adjudicate_patch_verification(judge_result, replay_evidence, patches):
+def adjudicate_patch_verification(judge_result, replay_evidence, patches, *, cache_root=None):
     """Conservatively confirm recorded interception; model verdicts are not proof.
 
     At least one validated successful control must fail in modified code at an
@@ -416,6 +434,8 @@ def adjudicate_patch_verification(judge_result, replay_evidence, patches):
     Profit, normal functionality and root-cause rejection remain unmeasured.
     """
     report = replay_evidence if isinstance(replay_evidence, dict) else {}
+    if report.get('scope') == 'sequential_attack_and_regression':
+        return _adjudicate_complete_verification(judge_result, report, patches, cache_root=cache_root)
     pairs = report.get('transactions')
     pairs = pairs if isinstance(pairs, list) else []
     attempted = any(isinstance(pair, dict) and any(
@@ -449,6 +469,8 @@ def adjudicate_patch_verification(judge_result, replay_evidence, patches):
     evidence_digest = replay_evidence_digest(report)
 
     def outcome(reason_code, reason, *, verified=False, next_action=None):
+        from app.attackpilot.utils.native_profit import build_native_profit_evidence
+
         intercepted = [item['original_transaction_hash'] for item in checked]
         outside_code = [item['original_transaction_hash'] for item in unaffected]
         resolved = {tx.lower() for tx in intercepted + outside_code}
@@ -478,7 +500,7 @@ def adjudicate_patch_verification(judge_result, replay_evidence, patches):
             }, dimensions={
                 'attack_interception': {'status': 'passed' if verified else 'unavailable'},
                 'normal_regression': {'status': 'not_run'},
-                'profit': {'status': 'unavailable', 'usd': None},
+                'profit': build_native_profit_evidence(report, execution_validated=verified),
             },
         )
 
@@ -658,6 +680,198 @@ def adjudicate_patch_verification(judge_result, replay_evidence, patches):
                        next_action='review_same_evidence')
     return outcome(
         'attack_path_intercepted',
-        '原版对照与真实回执一致；触发交易在修改合约的实际校验中回滚。未执行修改代码且结果未变的独立历史交易另行记录；未验证前后状态传递、整条攻击链或正常功能。',
+        '原版对照与真实回执一致；触发交易在修改合约的实际校验中回滚。未执行修改代码且结果未变的独立历史交易另行记录；未验证前后状态传递或整条攻击链。',
         verified=True,
     )
+
+
+def _adjudicate_complete_verification(judge_result, report, patches, *, cache_root=None):
+    """Combine executed chain, declared attack effects and normal-case assertions.
+
+    Full verification is scoped to the recorded inputs and declared properties;
+    it never claims arbitrary transactions or all business behavior are safe.
+    """
+    from copy import deepcopy
+    from app.attackpilot.utils.security_checks import (
+        evaluate_normal_regression, evaluate_security_properties, plan_digest,
+        validate_plan_authority, validate_verification_plan,
+    )
+    from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+
+    pairs = report.get('transactions')
+    pairs = pairs if isinstance(pairs, list) else []
+    verdict = judge_result.get('verdict') if isinstance(judge_result, dict) else None
+    verdict = verdict if isinstance(verdict, str) and verdict in {
+        'VERIFIED', 'INEFFECTIVE_PATCH', 'WRONG_ROOT_CAUSE', 'BROKEN_LOGIC', 'UNVERIFIED'} else None
+    modified = _modified_code_addresses(patches)
+    digest = replay_evidence_digest(report)
+    plan = None
+    checked = []
+    sequence = {'status': 'unavailable', 'reason_code': 'sequence_evidence_missing'}
+    security = {'status': 'unavailable', 'reason_code': 'security_properties_not_measured', 'checks': []}
+    normal = {'status': 'not_run', 'reason_code': 'normal_regression_not_measured', 'checks': []}
+    attack = {'status': 'unavailable'}
+    native_profit = {'status': 'unavailable', 'usd': None}
+    attempted = any(isinstance(pair, dict) and any(isinstance(pair.get(role), dict)
+                    and (pair[role].get('completed') is True or pair[role].get('artifact'))
+                    for role in ('control', 'patched')) for pair in pairs)
+    complete = bool(pairs) and all(isinstance(pair, dict) and all(
+        isinstance(pair.get(role), dict) and pair[role].get('completed') is True
+        for role in ('control', 'patched')) for pair in pairs)
+
+    def outcome(code, reason, *, verified=False, next_action=None):
+        return verification_state(
+            'verified' if verified else 'unverified', stage='judge', reason_code=code,
+            reason=reason, replay_attempted=attempted, replay_completed=complete,
+            terminal=next_action is None, retryable=next_action is not None,
+            next_action=next_action or ('complete' if verified else 'collect_missing_evidence'),
+            scope=('declared_attack_chain_and_normal_cases' if plan and plan['normal_regression_cases']
+                   else 'declared_attack_chain'), evidence_version=2,
+            evidence_validated=verified, verification_policy_version=VERIFICATION_POLICY_VERSION,
+            decision_authority='validated_execution_evidence',
+            execution_evidence_validated=sequence.get('status') in {'passed', 'partial'},
+            replay_evidence_sha256=digest, applied_patch_sha256=report.get('applied_patch_sha256'),
+            judge_verdict=verdict, checked=list(checked), unaffected=[],
+            verification_plan_sha256=plan_digest(plan) if plan else None,
+            coverage={'mode': 'sequential_attack_and_regression',
+                      'modified_addresses': sorted(modified),
+                      'required_trigger_transaction_hashes': report.get('required_trigger_transaction_hashes', []),
+                      'ordered_transaction_hashes': plan['attack_transaction_hashes'] if plan else [],
+                      'sequence_replay_verified': sequence.get('status') == 'passed',
+                      'declared_security_property_ids': [item['id'] for item in plan['security_properties']] if plan else [],
+                      'normal_regression_case_ids': [item['id'] for item in plan['normal_regression_cases']] if plan else [],
+                      'unexecuted_transaction_hashes': [pair.get('original_transaction_hash') for pair in pairs
+                          if isinstance(pair, dict) and isinstance(pair.get('patched'), dict)
+                          and pair['patched'].get('completed') is not True]},
+            dimensions={'sequence_replay': deepcopy(sequence), 'attack_interception': deepcopy(attack),
+                        'security_properties': deepcopy(security), 'normal_regression': deepcopy(normal),
+                        'profit': deepcopy(native_profit)},
+        )
+
+    if type(report.get('schema_version')) is not int or report['schema_version'] != 2 or digest is None:
+        return outcome('structured_replay_evidence_missing', '缺少完整连续回放的结构化执行证据。')
+    try:
+        plan = validate_verification_plan(report.get('verification_plan'))
+    except (ValueError, TypeError, OverflowError, RecursionError):
+        return outcome('verification_plan_invalid', '声明的安全条件或验证计划无效，不能据此判定补丁通过。')
+    if plan is None or not (validate_plan_authority(plan) if cache_root is None else
+                            validate_plan_authority(plan, cache_root=cache_root)):
+        return outcome('verification_plan_unbound', '缺少用户声明的验证条件，或调查计划未绑定本任务的实际证据。')
+    if (report.get('verification_plan_sha256') != plan_digest(plan)
+            or plan != report.get('verification_plan')):
+        return outcome('verification_plan_mismatch', '执行记录中的验证计划与实际安全条件不一致。')
+    if (not isinstance(patches, str) or report.get('applied_patch_sha256') != hashlib.sha256(patches.encode()).hexdigest()):
+        return outcome('applied_patch_evidence_mismatch', '回放记录未绑定本次实际应用的补丁代码。')
+    addresses = report.get('patched_addresses')
+    if (not isinstance(addresses, list) or not addresses or not modified
+            or any(not isinstance(address, str) or not _ADDRESS.fullmatch(address) for address in addresses)
+            or not modified.issubset({address.lower() for address in addresses})):
+        return outcome('patch_target_missing', '实际源码修改地址未对应回放中的代码替换地址。')
+    integrity = report.get('runtime_integrity')
+    if (not isinstance(integrity, dict) or integrity.get('status') != 'validated'
+            or integrity.get('applied_patch_sha256') != report.get('applied_patch_sha256')
+            or not isinstance(integrity.get('contracts'), dict)):
+        return outcome('runtime_integrity_missing', '未确认历史字节码、存储布局和 immutable 与本次补丁一致。')
+    for address in modified:
+        contract = integrity['contracts'].get(address)
+        if (not isinstance(contract, dict) or contract.get('storage_layout_checked') is not True
+                or contract.get('immutable_checked') is not True
+                or any(not isinstance(contract.get(key), str) or not _DIGEST.fullmatch(contract[key])
+                       for key in ('patched_runtime_sha256', 'original_runtime_sha256',
+                                   'original_compiled_runtime_sha256'))):
+            return outcome('runtime_integrity_missing', '源码修改地址缺少完整的运行时完整性检查。')
+    try:
+        validation = (validate_sequential_evidence(report) if cache_root is None else
+                      validate_sequential_evidence(report, cache_root=cache_root))
+    except (ValueError, TypeError, OSError, KeyError, AttributeError):
+        validation = {'status': 'unavailable', 'reason_code': 'sequence_evidence_invalid'}
+    if not isinstance(validation, dict) or validation.get('status') != 'validated':
+        sequence = {'status': 'unavailable', 'reason_code': validation.get('reason_code', 'sequence_evidence_invalid')
+                    if isinstance(validation, dict) else 'sequence_evidence_invalid'}
+        return outcome(sequence['reason_code'], '连续回放的原始响应、交易顺序、初始状态或实际请求未通过核验。')
+    sequence = {'status': 'passed' if complete else 'partial',
+                'reason_code': 'stateful_sequence_completed' if complete else 'stateful_sequence_stopped',
+                'ordered_transaction_hashes': list(plan['attack_transaction_hashes'])}
+    hashes = [pair.get('original_transaction_hash') for pair in pairs if isinstance(pair, dict)]
+    if hashes != plan['attack_transaction_hashes']:
+        return outcome('attack_sequence_input_mismatch', '实际连续回放交易与计划声明的攻击链不一致。')
+    if any(pair.get('context', {}).get('network_id') != plan['network_id'] for pair in pairs):
+        return outcome('verification_plan_network_mismatch', '验证条件与执行链不一致。')
+    from app.attackpilot.utils.native_profit import build_native_profit_evidence
+    native_profit = build_native_profit_evidence(report, execution_validated=True)
+    required = report.get('required_trigger_transaction_hashes', [])
+    if (not isinstance(required, list) or not required
+            or any(not isinstance(tx, str) or not _HASH.fullmatch(tx) for tx in required)
+            or not {tx.lower() for tx in required}.issubset(hashes)):
+        return outcome('required_trigger_replay_missing', '源码定位要求的触发交易没有全部纳入连续回放。')
+    target_sets = [_trace_call_targets(pair.get('patched', {})) for pair in pairs]
+    reached = any(targets is not None and modified.intersection(targets) for targets in target_sets)
+    if not reached:
+        unknown = [_unavailable_trace_reason(pair.get('patched', {}).get('trace'))
+                   for pair, targets in zip(pairs, target_sets) if targets is None]
+        if unknown:
+            priority = {'patched_trace_invalid': 0, 'patched_trace_format_unsupported': 1,
+                        'patched_trace_unavailable': 2}
+            code, reason = min(unknown, key=lambda item: priority[item[0]])
+            return outcome(code, reason)
+        return outcome('modified_code_not_reached', '连续回放没有完整轨迹证明执行了实际修改代码。',
+                       next_action='select_trigger_transactions')
+    if cache_root is None:
+        security = evaluate_security_properties(plan, pairs)
+        normal = evaluate_normal_regression(plan, report.get('normal_regression', {}), modified)
+    else:
+        security = evaluate_security_properties(plan, pairs, cache_root=cache_root)
+        normal = evaluate_normal_regression(plan, report.get('normal_regression', {}), modified,
+                                            cache_root=cache_root)
+    if security.get('status') == 'passed':
+        attack = {'status': 'passed', 'method': 'declared_security_properties',
+                  'scope': 'declared_properties_and_recorded_inputs'}
+        checked.extend({'original_transaction_hash': item['transaction_hash'],
+                        'property_id': item['property_id'], 'method': 'declared_security_property'}
+                       for item in security['checks'])
+    else:
+        # Guard interception remains independently useful. Reuse the existing
+        # source/PC/terminal-propagation gate after the stateful validator has
+        # established the stronger control baseline and artifact identities.
+        guarded = []
+        for pair in pairs:
+            if pair.get('patched', {}).get('status') != 'revert':
+                continue
+            shadow = deepcopy(report)
+            shadow.update(schema_version=1, scope='independent_historical_transaction_pairs',
+                          status='completed', control_validation='validated', transaction_count=1,
+                          transactions=[deepcopy(pair)],
+                          required_trigger_transaction_hashes=[pair['original_transaction_hash']])
+            control = shadow['transactions'][0]['control']
+            baseline = control.get('baseline_validation')
+            if isinstance(baseline, dict):
+                baseline['method'] = 'rpc_receipt_vs_tenderly_original_replay'
+            local = adjudicate_patch_verification({'verdict': 'VERIFIED'}, shadow, patches)
+            if local.get('status') == 'verified':
+                guarded.extend(local.get('checked', []))
+        if guarded:
+            checked.extend(guarded)
+            attack = {'status': 'passed', 'method': 'matched_guard',
+                      'scope': 'recorded_guard_interceptions'}
+        else:
+            attack = {'status': 'unavailable', 'reason_code': 'attack_effect_not_established'}
+    if not complete:
+        return outcome('attack_sequence_incomplete', '补丁链在回滚后停止，后续交易没有实际执行；已记录的前缀证据不能证明整条攻击链通过。')
+    if security.get('status') == 'failed':
+        return outcome('declared_security_property_failed', '声明的安全条件未形成原版违反、补丁版消除的执行对照。',
+                       next_action='revise_patch')
+    if attack.get('status') != 'passed':
+        return outcome('attack_effect_not_established', '缺少可确认的补丁回滚归因或原版违反而补丁消除的实际安全结果。',
+                       next_action='revise_patch' if security.get('status') == 'failed' else None)
+    if security.get('status') != 'passed':
+        return outcome('security_observations_unavailable', '声明的资金、权限或状态条件缺少完整原始观测，不能把缺失数据当安全。')
+    if plan['normal_regression_cases'] and normal.get('status') != 'passed':
+        return outcome('normal_regression_failed' if normal.get('status') == 'failed' else 'normal_regression_unavailable',
+                       '正常业务尚未同时完成原版与补丁版执行、修改代码覆盖及业务断言。',
+                       next_action='revise_patch' if normal.get('status') == 'failed' else None)
+    if plan['normal_regression_cases']:
+        return outcome('declared_chain_and_regression_verified',
+                       '连续攻击链及声明的验证条件均已执行并通过；结论仅覆盖所声明条件与记录输入。', verified=True)
+    return outcome('declared_attack_chain_verified',
+                   '攻击交易已连续回放，原版违反而补丁消除了声明的安全条件违规；结论覆盖本次攻击输入。',
+                   verified=True)

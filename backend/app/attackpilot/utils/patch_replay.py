@@ -1,4 +1,4 @@
-"""Independent historical control/patch replays and durable execution evidence."""
+"""Historical replay requests and immutable, task-local execution artifacts."""
 import hashlib
 import json
 import os
@@ -13,11 +13,12 @@ from app.attackpilot.errors import HistoricalReplayValidationError, TenderlyAPIE
 from app.attackpilot.utils.replay_validation import (
     _hex, _logs, _quantity, _status, validate_original_transaction, validate_trace_root,
 )
+from app.attackpilot.utils.native_profit import extract_native_balance_change
 
 MAX_REPLAY_TRANSACTIONS = 4
 MAX_REPLAY_REQUESTS = 8
 MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
-TRACE_SUMMARY_POLICY_VERSION = 5
+TRACE_SUMMARY_POLICY_VERSION = 6
 _HASH = re.compile(r'0x[0-9a-fA-F]{64}')
 _ADDRESS = re.compile(r'0x[0-9a-fA-F]{40}')
 _DIGEST = re.compile(r'[0-9a-f]{64}')
@@ -147,6 +148,71 @@ class PatchReplayEvidenceStore:
                 handle.write(_canonical({'schema_version': 1, 'request_digest': _digest(request)}))
             return
         raise PatchReplayBudgetError()
+
+    def remaining_requests(self) -> int:
+        return MAX_REPLAY_REQUESTS - sum(
+            (self.root / 'requests' / f'{number:02}.json').exists()
+            for number in range(1, MAX_REPLAY_REQUESTS + 1))
+
+    def reserve_requests(self, requests: list[dict]) -> set[str]:
+        """Reserve an entire verification round before its first remote call."""
+        import fcntl
+        reservations = self.root / 'requests'
+        reservations.mkdir(parents=True, exist_ok=True)
+        with (reservations / '.lock').open('a+b') as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            missing = {_digest(request): request for request in requests
+                       if self.cached_response(request) is None}
+            free = [reservations / f'{number:02}.json' for number in range(1, MAX_REPLAY_REQUESTS + 1)
+                    if not (reservations / f'{number:02}.json').exists()]
+            if len(missing) > len(free):
+                error = PatchReplayBudgetError()
+                error.required_requests, error.remaining_requests = len(missing), len(free)
+                raise error
+            created = []
+            try:
+                for path, digest in zip(free, missing):
+                    with path.open('xb') as handle:
+                        created.append(path)
+                        handle.write(_canonical({'schema_version': 1, 'request_digest': digest}))
+            except BaseException:
+                for path in created:
+                    path.unlink(missing_ok=True)
+                raise
+            return set(missing)
+
+    def read_artifact(self, reference: dict, *, whole_response: bool = False,
+                      expected_role: str | None = None, original_hash: str | None = None) -> tuple[dict, dict]:
+        """Verify immutable bytes and request identity before selecting a bundle step."""
+        if not isinstance(reference, dict) or not _DIGEST.fullmatch(str(reference.get('sha256', ''))):
+            raise ValueError('Invalid replay artifact reference')
+        digest = reference['sha256']
+        path = self.root / 'artifacts' / f'{digest}.json'
+        expected = str(Path('cache') / 'patch_replay' / 'artifacts' / f'{digest}.json')
+        if reference.get('relative_path') != expected or path.resolve() != path.absolute():
+            raise ValueError('Replay artifact path does not identify immutable local evidence')
+        with path.open('rb') as handle:
+            data = handle.read(MAX_ARTIFACT_BYTES + 1)
+        if len(data) > MAX_ARTIFACT_BYTES or hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError('Replay artifact SHA256 mismatch')
+        record = json.loads(data)
+        request, response = record.get('request'), record.get('response')
+        if (type(record.get('schema_version')) is not int or record['schema_version'] != 1 or not isinstance(request, dict)
+                or not isinstance(response, dict) or record.get('request_digest') != _digest(request)
+                or record['request_digest'] != reference.get('request_digest')):
+            raise ValueError('Replay artifact request identity mismatch')
+        if (expected_role is not None and record.get('role') != expected_role
+                or original_hash is not None and record.get('original_transaction_hash') != original_hash):
+            raise ValueError('Replay artifact execution identity mismatch')
+        if not whole_response and 'simulation_results' in response:
+            results, index = response['simulation_results'], reference.get('result_index')
+            if (not isinstance(results, list) or type(index) is not int
+                    or not 0 <= index < len(results) or not isinstance(results[index], dict)):
+                raise ValueError('Replay artifact bundle result index mismatch')
+            response = results[index]
+        elif not whole_response and 'result_index' in reference:
+            raise ValueError('Single replay artifact cannot identify a bundle step')
+        return request, response
 
     def invalidate_response(self, request: dict) -> None:
         """Keep the audit artifact, but never reuse a response rejected by validation."""
@@ -382,15 +448,18 @@ def _is_revert_annotation(node: dict, parent: dict | None) -> bool:
     if all(key not in frame for frame in (node, parent) for key in source_keys):
         # State-override bytecode has no source map. Tenderly still emits its
         # terminal zero-gas marker at the parent's exact failure position.
-        # Require the parent to carry the same ABI-encoded error and to end
-        # immediately afterwards; error text alone is not enough.
+        # Require the parent to end immediately afterwards. It must carry
+        # either the matching ABI error or a generic, empty-data REVERT;
+        # arbitrary error text alone cannot identify a source marker.
         reason, source = _revert_reason(parent)
         return (parent_kind.upper() in _CALL_TYPES
                 and type(parent.get('absolute_position')) is int
                 and parent['absolute_position'] == position + 1
-                and source == 'abi_error_output' and reason == error
                 and isinstance(parent.get('calls'), list)
-                and bool(parent['calls']) and parent['calls'][-1] is node)
+                and bool(parent['calls']) and parent['calls'][-1] is node
+                and ((source == 'abi_error_output' and reason == error)
+                     or (parent.get('output') == '0x'
+                         and error == 'execution reverted')))
     for key in source_keys:
         value = node.get(key)
         if (type(value) is not int or value < 0 or type(parent.get(key)) is not int
@@ -881,6 +950,13 @@ def execution_summary(result: dict, artifact: dict, patched_addresses: list[str]
                      'changes': {key: value for key, value in changes.items() if key != 'state_diff'}},
         'storage': changes['state_diff'],
         'execution_effects': _execution_effects(info),
+        'native_balance_change': extract_native_balance_change(result),
         'trace': trace,
         'profit_usd': None,
     }
+
+
+def validate_sequential_evidence(report, *, cache_root=None):
+    """Lazy export keeps legacy artifact readers independent of sequence setup."""
+    from app.attackpilot.utils.sequence_replay import validate_sequential_evidence as validate
+    return validate(report, cache_root=cache_root)

@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 import time
 from typing import Callable, List, Dict, Optional, Union
 
@@ -53,6 +54,8 @@ class DAppProcess:
     async def process(self, dapp):
         self._check_cancelled()
         processed_data = {'dapp': dapp}
+        if dapp.get('verification_plan') is not None:
+            processed_data['verification_plan'] = deepcopy(dapp['verification_plan'])
         dapp_name = dapp["name"]
 
         raw_tx_list = dapp['transaction_hash']

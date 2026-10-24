@@ -1,5 +1,5 @@
 // Keep aligned with the backend's execution-evidence verification policy.
-export const VERIFICATION_POLICY_VERSION = 2;
+export const VERIFICATION_POLICY_VERSION = 3;
 
 export enum TaskStatus {
   PENDING = "pending",
@@ -38,6 +38,7 @@ export interface LogMessage {
 
 export interface TaskCreateRequest {
   dapp_name: string;
+  verification_plan?: VerificationPlan;
 }
 
 export interface DappReference {
@@ -363,11 +364,44 @@ export interface VulnerabilityTypeKnowledge {
   tracepilot_usage?: string;
 }
 
+export interface VerificationProperty {
+  id: string;
+  kind: "native_balance" | "token_balance" | "storage" | "call_result";
+  account: string;
+  token?: string;
+  slot?: string;
+  mask?: string;
+  calldata?: string;
+  operator: "delta_lte" | "delta_gte" | "after_eq" | "unchanged" | "matches_control";
+  expected?: string;
+  rationale: string;
+  transaction_hashes?: string[];
+}
+
+export interface VerificationPlan {
+  schema_version: 1;
+  network_id: string;
+  attack_transaction_hashes: string[];
+  authority: {
+    kind: "user_declared" | "investigation_derived";
+    reference: string;
+    evidence_refs: { reference: string; sha256: string }[];
+  };
+  security_properties: VerificationProperty[];
+  normal_regression_cases: {
+    id: string;
+    name?: string;
+    transaction_hashes: string[];
+    assertions: VerificationProperty[];
+  }[];
+}
+
 export interface TxReviewRequest {
   tx_hash: string;
   chain?: string;
   tx_hashes?: string[];
   modules?: string[];
+  verification_plan?: VerificationPlan;
 }
 
 export interface TxReviewEvidence {

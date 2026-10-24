@@ -1,5 +1,9 @@
 import asyncio
 from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
+import re
 from typing import Callable, Dict, List, Optional
 
 from app.attackpilot.agents.FixAgent import FixAgent
@@ -14,6 +18,82 @@ from app.attackpilot.utils.rag_context import build_rag_query_from_dapp, retriev
 from app.attackpilot.errors import failure_message
 from app.attackpilot.utils.verification import adjudicate_patch_verification, patch_execution_state, verification_state
 from app.attackpilot.utils.report_evidence import report_evidence, render_verification_summary
+
+
+def investigation_verification_context(processed_data):
+    """Expose only this task's revalidated original artifacts as citable evidence."""
+    from app.attackpilot import settings
+    from app.attackpilot.errors import HistoricalReplayValidationError
+    from app.attackpilot.utils.patch_replay import PatchReplayEvidenceStore
+    from app.attackpilot.utils.replay_validation import validate_simulated_transaction
+    from app.attackpilot.utils.security_checks import MAX_EVIDENCE_BYTES
+
+    dapp = processed_data.get('dapp') or {}
+    known = processed_data.get('transaction_hash_list') or dapp.get('transaction_hash') or []
+    details = processed_data.get('transaction_to_detail') or {}
+    chain_id = settings.PLATFORM_TO_CHAIN_ID.get(dapp.get('platform'))
+    root = Path(settings.CACHE_DIR)
+    result = {'explicit_verification_plan': deepcopy(dapp.get('verification_plan',
+                                                processed_data.get('verification_plan'))),
+              'investigation_evidence_index': [], 'unavailable_transaction_hashes': [],
+              'authority': 'Evidence references only; no business or security assertion is established by this index.'}
+    if not isinstance(known, list) or not isinstance(details, dict) or chain_id is None:
+        return result
+
+    def safe_bytes(relative, limit=MAX_EVIDENCE_BYTES):
+        candidate = root / relative
+        cursor = candidate
+        while cursor != root.parent:
+            if cursor.is_symlink():
+                raise ValueError('Task evidence path contains a symbolic link')
+            cursor = cursor.parent
+        if not candidate.is_file() or candidate.stat().st_size > limit:
+            raise ValueError('Task evidence file is unavailable')
+        with candidate.open('rb') as stream:
+            data = stream.read(limit + 1)
+        if len(data) > limit:
+            raise ValueError('Task evidence file exceeds the size limit')
+        return data
+
+    for transaction_hash in known[:50]:
+        if not isinstance(transaction_hash, str) or not re.fullmatch(r'0x[0-9a-fA-F]{64}', transaction_hash):
+            continue
+        transaction_hash = transaction_hash.lower()
+        detail = details.get(transaction_hash)
+        baseline = detail.get('baseline_validation') if isinstance(detail, dict) else None
+        simulation_id = baseline.get('simulation_id') if isinstance(baseline, dict) else None
+        try:
+            if (not isinstance(baseline, dict) or baseline.get('status') != 'validated'
+                    or baseline.get('method') != 'rpc_receipt_vs_tenderly_original_replay'
+                    or baseline.get('original_transaction_hash') != transaction_hash
+                    or baseline.get('network_id') != str(chain_id)
+                    or not isinstance(simulation_id, str)
+                    or not re.fullmatch(r'[a-zA-Z0-9-]{1,128}', simulation_id)):
+                raise ValueError('Original replay provenance is unavailable')
+            raw_transaction = json.loads(safe_bytes(Path('tx_detail/tx') / f'{transaction_hash}.json'))
+            safe_bytes(Path('tx_detail/tx_receipt') / f'{transaction_hash}.json')
+            block = raw_transaction.get('blockNumber')
+            if type(block) is not int:
+                block = int(block, 16 if isinstance(block, str) and block.startswith('0x') else 10)
+            if block < 0:
+                raise ValueError('Invalid block number')
+            safe_bytes(Path('timestamp') / f'{block}.json', 65536)
+            relative = Path('trace/simulation_result') / f'{simulation_id}.json'
+            data = safe_bytes(relative)
+            raw = json.loads(data)
+            context, _ = PatchReplayEvidenceStore(root).original_context(transaction_hash, chain_id)
+            validated = validate_simulated_transaction(context, raw)
+            if (any(baseline.get(key) != value for key, value in validated.items())
+                    or raw.get('simulation', {}).get('state_objects')):
+                raise ValueError('Original evidence does not match its saved baseline')
+            result['investigation_evidence_index'].append({
+                'transaction_hash': transaction_hash, 'simulation_id': simulation_id,
+                'reference': (Path('cache') / relative).as_posix(),
+                'sha256': hashlib.sha256(data).hexdigest()})
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError,
+                HistoricalReplayValidationError):
+            result['unavailable_transaction_hashes'].append(transaction_hash)
+    return result
 
 
 class DAppAnalyze:
@@ -48,6 +128,18 @@ class DAppAnalyze:
         self.mcp_client = mcp_client
         self.transaction_debugger = transaction_debugger
         self.transaction_debugger.init_prompt(self.processed_data)
+        memory = getattr(self.transaction_debugger, 'memory', None)
+        if (self._module_enabled('patch_verification') and isinstance(memory, list) and memory
+                and isinstance(memory[0], dict) and isinstance(memory[0].get('content'), str)):
+            memory[0]['content'] += (
+                '\n\n<Verification_Plan_Context authority="coordinator_provenance">\n'
+                + json.dumps(investigation_verification_context(processed_data), ensure_ascii=False)
+                + '\n</Verification_Plan_Context>\n'
+                  'Use an explicit input plan as declared. Investigation-derived plans may cite only '
+                  'the indexed original evidence and must explain the observed basis of each rule. '
+                  'Missing evidence, normal transactions, calldata, storage locations, or business '
+                  'requirements remain unavailable; never fabricate them or relabel attack inputs as normal cases.'
+            )
         self.global_memory_administrator = GlobalMemoryAgent(self.is_multi, dapp_name=self.dapp_name, log_callback=log_callback)
         self.task_organizer = TaskAgent(self.mcp_client, dapp_name=self.dapp_name, session_id=self.transaction_debugger.session_id, log_callback=log_callback)
         self.code_patcher = None
@@ -303,7 +395,8 @@ class DAppAnalyze:
                         )
                         return await self._finish_unverified(current_hypothesis, replay_logs, patches)
 
-                    # A model verdict is considered only after completed replay.
+                    # The model interprets completed replay. Declared execution
+                    # checks decide the outcome even if interpretation fails.
                     judge_data = {
                         "real_balance_change": self.processed_data["balance_change"],
                         "replay_logs": replay_logs,
@@ -313,18 +406,36 @@ class DAppAnalyze:
                     try:
                         judge_result = await self.transaction_judge.handle(judge_data)
                     except Exception as exc:
-                        self.verification.update(
-                            status="error", stage="judge", reason_code="judge_error", terminal=True,
-                            reason=failure_message(exc, "解读补丁回放结果"),
-                        )
-                        return await self._finish_unverified(current_hypothesis, replay_logs, patches)
+                        if (isinstance(replay_logs, dict) and type(replay_logs.get('schema_version')) is int
+                                and replay_logs['schema_version'] == 2
+                                and replay_logs.get('scope') == 'sequential_attack_and_regression'):
+                            judge_result = {
+                                'interpretation_status': 'unavailable',
+                                'reason': failure_message(exc, "解读补丁回放结果"),
+                            }
+                        else:
+                            self.verification.update(
+                                status="error", stage="judge", reason_code="judge_error", terminal=True,
+                                reason=failure_message(exc, "解读补丁回放结果"),
+                            )
+                            return await self._finish_unverified(current_hypothesis, replay_logs, patches)
                     self._check_cancelled()
                     judge_result = judge_result if isinstance(judge_result, dict) else {"verdict": "UNVERIFIED"}
                     execution_state = self.verification
                     self.verification = adjudicate_patch_verification(judge_result, replay_logs, patches)
+                    if (self.metrics_collector and self.verification.get('evidence_version') == 2
+                            and judge_result.get('interpretation_status') == 'unavailable'):
+                        self.metrics_collector.record_judge_result(
+                            case_name=self.dapp_name,
+                            verdict='VERIFIED' if self.verification.get('status') == 'verified'
+                            and self.verification.get('evidence_validated') is True else 'UNVERIFIED',
+                            reason=self.verification.get('reason', ''),
+                        )
                     for budget_key in ("request_budget", "patch_generation_budget", "runtime_generation_budget", "runtime_source_evidence"):
                         if isinstance(execution_state.get(budget_key), dict):
                             self.verification[budget_key] = dict(execution_state[budget_key])
+                    if isinstance(execution_state.get('source_target_resolutions'), list):
+                        self.verification['source_target_resolutions'] = deepcopy(execution_state['source_target_resolutions'])
                     # Candidate repair history is diagnostic context, copied
                     # only after the replay evidence gate has made its verdict.
                     rejected_candidates = execution_state.get('rejected_patch_candidates')
@@ -433,6 +544,7 @@ class DAppAnalyze:
         judge_token = self.transaction_judge.token if self.transaction_judge else 0
         return {
             "verification": self.verification,
+            "verification_plan": deepcopy(getattr(self.code_patcher, '_verification_plan', None)),
             "replay_evidence": self.replay_evidence,
             "applied_patches": self.applied_patches,
             "report_generation": getattr(self.global_memory_administrator, "report_generation", {"status": "not_run"}),

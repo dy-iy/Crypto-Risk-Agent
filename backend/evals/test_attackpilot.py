@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -495,6 +496,7 @@ class WorkflowTest(TemporaryStore, unittest.IsolatedAsyncioTestCase):
     async def test_compile_only_patch_never_calls_tenderly(self):
         from app.attackpilot.agents.FixAgent import FixAgent
         agent = FixAgent.__new__(FixAgent)
+        agent.chain_id = 1
         agent._check_cancelled = Mock()
         agent.session_id = "session"
         agent.mcp_client = Mock()
@@ -1201,6 +1203,482 @@ class SourceLookupRegressionTest(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(result['source_mapping'])
             if call_type == 'JUMP':
                 resolve.assert_not_awaited()
+
+
+class RegressionInputFlowTests(TemporaryStore, unittest.TestCase):
+    """Explicit business plans reach execution without joining attack classification."""
+    NORMAL = '0x' + 'b' * 64
+    ACCOUNT = '0x' + '1' * 40
+
+    def setUp(self):
+        self.init_store()
+        self.app = FastAPI(); self.app.include_router(api.router)
+        self.user = AuthUser(id='alice', username='alice', display_name='Alice', created_at=store.now())
+        auth = patch.object(api, 'get_user_by_session', return_value=self.user)
+        auth.start(); self.addCleanup(auth.stop)
+
+    def post(self, path, **kwargs):
+        async def request():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app),
+                                         base_url='http://offline-test',
+                                         cookies={'cryptorisk_session': 'alice'}) as client:
+                return await client.post(path, **kwargs)
+        return asyncio.run(request())
+
+    def plan(self):
+        return {'schema_version': 1, 'network_id': '1', 'attack_transaction_hashes': [HASH],
+                'authority': {'kind': 'user_declared', 'reference': 'Business acceptance criteria',
+                              'evidence_refs': []},
+                'security_properties': [{'id': 'no_unbacked_gain', 'kind': 'native_balance',
+                                         'account': self.ACCOUNT, 'operator': 'delta_lte', 'expected': '0',
+                                         'transaction_hashes': [HASH], 'rationale': 'No unauthorized gain'}],
+                'normal_regression_cases': [
+                    {'id': 'normal_deposit', 'name': 'Supported deposit', 'transaction_hashes': [self.NORMAL],
+                     'assertions': [{'id': 'deposit_result', 'kind': 'native_balance', 'account': self.ACCOUNT,
+                                     'operator': 'matches_control', 'rationale': 'Preserve depositor balance result'}]}]}
+
+    def patcher(self, plan=None):
+        from app.attackpilot.agents.FixAgent import FixAgent
+        agent = FixAgent.__new__(FixAgent)
+        agent.chain_id = 1; agent._platform = 'Ethereum'
+        agent.processed_data = {'dapp': {'platform': 'Ethereum', 'transaction_hash': [HASH]},
+                                'transaction_hash_list': [HASH]}
+        if plan is not None:
+            agent.processed_data['dapp']['verification_plan'] = plan
+        agent.cancellation_checker = lambda: False
+        return agent
+
+    def original_context(self):
+        block_hash = '0x' + 'c' * 64
+        transaction = {'hash': self.NORMAL, 'chainId': '0x1', 'blockNumber': '0x10',
+                       'blockHash': block_hash, 'transactionIndex': '0x0', 'from': self.ACCOUNT,
+                       'to': '0x' + '2' * 40, 'input': '0x', 'value': '0x1', 'gas': '0x10000',
+                       'gasPrice': '0x1', 'nonce': '0x0'}
+        receipt = {'transactionHash': self.NORMAL, 'blockNumber': '0x10', 'blockHash': block_hash,
+                   'transactionIndex': '0x0', 'status': '0x1', 'gasUsed': '0x5208', 'logs': []}
+        return transaction, receipt
+
+    def evidence_fixture(self, directory):
+        from app.attackpilot.utils.replay_validation import validate_original_transaction, validate_simulated_transaction
+        transaction, receipt = self.original_context()
+        transaction['hash'] = receipt['transactionHash'] = HASH
+        context = validate_original_transaction(HASH, 1, transaction, receipt)
+        shared = {key: context[key] for key in ('from', 'to', 'input', 'value', 'gas', 'gas_price',
+                                                'nonce', 'status', 'gas_used', 'block_number', 'transaction_index')}
+        shared['network_id'] = '1'
+        root = {'type': 'CALL', 'from': context['from'], 'to': context['to'],
+                'input': context['input'], 'value': context['value']}
+        raw = {'simulation': {**shared, 'id': 'offline-original', 'block_header': {'hash': context['block_hash']}},
+               'transaction': {**shared, 'transaction_info': {'logs': [], 'call_trace': root}}}
+        baseline = validate_simulated_transaction(context, raw)
+        cache = Path(directory) / 'cache'
+        files = {'tx_detail/tx/' + HASH + '.json': transaction,
+                 'tx_detail/tx_receipt/' + HASH + '.json': receipt,
+                 'timestamp/16.json': {'schema_version': 1, 'block_number': 16,
+                                       'block_hash': context['block_hash'], 'timestamp': 123},
+                 'trace/simulation_result/offline-original.json': raw}
+        for relative, value in files.items():
+            path = cache / relative; path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(value))
+        processed = {'dapp': {'platform': 'Ethereum', 'transaction_hash': [HASH], 'verification_plan': self.plan()},
+                     'transaction_hash_list': [HASH], 'transaction_to_detail': {HASH: {'baseline_validation': baseline}}}
+        return cache, processed
+
+    def test_investigation_index_exposes_only_revalidated_task_provenance(self):
+        import hashlib
+        from app.attackpilot.process.analyze import investigation_verification_context
+        with tempfile.TemporaryDirectory() as directory:
+            cache, processed = self.evidence_fixture(directory)
+            (cache / 'trace/simulation_result/unrelated.json').write_text('{}')
+            with patch.object(settings, 'CACHE_DIR', str(cache)):
+                context = investigation_verification_context(processed)
+            self.assertEqual(context['unavailable_transaction_hashes'], [])
+            self.assertEqual(context['investigation_evidence_index'], [{
+                'transaction_hash': HASH, 'simulation_id': 'offline-original',
+                'reference': 'cache/trace/simulation_result/offline-original.json',
+                'sha256': hashlib.sha256((cache / 'trace/simulation_result/offline-original.json').read_bytes()).hexdigest()}])
+            context['explicit_verification_plan']['normal_regression_cases'].clear()
+            self.assertEqual(len(processed['dapp']['verification_plan']['normal_regression_cases']), 1)
+
+    def test_investigation_index_never_references_missing_wrong_or_linked_evidence(self):
+        from app.attackpilot.process.analyze import investigation_verification_context
+        for fault in ('missing', 'wrong_identity', 'wrong_baseline', 'symlink_file', 'symlink_parent', 'traversal', 'oversized'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
+                cache, processed = self.evidence_fixture(directory)
+                path = cache / 'trace/simulation_result/offline-original.json'
+                if fault == 'missing': path.unlink()
+                elif fault == 'wrong_identity':
+                    raw = json.loads(path.read_text()); raw['transaction']['to'] = self.ACCOUNT
+                    path.write_text(json.dumps(raw))
+                elif fault == 'wrong_baseline':
+                    processed['transaction_to_detail'][HASH]['baseline_validation']['receipt_digest'] = '0' * 64
+                elif fault == 'symlink_file':
+                    actual = cache / 'actual.json'; path.rename(actual); path.symlink_to(actual)
+                elif fault == 'symlink_parent':
+                    actual = cache / 'actual'; path.parent.rename(actual)
+                    path.parent.symlink_to(actual, target_is_directory=True)
+                elif fault == 'traversal':
+                    processed['transaction_to_detail'][HASH]['baseline_validation']['simulation_id'] = '../other'
+                else:
+                    with path.open('r+b') as stream:
+                        stream.truncate(32 * 1024 * 1024 + 1)
+                with patch.object(settings, 'CACHE_DIR', str(cache)):
+                    context = investigation_verification_context(processed)
+                self.assertEqual(context['investigation_evidence_index'], [])
+                self.assertEqual(context['unavailable_transaction_hashes'], [HASH])
+
+    def test_api_persists_exact_rules_and_separate_normal_inputs(self):
+        plan = self.plan()
+        plan['security_properties'][0]['expected'] = '900719925474099312345'
+        with patch.object(api, 'require_capability'):
+            response = self.post('/api/attackpilot/tx-review/deep-analysis',
+                                        json={'tx_hash': HASH, 'verification_plan': plan})
+        self.assertEqual(response.status_code, 201, response.text)
+        payload = store.get_task(response.json()['task_id'])['payload']
+        self.assertEqual(payload['transaction_hash'], [HASH])
+        saved = payload['verification_plan']
+        self.assertEqual(saved['security_properties'][0]['expected'], '900719925474099312345')
+        self.assertEqual(saved['normal_regression_cases'][0]['transaction_hashes'], [self.NORMAL])
+        resolved = self.patcher(saved)._resolve_verification_plan({})
+        resolved['normal_regression_cases'][0]['assertions'][0]['rationale'] = 'mutated copy'
+        self.assertNotEqual(resolved, saved)
+
+    def test_api_rejects_network_scope_authority_and_empty_normal_assertions_before_start(self):
+        for change in ('network', 'scope', 'authority', 'normal_attack', 'assertions'):
+            plan = self.plan()
+            if change == 'network': plan['network_id'] = '56'
+            elif change == 'scope': plan['attack_transaction_hashes'] = ['0x' + 'c' * 64]
+            elif change == 'authority': plan['authority'].update(kind='investigation_derived', evidence_refs=[
+                {'reference': 'cache/trace/evidence.json', 'sha256': 'a' * 64}])
+            elif change == 'normal_attack': plan['normal_regression_cases'][0]['transaction_hashes'] = [HASH]
+            else: plan['normal_regression_cases'][0]['assertions'] = []
+            with self.subTest(change=change), patch.object(api, 'require_capability') as remote:
+                response = self.post('/api/attackpilot/tx-review/deep-analysis',
+                                            json={'tx_hash': HASH, 'verification_plan': plan})
+                self.assertEqual(response.status_code, 422, response.text)
+                remote.assert_not_called()
+
+    def test_catalog_task_accepts_the_same_declared_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / 'dataset' / 'raw'; raw.mkdir(parents=True)
+            (raw / 'synthetic.json').write_text(json.dumps(PAYLOAD))
+            with patch.object(settings, 'PACKAGE_ROOT', root), patch.object(api, 'require_capability'):
+                response = self.post('/api/attackpilot/tasks', json={
+                    'dapp_name': PAYLOAD['name'], 'verification_plan': self.plan()})
+            self.assertEqual(response.status_code, 201, response.text)
+            saved = store.get_task(response.json()['task_id'])['payload']['verification_plan']
+            self.assertEqual(saved['normal_regression_cases'][0]['id'], 'normal_deposit')
+
+    def test_explicit_plan_cannot_be_weakened_by_fix_report(self):
+        original = self.plan()
+        weaker = deepcopy(original); weaker['normal_regression_cases'] = []
+        resolved = self.patcher(original)._resolve_verification_plan({'verification_plan': weaker})
+        self.assertEqual(len(resolved['normal_regression_cases']), 1)
+
+    def test_reversed_input_plan_uses_historical_order_without_changing_rules(self):
+        plan = self.plan(); first = '0x' + 'c' * 64
+        plan['attack_transaction_hashes'] = [HASH, first]
+        original_rules = deepcopy(plan['security_properties'])
+        agent = self.patcher(plan); agent.processed_data['transaction_hash_list'] = [first, HASH]
+        resolved = agent._resolve_verification_plan({})
+        self.assertEqual(resolved['attack_transaction_hashes'], [first, HASH])
+        self.assertEqual(resolved['security_properties'], original_rules)
+        self.assertEqual(plan['attack_transaction_hashes'], [HASH, first])
+
+    def test_order_normalization_never_moves_a_getter_observation_target(self):
+        plan = self.plan(); first = '0x' + 'c' * 64
+        plan['attack_transaction_hashes'] = [HASH, first]
+        plan['security_properties'] = [{'id': 'preserved_owner', 'kind': 'call_result',
+                                       'account': self.ACCOUNT, 'calldata': '0x8da5cb5b',
+                                       'operator': 'after_eq', 'expected': '0x' + '0' * 64,
+                                       'transaction_hashes': [first], 'rationale': 'Observe owner after the final step'}]
+        agent = self.patcher(plan); agent.processed_data['transaction_hash_list'] = [first, HASH]
+        with self.assertRaisesRegex(ValueError, 'call_result'):
+            agent._resolve_verification_plan({})
+
+    def test_investigation_plan_requires_actual_immutable_task_evidence(self):
+        import hashlib
+        plan = self.plan(); plan['authority']['kind'] = 'investigation_derived'
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / 'cache'; cache.mkdir()
+            evidence = cache / 'observed.json'; evidence.write_text('{"observed":true}')
+            plan['authority']['evidence_refs'] = [{'reference': 'cache/observed.json',
+                                                'sha256': hashlib.sha256(evidence.read_bytes()).hexdigest()}]
+            with patch.object(settings, 'CACHE_DIR', str(cache)):
+                self.assertEqual(self.patcher()._resolve_verification_plan({'verification_plan': plan})[
+                    'authority']['kind'], 'investigation_derived')
+                evidence.write_text('{"observed":false}')
+                with self.assertRaises(ValueError):
+                    self.patcher()._resolve_verification_plan({'verification_plan': plan})
+                evidence.unlink()
+                with self.assertRaises(ValueError):
+                    self.patcher()._resolve_verification_plan({'verification_plan': plan})
+
+    def test_attack_selection_keeps_auxiliary_preparation_steps(self):
+        first, last = '0x' + 'c' * 64, '0x' + 'd' * 64
+        agent = self.patcher()
+        agent.processed_data.update(transaction_hash_list=[first, HASH, last],
+                                    transaction_to_detail={tx: {'block_number': index}
+                                                           for index, tx in enumerate([first, HASH, last])},
+                                    attack_transactions=[HASH])
+        agent._patch_trigger_transactions = {self.ACCOUNT: [HASH]}
+        self.assertEqual([tx for tx, _ in agent._replay_selection()], [first, HASH, last])
+
+    def test_normal_contexts_validate_identity_and_respect_cancellation(self):
+        from app.attackpilot.errors import HistoricalReplayValidationError
+        agent = self.patcher(); agent._verification_plan = self.plan()
+        agent.rpc_bucket = Mock(get=AsyncMock(return_value='offline-mock'))
+        agent._load_transaction_time = AsyncMock(return_value={16: 123})
+        transaction, receipt = self.original_context()
+        downloads = 'app.attackpilot.agents.FixAgent.'
+        with patch(downloads + 'TxDownloader') as tx, patch(downloads + 'TxReceiptDownloader') as receipts:
+            tx.return_value.download = AsyncMock(return_value=transaction)
+            receipts.return_value.download = AsyncMock(return_value=receipt)
+            asyncio.run(agent._prepare_normal_regression_contexts())
+            self.assertEqual(tx.return_value.download.await_count, 1)
+            receipt['transactionHash'] = HASH
+            with self.assertRaises(HistoricalReplayValidationError):
+                asyncio.run(agent._prepare_normal_regression_contexts())
+            agent.cancellation_checker = lambda: True
+            before = tx.return_value.download.await_count
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(agent._prepare_normal_regression_contexts())
+            self.assertEqual(tx.return_value.download.await_count, before)
+
+    def test_plan_reaches_dao_budget_and_execution_without_aliasing(self):
+        from app.attackpilot.agents import FixAgent as module
+        plan = self.plan(); observed = {}
+        class FakeDao:
+            def __init__(self, **kwargs): pass
+            def estimate_replay_budget(self, transactions, bytecode, verification_plan=None):
+                observed['budget'] = deepcopy(verification_plan)
+                return {'required_requests': 4, 'remaining_requests': 8, 'planned_requests': 4}
+            async def bundle_simulate_txs_in_tenderly(self, transactions, bytecode, verification_plan=None):
+                observed['execution'] = deepcopy(verification_plan)
+                verification_plan['normal_regression_cases'].clear()
+                return True, {'schema_version': 2}
+        agent = self.patcher(); agent._verification_plan = plan
+        with patch.object(module, 'BundleTenderlyDao', FakeDao):
+            success, result = asyncio.run(agent.run_patch_verification_from_tenderly([{'hash': HASH}], {}))
+        self.assertTrue(success)
+        self.assertEqual(observed['budget'], observed['execution'])
+        self.assertEqual(len(plan['normal_regression_cases']), 1)
+        self.assertEqual(result['request_budget']['new_requests_this_round'], 4)
+        self.assertEqual(result['request_budget']['reused_requests_this_round'], 0)
+
+
+class SequentialOfflineReviewTests(TemporaryStore, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.init_store()
+
+    @staticmethod
+    def warning_header(feedback='Coordinator reason: modified_code_not_reached. Coverage: {\'sequence_replay_verified\': True}'):
+        return ('\n' + '!' * 80 + '\n'
+                '⚠️  WARNING: ANALYSIS INCOMPLETE / UNVERIFIED REPORT  ⚠️\n'
+                'The system failed to verify the fix within the allowed turns.\n'
+                'The following report is generated based on the LAST HYPOTHESIS.\n'
+                'It may contain inaccurate root causes or ineffective patches.\n'
+                f'Final Status: {feedback}\n' + '!' * 80 + '\n\n')
+
+    async def saved_result(self, root, *, investigation=True, warning=False):
+        from evals.test_attackpilot_failures import StatefulSequenceRegressionTests
+        from app.attackpilot.utils.report_evidence import report_evidence, render_verification_summary
+        from app.attackpilot.utils.verification import adjudicate_patch_verification, replay_evidence_digest
+
+        fixture = StatefulSequenceRegressionTests()
+        dao, transactions = fixture.make_dao(root)
+        simulate = dao.bundle_downloader.download.side_effect
+        async def with_balances(*, payload):
+            results = await simulate(payload=payload)
+            delta = -35000 if 'state_objects' in payload['simulations'][0] else 100
+            for index, raw in enumerate(results[:2]):
+                before = 10 ** 24 + index * delta
+                raw['transaction']['transaction_info']['balance_diff'] = [{
+                    'address': fixture.sender, 'original': str(before), 'dirty': str(before + delta)}]
+            return results
+        dao.bundle_downloader.download.side_effect = with_balances
+        plan = fixture.plan(transactions, normal=False, probe=True)
+        if investigation:
+            source = root / 'cache/trace/analysis.json'
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b'{"synthetic_offline_investigation":true}')
+            plan['authority'] = {'kind': 'investigation_derived', 'reference': 'saved task investigation',
+                'evidence_refs': [{'reference': 'cache/trace/analysis.json',
+                                   'sha256': hashlib.sha256(source.read_bytes()).hexdigest()}]}
+        _, replay = await dao.bundle_simulate_txs_in_tenderly(
+            transactions[:2], {fixture.address: fixture.runtime}, verification_plan=plan)
+        patches = (f'# File: {fixture.address}::Vault.sol\n<<<<<<< SEARCH\n'
+                   'uint amount = requested;\n=======\nuint amount = allowed;\n>>>>>>> REPLACE')
+        digest = hashlib.sha256(patches.encode()).hexdigest()
+        replay.update(applied_patch_sha256=digest,
+            required_trigger_transaction_hashes=[item['hash'] for item in transactions[:2]],
+            patch_attribution={'status': 'unavailable', 'reason_code': 'modified_guard_missing'},
+            runtime_integrity={'schema_version': 1, 'status': 'validated', 'applied_patch_sha256': digest,
+                'contracts': {fixture.address: {
+                    'original_runtime_sha256': hashlib.sha256(bytes.fromhex(fixture.original_runtime[2:])).hexdigest(),
+                    'original_compiled_runtime_sha256': hashlib.sha256(bytes.fromhex(fixture.original_runtime[2:])).hexdigest(),
+                    'patched_runtime_sha256': hashlib.sha256(bytes.fromhex(fixture.runtime[2:])).hexdigest(),
+                    'storage_layout_checked': True, 'immutable_checked': True}}})
+        state = adjudicate_patch_verification({'verdict': 'UNVERIFIED'}, replay, patches, cache_root=root / 'cache')
+        self.assertEqual(state['reason_code'], 'declared_attack_chain_verified', state)
+        for pair in replay['transactions']:
+            pair['patched']['trace'].update(policy_version=5, complete=False,
+                diagnostics=[{'reason': 'unrecognized_untyped_node', 'path': [8, 10, 8]}])
+        state.pop('decision_authority', None)
+        state.update(status='unverified', evidence_validated=False,
+                     reason_code='modified_code_not_reached', next_action='select_trigger_transactions',
+                     replay_evidence_sha256=replay_evidence_digest(replay))
+        state['dimensions']['attack_interception'] = {'status': 'unavailable'}
+        state['dimensions']['security_properties'] = {'status': 'unavailable', 'checks': []}
+        report = render_verification_summary(report_evidence({'verdict': 'UNVERIFIED', 'verification': state}, replay))
+        if warning:
+            report = self.warning_header() + report
+        return {'verification': state, 'replay_evidence': replay, 'applied_patches': patches,
+                'report': report + '\n\n# 原始分析\n\n保留原始分析正文。'}
+
+    def rebind(self, result):
+        from app.attackpilot.utils.report_evidence import report_evidence, render_verification_summary
+        from app.attackpilot.utils.verification import replay_evidence_digest
+        result['verification']['replay_evidence_sha256'] = replay_evidence_digest(result['replay_evidence'])
+        result['report'] = render_verification_summary(report_evidence(
+            {'verdict': result['verification']['judge_verdict'], 'verification': result['verification']},
+            result['replay_evidence'])) + '\n\n# 原始分析\n\n保留原始分析正文。'
+
+    async def test_offline_sequential_refresh_reparses_existing_artifacts_without_inventing_a_judge_verdict(self):
+        from app.attackpilot.revalidate import revalidate_result
+        from app.attackpilot.utils.patch_replay import TRACE_SUMMARY_POLICY_VERSION
+        from app.attackpilot.utils.verification import replay_evidence_digest
+        root = Path(self.temp.name) / 'saved-task'
+        result = await self.saved_result(root, warning=True)
+        original = deepcopy(result)
+        files = {path.relative_to(root): hashlib.sha256(path.read_bytes()).hexdigest()
+                 for path in root.rglob('*') if path.is_file()}
+        revised = revalidate_result(result, root)
+        state = revised['verification']
+        self.assertEqual(state['status'], 'verified')
+        self.assertEqual(state['judge_verdict'], 'UNVERIFIED')
+        self.assertEqual(state['reason_code'], 'declared_attack_chain_verified')
+        self.assertEqual(state['decision_authority'], 'validated_execution_evidence')
+        self.assertTrue(state['evidence_validated'])
+        self.assertTrue(state['execution_evidence_validated'])
+        self.assertTrue(all(state['dimensions'][key]['status'] == 'passed'
+                            for key in ('sequence_replay', 'attack_interception', 'security_properties')))
+        self.assertEqual(state['dimensions']['profit']['status'], 'available')
+        self.assertEqual(state['replay_evidence_sha256'], replay_evidence_digest(revised['replay_evidence']))
+        for pair in revised['replay_evidence']['transactions']:
+            self.assertTrue(pair['patched']['trace']['complete'])
+            self.assertEqual(pair['patched']['trace']['policy_version'], TRACE_SUMMARY_POLICY_VERSION)
+        self.assertFalse(revised['evidence_revision']['diagnosis_only'])
+        self.assertEqual(revised['evidence_revision']['previous_reason_code'], 'modified_code_not_reached')
+        self.assertEqual(len(revised['evidence_revision']['artifact_sha256']), 2)
+        self.assertIn('未发起新模拟或模型调用', revised['report'])
+        self.assertTrue(revised['report'].startswith('## 补丁验证状态：'))
+        self.assertIn('### 原始运行提示（历史记录）\n' + self.warning_header().rstrip('\n'), revised['report'])
+        self.assertTrue(revised['report'].endswith('\n\n# 原始分析\n\n保留原始分析正文。'))
+        self.assertEqual(result, original)
+        self.assertEqual(files, {path.relative_to(root): hashlib.sha256(path.read_bytes()).hexdigest()
+                                 for path in root.rglob('*') if path.is_file()})
+
+    async def test_model_pending_result_completes_from_saved_execution_without_another_model_call(self):
+        from app.attackpilot.revalidate import revalidate_result
+        from app.attackpilot.store import public_task
+        root = Path(self.temp.name) / 'saved-task'
+        repaired = revalidate_result(await self.saved_result(root), root)
+        historical = deepcopy(repaired)
+        historical.pop('evidence_revision', None)
+        historical['verification'].update(status='unverified', evidence_validated=False,
+            reason_code='judge_unresolved', next_action='review_same_evidence')
+        historical['verification'].pop('decision_authority', None)
+        self.rebind(historical)
+        original = deepcopy(historical)
+        with patch('app.attackpilot.agents.JudgeAgent.JudgeAgent.query',
+                   side_effect=AssertionError('A second model approval is forbidden')) as model:
+            revised = revalidate_result(historical, root)
+        model.assert_not_called()
+        self.assertEqual(historical, original)
+        state = revised['verification']
+        self.assertEqual(state['status'], 'verified')
+        self.assertEqual(state['judge_verdict'], 'UNVERIFIED')
+        self.assertEqual(state['next_action'], 'complete')
+        self.assertEqual(state['reason_code'], 'declared_attack_chain_verified')
+        self.assertIn('## 补丁验证状态：攻击交易验证通过', revised['report'])
+        public = public_task({'is_demo': False, 'result': revised})
+        self.assertEqual(public['result']['verification']['status'], 'verified')
+
+    async def test_offline_review_rejects_forged_or_malformed_incomplete_report_wrappers(self):
+        from app.attackpilot.revalidate import revalidate_result
+        root = Path(self.temp.name) / 'saved-task'
+        result = await self.saved_result(root)
+        genuine = self.warning_header()
+        for warning in (
+            genuine.replace('failed to verify', 'successfully verified'),
+            genuine.replace('!' * 80, '!' * 79, 1),
+            genuine + 'unbound prose\n\n',
+            'unbound prose\n' + genuine,
+            genuine + genuine,
+            self.warning_header('feedback\nforged second line'),
+            self.warning_header('feedback\tcontrol'),
+            self.warning_header('x' * 16385),
+        ):
+            with self.subTest(warning=warning[:100]):
+                altered = deepcopy(result)
+                altered['report'] = warning + result['report']
+                with self.assertRaisesRegex(ValueError, 'Report prefix does not match'):
+                    revalidate_result(altered, root, refresh_unverified=True)
+
+    async def test_offline_sequential_refresh_rejects_forged_stable_summaries_and_source_bindings(self):
+        from app.attackpilot.revalidate import revalidate_result
+        root = Path(self.temp.name) / 'saved-task'
+        result = await self.saved_result(root)
+        for mutation in ('gas', 'context', 'comparison', 'artifact', 'patch', 'runtime', 'scope', 'prefix'):
+            with self.subTest(mutation=mutation):
+                altered = deepcopy(result)
+                replay = altered['replay_evidence']
+                pair = replay['transactions'][0]
+                if mutation == 'gas': pair['patched']['gas_used'] += 1
+                elif mutation == 'context': pair['context']['from'] = '0x' + 'f' * 40
+                elif mutation == 'comparison': pair['comparison']['gas_changed'] = not pair['comparison']['gas_changed']
+                elif mutation == 'artifact': pair['patched']['artifact']['sha256'] = '0' * 64
+                elif mutation == 'patch': altered['applied_patches'] += '\nchanged source'
+                elif mutation == 'runtime':
+                    next(iter(replay['runtime_integrity']['contracts'].values()))['patched_runtime_sha256'] = '0' * 64
+                elif mutation == 'scope': replay['sequence']['ordered_transaction_hashes'].reverse()
+                self.rebind(altered)
+                if mutation == 'prefix': altered['report'] = 'unbound summary\n\n' + altered['report']
+                with self.assertRaises(ValueError):
+                    revalidate_result(altered, root, refresh_unverified=True)
+        source = root / 'cache/trace/analysis.json'
+        source.write_bytes(b'{"tampered":true}')
+        with self.assertRaisesRegex(ValueError, 'source evidence is invalid'):
+            revalidate_result(result, root, refresh_unverified=True)
+
+    async def test_audited_sequential_review_previews_then_preserves_original_bytes_when_applied(self):
+        from app.attackpilot.revalidate import review_task
+        from contextlib import closing
+        import sqlite3
+        task = store.create_task('alice', PAYLOAD)
+        root = store.task_dir(task['task_id'])
+        result = await self.saved_result(root)
+        self.assertTrue(store.transition(task['task_id'], 'completed', result=result))
+        with closing(sqlite3.connect(settings.DATABASE_PATH)) as db:
+            original_bytes = db.execute('SELECT result FROM tasks WHERE task_id=?', (task['task_id'],)).fetchone()[0].encode()
+        preview = review_task(task['task_id'], refresh_unverified=True)
+        self.assertFalse(preview['applied'])
+        self.assertEqual(store.get_task(task['task_id'])['result'], result)
+        self.assertFalse((root / 'evidence-revisions').exists())
+        applied = review_task(task['task_id'], apply=True, refresh_unverified=True)
+        self.assertTrue(applied['applied'])
+        saved = store.get_task(task['task_id'])['result']
+        self.assertEqual(saved['verification']['reason_code'], 'declared_attack_chain_verified')
+        self.assertEqual(saved['verification']['status'], 'verified')
+        self.assertEqual(saved['verification']['judge_verdict'], 'UNVERIFIED')
+        revision = saved['evidence_revision']
+        self.assertEqual((root / revision['original_result_path']).read_bytes(), original_bytes)
+        self.assertEqual(revision['original_result_sha256'], hashlib.sha256(original_bytes).hexdigest())
+        self.assertEqual(store.get_task(task['task_id'])['final_report'], saved['report'])
+        self.assertEqual(store.events_after(task['task_id'], 0)[-1]['payload']['type'], 'TASK_FINAL')
+        self.assertEqual(list((root / 'evidence-revisions').glob('.revision-*')), [])
 
 
 if __name__ == "__main__": unittest.main()

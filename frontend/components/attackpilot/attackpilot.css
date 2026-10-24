@@ -1135,6 +1135,49 @@
   line-height: 1.6;
 }
 
+.attackpilot-root .native-profit-comparison {
+  margin: 0 0 14px;
+}
+
+.attackpilot-root .native-profit-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.attackpilot-root .native-profit-comparison table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.attackpilot-root .native-profit-comparison th,
+.attackpilot-root .native-profit-comparison td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.attackpilot-root .native-profit-comparison th {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.attackpilot-root .native-profit-comparison tr:last-child td {
+  border-bottom: 0;
+}
+
+.attackpilot-root .native-profit-comparison code {
+  display: block;
+  min-width: 110px;
+  max-width: 250px;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
 .attackpilot-root .evidence-intelligence-card {
   padding: 12px;
   border: 1px solid var(--border);

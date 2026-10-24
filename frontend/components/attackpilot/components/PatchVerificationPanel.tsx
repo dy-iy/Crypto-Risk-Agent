@@ -8,7 +8,7 @@ import {
   isLowValueOperationalLog,
   normalizeEvidenceMarkdown,
 } from "../utils/evidence";
-import { getPatchCompileDiagnostics, getPatchVerificationDimensions, getPatchVerificationPresentation, PatchCompileDiagnostic, PatchVerificationDimension, PatchVerificationPresentation, PatchVerificationStatus } from "../utils/verification";
+import { getNativeProfitComparison, getPatchCompileDiagnostics, getPatchVerificationDimensions, getPatchVerificationPresentation, NativeProfitComparison, PatchCompileDiagnostic, PatchVerificationDimension, PatchVerificationPresentation, PatchVerificationStatus } from "../utils/verification";
 import EvidenceDrawer from "./EvidenceDrawer";
 
 interface PatchVerificationPanelProps {
@@ -20,6 +20,7 @@ interface PatchVerificationSummary extends PatchVerificationPresentation {
   evidence: EvidenceItem[];
   dimensions: PatchVerificationDimension[];
   compileDiagnostics: PatchCompileDiagnostic[];
+  nativeProfit: NativeProfitComparison;
 }
 
 function pickParagraph(report: string, keywords: string[]) {
@@ -92,7 +93,7 @@ function buildSummary(task: Task | null, events: TaskEvent[]): PatchVerification
   const logs = events.filter(isLogEvent).filter((log) => !isLowValueOperationalLog(log));
   const evidence = buildPatchEvidence(report, logs);
   return { ...getPatchVerificationPresentation(task), evidence, dimensions: getPatchVerificationDimensions(task),
-    compileDiagnostics: getPatchCompileDiagnostics(task) };
+    compileDiagnostics: getPatchCompileDiagnostics(task), nativeProfit: getNativeProfitComparison(task) };
 }
 
 function PatchStatusIcon({ status }: { status: PatchVerificationStatus }) {
@@ -142,6 +143,20 @@ const PatchVerificationPanel: React.FC<PatchVerificationPanelProps> = ({ task, e
           {summary.dimensions.length > 0 && <Space size={[8, 6]} wrap style={{ marginBottom: 12 }} aria-label="补丁验证范围">
             {summary.dimensions.map(dimension => <Tag key={dimension.key}>{dimension.label}：{dimension.value}</Tag>)}
           </Space>}
+          {summary.nativeProfit.transactions.length > 0 && <div className="native-profit-comparison" aria-label="原生币收益对比">
+            <Typography.Paragraph type="secondary">{summary.nativeProfit.scopeDescription}</Typography.Paragraph>
+            <div className="native-profit-table-scroll">
+              <table>
+                <thead><tr><th scope="col">交易</th><th scope="col">统计地址</th><th scope="col">原版净变化</th><th scope="col">补丁净变化</th></tr></thead>
+                <tbody>{summary.nativeProfit.transactions.map(row => <tr key={row.transactionHash}>
+                  <td><code>{row.transactionHash}</code></td>
+                  <td><code>{row.account}</code></td>
+                  <td>{row.control.text}</td>
+                  <td>{row.patched.text}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </div>}
           <Space size={8} wrap>
             <Tag color={summary.evidence.length > 0 ? "cyan" : "default"} title="报告片段和相关日志的数量，不代表验证通过次数">{summary.evidence.length} 条相关记录</Tag>
             <Button size="small" icon={<SearchCheck size={14} />} onClick={() => setOpen(true)}>

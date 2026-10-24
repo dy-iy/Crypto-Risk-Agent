@@ -14,7 +14,8 @@ from . import settings, store
 from .knowledge import get_rag_service, knowledge_owner
 from .privacy import redact, redact_text
 from .report_translation import ensure_translation, translation_view
-from .schemas import CaseTaskInput, TransactionInput, SearchInput, normalize_modules
+from .schemas import (CaseTaskInput, TransactionInput, SearchInput, normalize_modules,
+                      normalize_input_verification_plan)
 from .web import reference_api as reference
 from .web.models import AssistantChatRequest, TaskResponse, TxDetectRequest, TxReviewRequest
 
@@ -134,8 +135,16 @@ async def deep_analysis(payload: TransactionInput, user=Depends(caller)):
     if invalid:
         raise HTTPException(422, "请移除无效交易 Hash 后再启动深度分析")
     modules = normalize_modules(payload.modules)
+    try:
+        plan = normalize_input_verification_plan(
+            payload.verification_plan, network_id='1' if payload.chain == 'ethereum' else '56',
+            transaction_hashes=valid)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     require_capability(payload.chain, modules, deep=True)
     data = reference._build_adhoc_dapp_payload(valid[0], payload.chain, valid, modules)
+    if plan is not None:
+        data['verification_plan'] = plan
     return redact(store.public_task(store.create_task(user.id, data)))
 
 @router.post("/tasks", status_code=201)
@@ -163,6 +172,14 @@ async def create_case(payload: CaseTaskInput, user=Depends(caller)):
     chain = {"Ethereum": "ethereum", "BNBChain": "bnbchain", "BSC": "bnbchain"}.get(data.get("platform"))
     if not chain:
         raise HTTPException(422, "当前仅支持 Ethereum 和 BNB Chain")
+    try:
+        plan = normalize_input_verification_plan(
+            payload.verification_plan if payload.verification_plan is not None else data.get('verification_plan'),
+            network_id='1' if chain == 'ethereum' else '56', transaction_hashes=valid)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if plan is not None:
+        data['verification_plan'] = plan
     require_capability(chain, modules, deep=True)
     data["platform"] = "Ethereum" if chain == "ethereum" else "BNBChain"
     data["enabled_modules"] = modules

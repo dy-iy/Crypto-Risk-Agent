@@ -1,3 +1,60 @@
+TRACE_VERIFICATION_PLAN_GUIDANCE = """
+### Optional verification_plan JSON format
+The following complete JSON object illustrates the schema only. Its repeated-digit addresses,
+transaction hash, zero digest and evidence filename are synthetic; never copy them into a task.
+Replace every value with observed task evidence before including this object as
+fix_report.verification_plan. Use the actual positive chain ID (canonical decimal string),
+every original submitted attack transaction, and the actual cache-relative evidence reference
+and SHA-256. Values for native/token balances are exact raw integers, never decimal ETH/token
+amounts; storage slots, storage expected values and getter expected values are exactly 32 bytes.
+
+```json
+{{
+  "schema_version": 1,
+  "network_id": "1",
+  "attack_transaction_hashes": ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+  "authority": {{
+    "kind": "investigation_derived",
+    "reference": "Observed invariant supported by the cited task artifact",
+    "evidence_refs": [{{
+      "reference": "cache/trace/simulation_result/SYNTHETIC_EXAMPLE.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }}]
+  }},
+  "security_properties": [
+    {{
+      "id": "bounded_native_balance_change",
+      "kind": "native_balance",
+      "account": "0x1111111111111111111111111111111111111111",
+      "operator": "delta_lte",
+      "expected": "0",
+      "transaction_hashes": ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      "rationale": "Use only when observed business evidence requires this raw wei bound"
+    }},
+    {{
+      "id": "preserved_permission_word",
+      "kind": "storage",
+      "account": "0x2222222222222222222222222222222222222222",
+      "slot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "operator": "after_eq",
+      "expected": "0x0000000000000000000000001111111111111111111111111111111111111111",
+      "transaction_hashes": ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      "rationale": "Use only after verifying this exact permission slot and legitimate value"
+    }}
+  ]
+}}
+```
+
+This plan verifies only the supplied attack transactions and their security conditions.
+Do not request or add normal-business regression transactions. For an investigation-derived
+plan, omit normal_regression_cases or leave it empty; the application supplies an empty list.
+If no defensible evidence-backed plan is available, omit verification_plan and explain the
+missing evidence while retaining a supported fault hypothesis. Never replace, weaken, or invent
+an explicit user plan. A rejected plan is a request to correct its indicated fields within the
+existing analysis budget, not evidence that patch verification succeeded.
+"""
+
+
 TRACE_DEBUG_UP_INIT = """Investigate the supplied transaction and its Trace tree for possible security-condition violations. The Task Organizer has prepared investigation tasks from preliminary observations. Submitted hashes and preliminary attack/auxiliary labels do not establish or exclude an attack. Examine the explicit investigation targets even when classified as auxiliary; obtain missing call details or source before deciding what the observations support. If a verifiable fault hypothesis emerges, provide its evidence and repair targets through `ready_for_patch`. If the reviewed evidence supports no patch hypothesis, use `finish_investigation` with the observed facts and remaining gaps. Neither outcome by itself establishes transaction safety.
 <global_fault_understanding>{global_fault_understanding}</global_fault_understanding>
 <trace>{trace}</trace>
@@ -22,7 +79,7 @@ Base the terminal decision only on the information below:
 <global_fault_understanding>{global_fault_understanding}</global_fault_understanding>
 <trace>{trace}</trace>
 <task_tree>{task_tree}</task_tree>
-"""
+""" + TRACE_VERIFICATION_PLAN_GUIDANCE
 
 TRACE_DEBUG_FORCE_COLLAPSE_UP = """🚨 【System Warning: Trace Context Length Exceeded】 🚨
 The current Trace tree structure is too large, and Token consumption has touched the safety threshold of the system context window. To prevent subsequent analysis from hallucinating or losing key information due to context truncation, the system has **paused** new node expansions.
@@ -246,10 +303,27 @@ Please follow these steps to conduct transaction debugging:
         }
 
 ### Restrictions:
+0. The fix_report may include verification_plan only when its rules follow observed evidence.
+   Use schema_version=1, network_id, all submitted attack_transaction_hashes, and authority
+   with kind=investigation_derived, a precise reference, and evidence_refs containing actual
+   task-relative cache file references plus their SHA-256 digests. Never invent a digest,
+   transaction, storage slot, balance threshold, or normal user case. If such references
+   are unavailable, leave the plan unavailable and explain the gap. An explicit input plan
+   remains authoritative and cannot be weakened by investigation or patch generation.
+   security_properties rules identify id, kind (native_balance/token_balance/storage/call_result),
+   account, token or slot where needed, operator (delta_lte/delta_gte/after_eq/unchanged),
+   expected when needed, transaction_hashes, and rationale. Keep the investigation-derived
+   plan scoped to the submitted attack inputs; omit normal_regression_cases or leave it empty.
+   Do not discover or request additional normal-business transactions for this review.
+   call_result rules execute an actual ABI getter after the sequence: account is the target,
+   calldata is the verified selector plus encoded arguments, operator is after_eq,
+   expected is one exact ABI word, and transaction_hashes contains only the
+   final sequence transaction. For example, owner() can verify a preserved permission and
+   balanceOf(account) can verify a token outcome without inferring unchanged state from a diff.
 1. Follow the tool schemas. Batch only useful independent investigation calls; send one terminal tool call when ending the investigation.
 2. fix_report is output in JSON format, ensuring the output can be parsed by Python `json.loads`.
 3. Must provide all necessary parameters.
 4. Parameter values must match the types defined by the tool.
 5. Wait for the tool to return results after calling before deciding the next operation.
 6. Fault data is organized by index. External call nodes and internal call nodes all have their own unique index. Please strictly call tools according to the sequence number preceding the call node, e.g., [203821].
-"""
+""" + TRACE_VERIFICATION_PLAN_GUIDANCE.format()

@@ -275,6 +275,7 @@ test('AttackPilot distinguishes missing evidence, capability and verifier errors
     ['patched_trace_unavailable','证据不足',/补齐完整执行轨迹/],
     ['control_evidence_mismatch','证据不足',/原始交易对照/],
     ['historical_runtime_context_mismatch','证据不足',/原始交易对照/],
+    ['historical_sequence_result_mismatch','证据不足',/系统需核对并补齐攻击步骤之间的链上状态变化/],
     ['missing_source','无法验证',/对应历史版本/],
     ['source_fetch_failed','验证异常',/重试源码获取/],
     ['source_not_verified','无法验证',/已验证源码/],
@@ -286,7 +287,7 @@ test('AttackPilot distinguishes missing evidence, capability and verifier errors
   ]){
     const task={status:'completed',result:{verification:{schema_version:2,status:'unverified',reason_code:reason,replay_completed:true,evidence_version:1,evidence_validated:false,dimensions:{attack_interception:{status:'passed'},normal_regression:{status:'passed',evidence_validated:true},profit:{status:'available',usd:25}}}}};
     const summary=present(task);assert.equal(summary.status,'unverified',reason);assert.equal(summary.label,label,reason);assert.match(summary.nextStep,next);assert.notEqual(summary.color,'success');
-    assert.deepEqual(Array.from(dimensions(task),item=>item.value),['待核实','未验证','无法确认']);
+    assert.deepEqual(Array.from(dimensions(task),item=>item.value),['待核实','无法确认']);
   }
   const unknown=present({result:{verification:{status:'unverified',reason_code:'future_reason',reason:'已经确认成功',next_action:'revise_patch'}}});
   assert.equal(unknown.status,'unverified');assert.equal(unknown.label,'尚未确认');assert.ok(!unknown.description.includes('已经确认成功'));assert.equal(unknown.nextStep,undefined);
@@ -308,6 +309,78 @@ test('AttackPilot distinguishes missing evidence, capability and verifier errors
   }
 });
 
+test('AttackPilot explains historical sequence mismatches without blaming the patch or requiring normal transactions',()=>{
+  const {getPatchVerificationPresentation:present,buildPatchVerificationMarkdown:markdown}=environment().load('@/components/attackpilot/utils/verification');
+  for(const status of ['unverified','blocked','error']){
+    const task={status:'completed',result:{verification:{status,reason_code:'historical_sequence_result_mismatch',
+      reason:'SECRET /private/raw-response.json execution/event_mismatch',
+      sequence_validation_diagnostic:{reason:'SECRET /private/trace',transaction_index:1,gas_used:'123',events:['PRIVATE_EVENT']}}}};
+    const summary=present(task);
+    assert.equal(summary.status,status);assert.notEqual(summary.color,'success');
+    assert.equal(summary.description,'原版连续回放未还原历史执行结果，尚不能判断补丁效果。');
+    assert.match(summary.nextStep,/系统需核对并补齐攻击步骤之间的链上状态变化/);assert.match(summary.nextStep,/重新执行原版与补丁版回放/);
+    if(status==='unverified')assert.equal(summary.label,'证据不足');
+    const exported=markdown(task);
+    assert.match(exported,/原版连续回放未还原历史执行结果/);assert.match(exported,/系统需核对并补齐攻击步骤之间/);
+    for(const unsafe of ['SECRET','/private/','PRIVATE_EVENT','正常交易','正常业务'])assert.ok(!exported.includes(unsafe),unsafe);
+  }
+});
+
+test('AttackPilot explains verification plan fields and assigns corrections to their actual source',()=>{
+  const env=componentEnvironment(),Panel=env.load('@/components/attackpilot/components/PatchVerificationPanel').default;
+  const {getPatchVerificationPresentation:present}=env.load('@/components/attackpilot/utils/verification');
+  const diagnostic={schema_version:1,code:'network_id_invalid',field:'network_id',origin:'investigation_derived',retryable:false};
+  const verification={status:'blocked',reason_code:'invalid_verification_plan',reason:'PRIVATE_CONFIG /private/evidence.json',replay_attempted:false,replay_completed:false,plan_diagnostic:diagnostic};
+  for(const status of ['blocked','error','unverified']){
+    const summary=present({result:{verification:{...verification,status}}});
+    assert.match(summary.description,/系统调查生成的验证计划/);assert.match(summary.description,/network_id/);
+    assert.match(summary.description,/尚未生成或回放补丁/);assert.match(summary.nextStep,/修正系统生成验证计划/);
+    assert.ok(!summary.nextStep.includes('重新提交'));assert.notEqual(summary.color,'success');
+  }
+  for(const [code,field] of [
+    ['network_id_invalid','network_id'],['network_id_mismatch','network_id'],['execution_chain_unavailable','network_id'],
+    ['reference_invalid','authority.evidence_refs'],['reference_conflict','authority.evidence_refs'],
+    ['evidence_unavailable','authority.evidence_refs'],['evidence_hash_mismatch','authority.evidence_refs'],['evidence_too_large','authority.evidence_refs'],
+    ['authority_invalid','authority'],['attack_scope_mismatch','attack_transaction_hashes'],['transaction_count_exceeded','attack_transaction_hashes'],
+    ['observation_scope_invalid','security_properties.transaction_hashes'],['normal_cases_invalid','normal_regression_cases'],['plan_invalid','verification_plan'],
+  ]){
+    const summary=present({result:{verification:{...verification,plan_diagnostic:{...diagnostic,code,field}}}});
+    assert.ok(summary.description.includes(field),code);assert.match(summary.description,/系统调查生成/);
+  }
+  const submitted=present({result:{verification:{...verification,plan_diagnostic:{...diagnostic,origin:'user_declared'}}}});
+  assert.match(submitted.description,/提交的验证计划/);assert.match(submitted.nextStep,/核对提交计划中对应字段/);
+  const unknown=present({result:{verification:{...verification,plan_diagnostic:{...diagnostic,origin:'unknown'}}}});
+  assert.match(unknown.description,/network_id/);assert.ok(!unknown.description.includes('系统调查生成'));
+  assert.match(unknown.nextStep,/确认计划来自提交输入还是系统调查/);
+  env.mount(Panel,{task:{status:'completed',result:{verification}},events:[]});
+  const text=env.nodes().filter(node=>node.type==='Text'||node.type==='Paragraph'||node.type==='Tag').map(node=>node.props.children).flat().join('');
+  assert.match(text,/系统调查生成的验证计划/);assert.match(text,/network_id/);
+  assert.ok(!text.includes('PRIVATE_CONFIG'));assert.ok(!text.includes('/private/'));assert.ok(!text.includes('核对验证计划的网络、全部攻击交易、正常样本'));env.unmount();
+});
+
+test('AttackPilot ignores unknown or unsafe plan diagnostics and never displays freeform rejection messages',()=>{
+  const {getPatchVerificationPresentation:present}=environment().load('@/components/attackpilot/utils/verification');
+  const diagnostic={schema_version:1,code:'network_id_invalid',field:'network_id',origin:'investigation_derived',retryable:false};
+  const verification={status:'blocked',reason_code:'invalid_verification_plan',reason:'SECRET /private/cache.json <script>verified</script>'};
+  const baseline=present({result:{verification}});
+  assert.equal(baseline.description,'验证计划的格式、交易范围或证据引用未通过检查。');
+  assert.match(baseline.nextStep,/确认具体失败字段及计划来源/);assert.ok(!baseline.nextStep.includes('重新提交'));
+  for(const malformed of [null,[],{},
+    {...diagnostic,schema_version:'1'}, {...diagnostic,schema_version:2},
+    {...diagnostic,code:'__proto__'}, {...diagnostic,code:'future_reason'}, {...diagnostic,code:'/private/code'},
+    {...diagnostic,field:'authority.evidence_refs'}, {...diagnostic,field:'/private/field'},
+    {...diagnostic,origin:'model'}, {...diagnostic,origin:{source:'user_declared'}},
+    {...diagnostic,retryable:true}, {...diagnostic,retryable:'false'},
+    {...diagnostic,detail:'SECRET /private/plan'}, {...diagnostic,reason:'已验证通过'},
+  ]){
+    const summary=present({result:{verification:{...verification,plan_diagnostic:malformed}}});
+    assert.equal(summary.description,baseline.description);assert.equal(summary.nextStep,baseline.nextStep);
+    assert.ok(!JSON.stringify(summary).includes('SECRET'));assert.ok(!JSON.stringify(summary).includes('/private/'));
+  }
+  const unrelated=present({result:{verification:{...verification,reason_code:'missing_source',plan_diagnostic:diagnostic}}});
+  assert.equal(unrelated.description,'缺少可用源码，已停止补丁生成与回放。');
+});
+
 test('AttackPilot presents observed successful modified execution without declaring attack success or failed verification',()=>{
   const {getPatchVerificationPresentation:present}=environment().load('@/components/attackpilot/utils/verification');
   const tx='0x'+'a'.repeat(64);
@@ -317,7 +390,7 @@ test('AttackPilot presents observed successful modified execution without declar
   for(const changes of [{replay_completed:false},{replay_attempted:false},{schema_version:1},{evidence_version:undefined},{scope:undefined},{next_action:'collect_missing_evidence'},{coverage:undefined}]){
     const incomplete=present({result:{verification:{...verification,...changes}}});assert.equal(incomplete.status,'unverified');assert.equal(incomplete.label,'证据不足');assert.ok(!incomplete.description.includes('交易仍然成功'));
   }
-  const verified={...verification,verification_policy_version:2,status:'verified',reason_code:'interception_confirmed',judge_verdict:'VERIFIED',replay_evidence_sha256:'d'.repeat(64),applied_patch_sha256:'e'.repeat(64),evidence_validated:true,dimensions:{attack_interception:{status:'passed'}},coverage:{...coverage,intercepted_transaction_hashes:[tx],unresolved_transaction_hashes:[]}};
+  const verified={...verification,verification_policy_version:3,status:'verified',reason_code:'interception_confirmed',judge_verdict:'VERIFIED',replay_evidence_sha256:'d'.repeat(64),applied_patch_sha256:'e'.repeat(64),evidence_validated:true,dimensions:{attack_interception:{status:'passed'}},coverage:{...coverage,intercepted_transaction_hashes:[tx],unresolved_transaction_hashes:[]}};
   const replay_evidence={schema_version:1,status:'completed',applied_patch_sha256:verified.applied_patch_sha256};
   assert.equal(present({result:{verification:verified,replay_evidence}}).status,'verified');
   for(const changes of [{evidence_validated:false},{replay_attempted:false},{evidence_version:undefined},{dimensions:{attack_interception:{status:'unavailable'}}},{coverage},{coverage:undefined},{replay_evidence_sha256:undefined},{applied_patch_sha256:'f'.repeat(64)},{judge_verdict:'UNVERIFIED'}])assert.equal(present({result:{verification:{...verified,...changes},replay_evidence}}).status,'unverified');
@@ -325,29 +398,245 @@ test('AttackPilot presents observed successful modified execution without declar
   assert.equal(present({is_demo:true,result:{verification}}).status,'archived');
 });
 
+test('AttackPilot submits an input-bound verification plan without rounding raw amounts',async()=>{
+  const env=environment();
+  const {buildDeepAnalysisRequest,parseVerificationPlan}=env.load('@/components/attackpilot/utils/requestPayloads');
+  const api=env.load('@/components/attackpilot/services/api');
+  const tx='0x'+'b'.repeat(64),normal='0x'+'c'.repeat(64),account='0x'+'d'.repeat(40);
+  const plan={schema_version:1,network_id:'1',attack_transaction_hashes:[tx],authority:{kind:'user_declared',reference:'expected withdrawal bound',evidence_refs:[]},
+    security_properties:[{id:'funds',kind:'native_balance',account,operator:'delta_lte',expected:'9007199254740993000000',rationale:'declared withdrawal bound',transaction_hashes:[tx]}],
+    normal_regression_cases:[{id:'withdraw',transaction_hashes:[normal],assertions:[{id:'balance',kind:'native_balance',account,operator:'matches_control',rationale:'preserve normal withdrawal'}]}]};
+  let sent;
+  env.scope.fetchImpl=async(_url,init)=>{sent=JSON.parse(init.body);return Response.json({task_id:'synthetic-plan'})};
+  await api.startTransactionDeepAnalysis(buildDeepAnalysisRequest([tx],'ethereum',['patch_verification'],JSON.stringify(plan)));
+  assert.deepEqual(sent.verification_plan,plan);
+  assert.equal(sent.verification_plan.security_properties[0].expected,'9007199254740993000000');
+  const {normal_regression_cases,...attackPlan}=plan;
+  const attackRequest=buildDeepAnalysisRequest([tx],'ethereum',['patch_verification'],JSON.stringify(attackPlan));
+  assert.equal(attackRequest.verification_plan.normal_regression_cases.length,0);
+  assert.equal(attackRequest.verification_plan.security_properties[0].expected,'9007199254740993000000');
+  for(const invalid of [null,{},'invalid'])assert.throws(()=>parseVerificationPlan(JSON.stringify({...plan,normal_regression_cases:invalid}),[tx],'ethereum'),/格式/);
+  assert.equal(parseVerificationPlan('',[tx],'ethereum'),undefined);
+  for(const value of ['{','[]','null'])assert.throws(()=>parseVerificationPlan(value,[tx],'ethereum'),/JSON/);
+  assert.throws(()=>parseVerificationPlan(JSON.stringify(plan),[tx],'bnbchain'),/网络/);
+  assert.throws(()=>parseVerificationPlan(JSON.stringify({...plan,attack_transaction_hashes:[normal]}),[tx],'ethereum'),/全部攻击交易/);
+});
+
+test('AttackPilot displays complete declared verification and preserves incomplete dimensions',()=>{
+  const env=environment();
+  const {getPatchVerificationPresentation:present,getPatchVerificationDimensions:dimensions,buildPatchVerificationMarkdown:markdown}=env.load('@/components/attackpilot/utils/verification');
+  const tx='0x'+'a'.repeat(64),normal='0x'+'b'.repeat(64),account='0x'+'c'.repeat(40);
+  const plan={schema_version:1,network_id:'1',attack_transaction_hashes:[tx],authority:{kind:'user_declared',reference:'synthetic expected behavior',evidence_refs:[]},
+    security_properties:[{id:'owner',kind:'call_result',account,calldata:'0x8da5cb5b',operator:'after_eq',expected:'0x'+'0'.repeat(24)+'d'.repeat(40),rationale:'owner stays authorized',transaction_hashes:[tx]}],
+    normal_regression_cases:[{id:'normal',transaction_hashes:[normal],assertions:[{id:'owner',kind:'call_result',account,calldata:'0x8da5cb5b',operator:'matches_control',rationale:'normal ownership unchanged'}]}]};
+  const replay={schema_version:2,scope:'sequential_attack_and_regression',status:'completed',applied_patch_sha256:'e'.repeat(64),verification_plan_sha256:'f'.repeat(64),verification_plan:plan};
+  const verification={schema_version:2,verification_policy_version:3,evidence_version:2,scope:'declared_attack_chain_and_normal_cases',status:'verified',judge_verdict:'VERIFIED',replay_completed:true,replay_attempted:true,evidence_validated:true,execution_evidence_validated:true,replay_evidence_sha256:'d'.repeat(64),applied_patch_sha256:replay.applied_patch_sha256,verification_plan_sha256:replay.verification_plan_sha256,
+    coverage:{mode:'sequential_attack_and_regression',modified_addresses:[account],ordered_transaction_hashes:[tx],sequence_replay_verified:true},
+    dimensions:{sequence_replay:{status:'passed'},attack_interception:{status:'passed',method:'declared_security_properties'},security_properties:{status:'passed'},normal_regression:{status:'passed'}}};
+  const task={result:{verification,replay_evidence:replay}};
+  assert.equal(present(task).status,'verified');assert.match(present(task).description,/连续执行 1 笔攻击交易/);
+  assert.deepEqual(Array.from(dimensions(task),item=>item.value),['已通过','已通过','已通过','无法确认']);
+  assert.match(markdown(task),/资金、权限与状态：已通过/);assert.ok(!/正常功能|正常业务/.test(markdown(task)));
+  for(const judge_verdict of ['UNVERIFIED','INEFFECTIVE_PATCH']){
+    const machineVerified={result:{verification:{...verification,judge_verdict},replay_evidence:replay}};
+    assert.equal(present(machineVerified).status,'verified');assert.match(markdown(machineVerified),/攻击交易验证通过/);
+    const missingDeclaredNormal={result:{verification:{...verification,judge_verdict,dimensions:{...verification.dimensions,normal_regression:{status:'unavailable'}}},replay_evidence:replay}};
+    assert.equal(present(missingDeclaredNormal).status,'unverified');
+    assert.ok(!/正常功能|正常业务/.test(markdown(missingDeclaredNormal)));
+  }
+  for(const change of [{execution_evidence_validated:false},{verification_plan_sha256:'0'.repeat(64)},{evidence_version:1},{verification_policy_version:2},{evidence_validated:false},{replay_completed:false},{scope:'declared_attack_chain'}]){
+    assert.notEqual(present({result:{verification:{...verification,...change},replay_evidence:replay}}).status,'verified');
+  }
+  for(const dimension of ['sequence_replay','attack_interception','security_properties','normal_regression']){
+    const incomplete={...verification,status:'unverified',evidence_validated:false,reason_code:'normal_regression_failed',dimensions:{...verification.dimensions,[dimension]:{status:'failed'}}};
+    const partial={result:{verification:incomplete,replay_evidence:replay}};
+    assert.equal(present(partial).status,'unverified');
+    if(dimension==='normal_regression')assert.equal(dimensions(partial).some(item=>item.key===dimension),false);
+    else assert.equal(dimensions(partial).find(item=>item.key===dimension).value,'未通过');
+    assert.ok(!/正常功能|正常业务/.test(markdown(partial)));
+    const unchangedVerdict={result:{verification:{...verification,dimensions:incomplete.dimensions},replay_evidence:replay}};
+    assert.notEqual(present(unchangedVerdict).status,'verified');
+  }
+  const old={...verification,evidence_version:1,scope:'attack_path_only'};
+  assert.notEqual(present({result:{verification:old,replay_evidence:replay}}).status,'verified');
+});
+
+test('AttackPilot verifies bound attack inputs without requiring optional normal cases or inventing business coverage',()=>{
+  const env=componentEnvironment();
+  const {getPatchVerificationPresentation:present,getPatchVerificationDimensions:dimensions,buildPatchVerificationMarkdown:markdown}=env.load('@/components/attackpilot/utils/verification');
+  const tx='0x'+'a'.repeat(64),account='0x'+'b'.repeat(40);
+  const plan={schema_version:1,network_id:'1',attack_transaction_hashes:[tx],authority:{kind:'investigation_derived',reference:'bound investigation',evidence_refs:[]},
+    security_properties:[{id:'balance',kind:'native_balance',account,operator:'delta_lte',expected:'0',transaction_hashes:[tx]}],normal_regression_cases:[]};
+  const replay={schema_version:2,scope:'sequential_attack_and_regression',status:'completed',applied_patch_sha256:'e'.repeat(64),verification_plan_sha256:'f'.repeat(64),verification_plan:plan};
+  const verification={schema_version:2,verification_policy_version:3,evidence_version:2,scope:'declared_attack_chain',status:'unverified',reason_code:'attack_effect_not_established',judge_verdict:'UNVERIFIED',replay_completed:true,replay_attempted:true,evidence_validated:false,execution_evidence_validated:true,replay_evidence_sha256:'d'.repeat(64),applied_patch_sha256:replay.applied_patch_sha256,verification_plan_sha256:replay.verification_plan_sha256,
+    coverage:{mode:'sequential_attack_and_regression',modified_addresses:[account],ordered_transaction_hashes:[tx],sequence_replay_verified:true},
+    dimensions:{sequence_replay:{status:'passed'},attack_interception:{status:'unavailable',reason_code:'attack_effect_not_established'},
+      security_properties:{status:'unavailable',reason_code:'declared_security_properties_unavailable',checks:[{kind:'native_balance',status:'unknown',control_satisfies:false,patched_satisfies:null}]},
+      normal_regression:{status:'not_run',reason_code:'normal_regression_cases_missing',checks:[]}}};
+  const task={status:'completed',result:{verification,replay_evidence:replay}};
+  const summary=present(task);assert.equal(summary.status,'unverified');assert.notEqual(summary.color,'success');
+  assert.match(summary.description,/原版违反声明的安全条件/);assert.match(summary.description,/缺少补丁版原生币余额观测/);
+  assert.match(summary.nextStep,/补齐补丁版原生币余额观测/);assert.ok(!summary.nextStep.includes('正常业务'));
+  assert.deepEqual(Array.from(dimensions(task),item=>item.value),['已通过','缺攻击效果证据','缺补丁版原生币余额观测','无法确认']);
+  assert.ok(!/正常功能|正常业务/.test(markdown(task)));assert.match(markdown(task),/下一步：补齐补丁版原生币余额观测/);
+
+  const repaired={...verification,status:'verified',reason_code:'declared_attack_chain_verified',judge_verdict:'VERIFIED',evidence_validated:true,dimensions:{...verification.dimensions,attack_interception:{status:'passed'},security_properties:{status:'passed'}}};
+  const repairedTask={...task,result:{verification:repaired,replay_evidence:replay}};
+  const repairedSummary=present(repairedTask);
+  assert.equal(repairedSummary.status,'verified');assert.equal(repairedSummary.color,'success');
+  assert.equal(repairedSummary.title,'攻击交易验证通过');assert.match(repairedSummary.description,/结论仅覆盖本次攻击输入。/);
+  assert.equal(repairedSummary.nextStep,undefined);
+  assert.deepEqual(Array.from(dimensions(repairedTask),item=>item.value),['已通过','已通过','已通过','无法确认']);
+  assert.match(markdown(repairedTask),/攻击交易验证通过/);assert.ok(!/正常功能|正常业务/.test(markdown(repairedTask)));
+  const Panel=env.load('@/components/attackpilot/components/PatchVerificationPanel').default;
+  env.mount(Panel,{task:repairedTask,events:[]});
+  const panelText=env.nodes().filter(node=>['Text','Paragraph','Tag'].includes(node.type)).map(node=>node.props.children).flat().join('');
+  assert.match(panelText,/攻击交易验证通过/);assert.ok(!/正常功能|正常业务/.test(panelText));env.unmount();
+
+  for(const change of [{execution_evidence_validated:false},{verification_plan_sha256:'0'.repeat(64)},{verification_policy_version:2}]){
+    const unbound={result:{verification:{...verification,...change},replay_evidence:replay}};
+    assert.ok(!present(unbound).description.includes('原版违反声明'));
+    assert.ok(!dimensions(unbound).some(item=>item.value.includes('补丁版原生币余额')));
+    assert.notEqual(present({result:{verification:{...repaired,...change},replay_evidence:replay}}).title,repairedSummary.title);
+  }
+  for(const key of ['sequence_replay','attack_interception','security_properties']){
+    const incomplete={result:{verification:{...repaired,dimensions:{...repaired.dimensions,[key]:{status:'unavailable'}}},replay_evidence:replay}};
+    assert.equal(present(incomplete).status,'unverified',key);
+  }
+  for(const change of [{scope:'declared_attack_chain_and_normal_cases'},{evidence_validated:false},{coverage:{...repaired.coverage,sequence_replay_verified:false}},{replay_completed:false},{replay_attempted:false}]){
+    assert.equal(present({result:{verification:{...repaired,...change},replay_evidence:replay}}).status,'unverified');
+  }
+  for(const status of ['not_run','unavailable','passed']){
+    const optional={result:{verification:{...repaired,dimensions:{...repaired.dimensions,normal_regression:{status}}},replay_evidence:replay}};
+    assert.equal(present(optional).status,'verified');assert.equal(dimensions(optional).some(item=>item.key==='normal_regression'),false);
+  }
+  const unsafeCheck={kind:'SECRET /private/artifact',status:'unknown',control_satisfies:false,patched_satisfies:null,reason:'已验证通过'};
+  const unsafe={result:{verification:{...verification,reason:'SECRET /private/reason',dimensions:{...verification.dimensions,security_properties:{status:'unavailable',checks:[unsafeCheck]}}},replay_evidence:replay}};
+  assert.ok(!JSON.stringify(present(unsafe)).includes('SECRET'));assert.ok(!JSON.stringify(dimensions(unsafe)).includes('/private/'));
+  assert.equal(present(unsafe).status,'unverified');
+});
+
 test('AttackPilot respects normalized API evidence and never invents regression or profit for attack-only replay',async()=>{
   const env=environment();const api=env.load('@/components/attackpilot/services/api');
   const {getPatchVerificationPresentation:present,getPatchVerificationDimensions:dimensions}=env.load('@/components/attackpilot/utils/verification');
   const tx='0x'+'a'.repeat(64);
-  const verification={schema_version:2,verification_policy_version:2,status:'verified',reason_code:'attack_path_intercepted',judge_verdict:'VERIFIED',replay_completed:true,replay_attempted:true,evidence_version:1,evidence_validated:true,scope:'attack_path_only',replay_evidence_sha256:'d'.repeat(64),applied_patch_sha256:'e'.repeat(64),coverage:{mode:'independent_historical_transaction_pairs',modified_addresses:['0x'+'c'.repeat(40)],intercepted_transaction_hashes:[tx],unaffected_transaction_hashes:[],unresolved_transaction_hashes:[],sequence_replay_verified:false},dimensions:{attack_interception:{status:'passed'},normal_regression:{status:'passed',evidence_validated:true},profit:{status:'available',usd:2500}}};
+  const verification={schema_version:2,verification_policy_version:3,status:'verified',reason_code:'attack_path_intercepted',judge_verdict:'VERIFIED',replay_completed:true,replay_attempted:true,evidence_version:1,evidence_validated:true,scope:'attack_path_only',replay_evidence_sha256:'d'.repeat(64),applied_patch_sha256:'e'.repeat(64),coverage:{mode:'independent_historical_transaction_pairs',modified_addresses:['0x'+'c'.repeat(40)],intercepted_transaction_hashes:[tx],unaffected_transaction_hashes:[],unresolved_transaction_hashes:[],sequence_replay_verified:false},dimensions:{attack_interception:{status:'passed'},normal_regression:{status:'passed',evidence_validated:true},profit:{status:'available',usd:2500}}};
   const task={task_id:'task',status:'completed',final_report:'Original model prose: verification passed.',result:{verification,replay_evidence:{schema_version:1,status:'completed',applied_patch_sha256:verification.applied_patch_sha256}}};
   env.scope.fetchImpl=async()=>Response.json(task);
   const verified=await api.getTask('task');assert.equal(present(verified).status,'verified');
-  assert.deepEqual(Array.from(dimensions(verified),item=>item.value),['已通过','未验证','无法确认']);
+  assert.deepEqual(Array.from(dimensions(verified),item=>item.value),['已通过','无法确认']);
+  assert.ok(!/正常功能|正常业务/.test(present(verified).description));
   const {buildPatchVerificationMarkdown:markdown}=env.load('@/components/attackpilot/utils/verification');
-  for(const policy of [undefined,null,1,3,true,'2']){
+  for(const policy of [undefined,null,1,2,true,'3']){
     task.result.verification={...verification,verification_policy_version:policy};
     const legacy=await api.getTask('task');
     assert.equal(present(legacy).status,'unverified',`policy=${String(policy)}`);
     assert.notEqual(present(legacy).color,'success');
-    assert.deepEqual(Array.from(dimensions(legacy),item=>item.value),['待核实','未验证','无法确认']);
-    assert.ok(!markdown(legacy).includes('触发交易拦截通过'));
+    assert.deepEqual(Array.from(dimensions(legacy),item=>item.value),['待核实','无法确认']);
+    assert.ok(!markdown(legacy).includes('触发交易拦截通过'));assert.ok(!/正常功能|正常业务/.test(markdown(legacy)));
     assert.equal(legacy.final_report,task.final_report);
   }
   task.result.verification={...verification,status:'unverified',evidence_validated:false,reason_code:'replay_evidence_invalid',dimensions:{attack_interception:{status:'unavailable'},normal_regression:{status:'not_run'},profit:{status:'unavailable',usd:null}}};
   const projected=await api.getTask('task');assert.equal(present(projected).status,'unverified');assert.equal(present(projected).label,'验证异常');
-  assert.deepEqual(Array.from(dimensions(projected),item=>item.value),['待核实','未验证','无法确认']);
+  assert.deepEqual(Array.from(dimensions(projected),item=>item.value),['待核实','无法确认']);
   assert.equal(projected.final_report,task.final_report);
+});
+
+function nativeProfitTask({network='1',count=1,legacy=false}={}) {
+  const account='0x'+'c'.repeat(40),symbol=network==='56'?'BNB':'ETH';
+  const hashes=Array.from({length:count},(_,index)=>'0x'+(index+1).toString(16).repeat(64));
+  const side=(before,after,sha)=>({status:'available',before_wei:String(before),after_wei:String(after),delta_wei:String(BigInt(after)-BigInt(before)),artifact_sha256:sha});
+  const before=1000n*10n**18n,controlSha='1'.repeat(64),patchedSha='2'.repeat(64);
+  const transactions=hashes.map(hash=>({original_transaction_hash:hash,context:{from:account,network_id:network},
+    control:{completed:true,status:'success',artifact:{sha256:controlSha}},patched:{completed:true,status:'revert',artifact:{sha256:patchedSha}}}));
+  const profit={schema_version:1,status:'available',usd:null,metric:'transaction_sender_native_balance_change',scope:'per_transaction_senders',gas_included:true,replay_evidence_sha256:'d'.repeat(64),
+    transactions:hashes.map(hash=>({transaction_hash:hash,account,network_id:network,symbol,control:side(before,before+10n**18n,controlSha),patched:side(before,before-1n,patchedSha)}))};
+  const plan={schema_version:1,network_id:network,attack_transaction_hashes:hashes,security_properties:[{kind:'native_balance',account}],normal_regression_cases:[]};
+  const replay={schema_version:legacy?1:2,scope:'sequential_attack_and_regression',status:'completed',applied_patch_sha256:'e'.repeat(64),verification_plan_sha256:'f'.repeat(64),verification_plan:plan,transactions};
+  const coverage=legacy?{mode:'independent_historical_transaction_pairs',modified_addresses:[account],intercepted_transaction_hashes:hashes,unaffected_transaction_hashes:[],unresolved_transaction_hashes:[],sequence_replay_verified:false}
+    :{mode:'sequential_attack_and_regression',sequence_replay_verified:true};
+  const verification={schema_version:2,evidence_version:legacy?1:2,verification_policy_version:3,scope:legacy?'attack_path_only':'declared_attack_chain',status:'verified',judge_verdict:'VERIFIED',execution_evidence_validated:true,evidence_validated:true,replay_completed:true,replay_attempted:true,
+    replay_evidence_sha256:'d'.repeat(64),applied_patch_sha256:replay.applied_patch_sha256,verification_plan_sha256:replay.verification_plan_sha256,coverage,
+    dimensions:{sequence_replay:{status:'passed'},attack_interception:{status:'passed'},security_properties:{status:'passed'},profit}};
+  return {task:{status:'completed',result:{verification,replay_evidence:replay}},profit,replay,verification,side};
+}
+
+test('AttackPilot compares ETH and BNB sender native changes with exact full precision and measured zero',()=>{
+  const {getNativeProfitComparison:compare,getPatchVerificationDimensions:dimensions}=environment().load('@/components/attackpilot/utils/verification');
+  for(const network of ['1','56']){
+    const {task,profit,side}=nativeProfitTask({network}),symbol=network==='1'?'ETH':'BNB';
+    const initial=compare(task);assert.equal(initial.status,'available');
+    assert.equal(initial.value,`原版 +1 ${symbol} → 补丁 -0.000000000000000001 ${symbol}`);
+    assert.match(initial.scopeDescription,/交易发起地址；净变化已含 gas；逐笔统计/);
+    assert.equal(dimensions(task).find(item=>item.key==='profit').label,'原生币收益对比');
+    const row=profit.transactions[0],huge=10n**70n+1n;
+    row.control=side(0n,huge,row.control.artifact_sha256);
+    row.patched=side(5806000000000000n,0n,row.patched.artifact_sha256);
+    const exact=compare(task);assert.equal(exact.transactions[0].control.text,`+${'1'+'0'.repeat(52)}.000000000000000001 ${symbol}`);
+    assert.equal(exact.transactions[0].patched.text,`-0.005806 ${symbol}`);
+    assert.ok(!/[eE][+-][0-9]/.test(exact.value));
+    row.control=side(5n,5n,row.control.artifact_sha256);row.patched=side(0n,1n,row.patched.artifact_sha256);
+    assert.equal(compare(task).value,`原版 0 ${symbol} → 补丁 +0.000000000000000001 ${symbol}`);
+  }
+});
+
+test('AttackPilot keeps partial native changes, missing evidence and unexecuted transactions distinct in panel and export',()=>{
+  const env=componentEnvironment();
+  const {getNativeProfitComparison:compare,buildPatchVerificationMarkdown:markdown}=env.load('@/components/attackpilot/utils/verification');
+  const {task,profit,replay}=nativeProfitTask({count:3});
+  profit.status='partial';profit.transactions[1].patched={status:'unavailable',reason_code:'native_balance_observation_missing'};
+  profit.transactions[2].patched={status:'not_executed',reason_code:'sequence_stopped_after_revert'};
+  replay.transactions[2].patched={completed:false,status:'not_executed'};
+  const result=compare(task);assert.equal(result.status,'partial');assert.equal(result.value,'已统计 1/3 笔');
+  assert.equal(result.transactions[1].patched.text,'证据不足');assert.equal(result.transactions[2].patched.text,'未执行');
+  const exported=markdown(task);assert.match(exported,/\| 交易 \| 统计地址 \| 原版净变化 \| 补丁净变化 \|/);
+  assert.ok(exported.includes(result.scopeDescription));assert.ok(!/USD|美元|正常功能|正常业务/.test(exported));
+  const Panel=env.load('@/components/attackpilot/components/PatchVerificationPanel').default;env.mount(Panel,{task,events:[]});
+  const panelText=env.nodes().flatMap(node=>typeof node.props.children==='string'?[node.props.children]:[]).join('\n');
+  for(const row of result.transactions){
+    for(const value of [row.transactionHash,row.account,row.control.text,row.patched.text]){assert.ok(exported.includes(value));assert.ok(panelText.includes(value));}
+  }
+  assert.equal(env.nodes().filter(node=>node.type==='td').length,12);env.unmount();
+  profit.transactions.forEach(row=>{row.control={status:'unavailable',reason_code:'SECRET /private/raw'};row.patched={status:'unavailable',reason_code:'unsafe <script>'}});
+  profit.status='unavailable';const missing=compare(task);assert.equal(missing.status,'unavailable');assert.equal(missing.value,'已统计 0/3 笔');
+  assert.ok(missing.transactions.every(row=>row.control.text==='证据不足'&&row.patched.text==='证据不足'));
+  assert.ok(!/SECRET|private|script/.test(markdown(task)));
+});
+
+test('AttackPilot rejects unbound, forged or malformed native measurements instead of publishing invented amounts',()=>{
+  const {getNativeProfitComparison:compare}=environment().load('@/components/attackpilot/utils/verification');
+  const mutations=[
+    ({profit})=>{profit.schema_version=2},({profit})=>{profit.scope='all_attackers'},({profit})=>{profit.metric='total_profit'},
+    ({profit})=>{profit.gas_included=false},({profit})=>{profit.usd=2500},({profit})=>{profit.replay_evidence_sha256='a'.repeat(64)},
+    ({profit})=>{profit.transactions[0].account='0x'+'b'.repeat(40)},({profit})=>{profit.transactions[0].network_id='56'},
+    ({profit})=>{profit.transactions[0].symbol='BNB'},({profit})=>{profit.transactions[0].transaction_hash='0x'+'9'.repeat(64)},
+    ({profit})=>{profit.transactions[0].control.artifact_sha256='f'.repeat(64)},({profit})=>{profit.transactions[0].control.delta_wei='0'},
+    ({profit})=>{profit.transactions[0].patched.status='not_executed';profit.transactions[0].patched.reason_code='made_up'},
+    ({profit})=>{profit.transactions=[]},({profit})=>{profit.transactions.push(profit.transactions[0])},
+    ({replay})=>{replay.transactions[0].control.completed=false},({replay})=>{replay.transactions[0].context.network_id=1},
+    ({replay})=>{replay.verification_plan.attack_transaction_hashes.push('0x'+'9'.repeat(64))},
+    ({verification})=>{verification.execution_evidence_validated=false},({verification})=>{verification.verification_policy_version=2},
+    ({verification})=>{verification.replay_evidence_sha256='not-a-digest'},({verification})=>{verification.applied_patch_sha256='b'.repeat(64)},
+  ];
+  for(const malformed of ['01','-1','1.5','1e18','+1','','9'.repeat(79),1,Number.NaN]){
+    mutations.push(({profit})=>{profit.transactions[0].control.before_wei=malformed});
+  }
+  for(const malformed of ['-0','+1','1.5','1e18','01',1])mutations.push(({profit})=>{profit.transactions[0].control.delta_wei=malformed});
+  for(const mutate of mutations){const fixture=nativeProfitTask();mutate(fixture);const result=compare(fixture.task);assert.equal(result.status,'unavailable',String(mutate));assert.equal(result.value,'无法确认',String(mutate));assert.equal(result.transactions.length,0,String(mutate));}
+  const duplicated=nativeProfitTask({count:2});duplicated.profit.transactions[1]=duplicated.profit.transactions[0];duplicated.replay.transactions[1]=duplicated.replay.transactions[0];
+  duplicated.replay.verification_plan.attack_transaction_hashes[1]=duplicated.profit.transactions[0].transaction_hash;assert.equal(compare(duplicated.task).transactions.length,0);
+});
+
+test('AttackPilot native measurements do not upgrade defense verdicts and old profit fields remain unknown',()=>{
+  const {getNativeProfitComparison:compare,getPatchVerificationPresentation:present}=environment().load('@/components/attackpilot/utils/verification');
+  const declared=nativeProfitTask();declared.verification.status='unverified';declared.verification.evidence_validated=false;declared.verification.judge_verdict='UNVERIFIED';
+  assert.equal(compare(declared.task).status,'available');assert.equal(present(declared.task).status,'unverified');
+  const legacy=nativeProfitTask({legacy:true});assert.equal(compare(legacy.task).status,'available');assert.equal(present(legacy.task).status,'verified');
+  for(const changes of [{evidence_validated:false},{verification_policy_version:2},{evidence_version:undefined},{status:'unverified'}]){
+    const fixture=nativeProfitTask({legacy:true});Object.assign(fixture.verification,changes);assert.equal(compare(fixture.task).status,'unavailable');assert.equal(present(fixture.task).status,'unverified');
+  }
+  const old=nativeProfitTask();old.verification.dimensions.profit={status:'available',usd:2500};assert.equal(compare(old.task).value,'无法确认');
+  assert.equal(compare({...declared.task,is_demo:true}).value,'无法确认');assert.equal(compare(null).value,'无法确认');
 });
 
 test('AttackPilot treats unproven guard locations and revert propagation as missing evidence',()=>{
@@ -370,6 +659,87 @@ test('AttackPilot patch panel shows the specific recovery step for an unsupporte
   env.mount(Panel,{task:{status:'completed',result:{verification:{status:'unverified',reason_code:'patched_trace_format_unsupported'}}},events:[]});
   const text=env.nodes().filter(node=>node.type==='Text'||node.type==='Paragraph'||node.type==='Tag').map(node=>node.props.children).flat().join('');
   assert.match(text,/验证异常/);assert.match(text,/下一步：适配执行轨迹格式后，用已有回放记录重新核验/);assert.ok(!text.includes('拦截通过'));env.unmount();
+});
+
+test('AttackPilot keeps a sequential trace parser failure distinct from missing trigger coverage',()=>{
+  const env=componentEnvironment(),Panel=env.load('@/components/attackpilot/components/PatchVerificationPanel').default;
+  const {getPatchVerificationPresentation:present,buildPatchVerificationMarkdown:markdown,getNativeProfitComparison:profit}=env.load('@/components/attackpilot/utils/verification');
+  const fixture=nativeProfitTask();
+  Object.assign(fixture.verification,{status:'unverified',judge_verdict:'UNVERIFIED',evidence_validated:false,
+    reason_code:'patched_trace_format_unsupported',next_action:'select_trigger_transactions'});
+  fixture.verification.dimensions.attack_interception={status:'unavailable'};
+  fixture.verification.dimensions.security_properties={status:'unavailable',checks:[]};
+  fixture.replay.transactions[0].patched.trace={complete:false,call_targets:['0x'+'c'.repeat(40)],
+    diagnostics:[{reason:'unrecognized_untyped_node',path:[8,10,8],message:'SECRET /private/raw.json'}]};
+  const summary=present(fixture.task);
+  assert.equal(summary.status,'unverified');assert.equal(summary.label,'验证异常');
+  assert.match(summary.description,/当前解析器尚未支持的节点/);assert.match(summary.description,/解析结果不完整/);
+  assert.match(summary.nextStep,/适配执行轨迹格式后，用已有回放记录重新核验/);
+  assert.equal(profit(fixture.task).status,'available');
+  const exported=markdown(fixture.task);
+  assert.match(exported,/解析结果不完整/);assert.match(exported,/原版 \+1 ETH/);
+  assert.ok(!/重新定位|补选触发交易|补齐触发交易|SECRET|\/private/.test(exported));
+  env.mount(Panel,{task:fixture.task,events:[]});
+  const panelText=env.nodes().filter(node=>['Text','Paragraph','Tag'].includes(node.type)).map(node=>node.props.children).flat().join('');
+  assert.match(panelText,/解析结果不完整/);assert.match(panelText,/用已有回放记录重新核验/);
+  assert.ok(!/重新定位|补选触发交易|补齐触发交易/.test(panelText));env.unmount();
+  fixture.verification.reason_code='modified_code_not_reached';
+  fixture.replay.transactions[0].patched.trace={complete:true,call_targets:[]};
+  assert.equal(present(fixture.task).label,'证据不足');assert.match(present(fixture.task).nextStep,/重新定位触发交易/);
+});
+
+test('AttackPilot accepts canonical attack verification independently of the model interpretation',()=>{
+  const env=componentEnvironment();
+  const {getPatchVerificationPresentation:present,buildPatchVerificationMarkdown:markdown}=env.load('@/components/attackpilot/utils/verification');
+  const Panel=env.load('@/components/attackpilot/components/PatchVerificationPanel').default;
+  for(const verdict of ['VERIFIED','UNVERIFIED','INEFFECTIVE_PATCH','WRONG_ROOT_CAUSE','BROKEN_LOGIC',undefined]){
+    const fixture=nativeProfitTask();
+    Object.assign(fixture.verification,{status:'verified',reason_code:'declared_attack_chain_verified',judge_verdict:verdict,evidence_validated:true});
+    const summary=present(fixture.task);
+    assert.equal(summary.status,'verified');assert.equal(summary.color,'success');
+    assert.equal(summary.title,'攻击交易验证通过');assert.match(summary.description,/本次攻击输入/);
+    assert.equal(summary.nextStep,undefined);
+    const exported=markdown(fixture.task);
+    assert.match(exported,/攻击交易验证通过/);
+    assert.ok(!/复核|待确认|正常功能|正常业务|补选|补齐触发交易|重新定位|补充.*交易.*hash/i.test(exported));
+    env.mount(Panel,{task:fixture.task,events:[]});
+    const text=env.nodes().filter(node=>['Text','Paragraph','Tag'].includes(node.type)).map(node=>node.props.children).flat().join('');
+    assert.match(text,/攻击交易验证通过/);assert.ok(!/复核|待确认/.test(text));env.unmount();
+  }
+});
+
+test('AttackPilot never upgrades incomplete attack evidence when model interpretation is optional',()=>{
+  const {getPatchVerificationPresentation:present,buildPatchVerificationMarkdown:markdown}=environment().load('@/components/attackpilot/utils/verification');
+  const changes=[
+    ...['sequence_replay','attack_interception','security_properties'].flatMap(key=>[
+      ({verification})=>{delete verification.dimensions[key]},
+      ({verification})=>{verification.dimensions[key]={status:'unavailable'}},
+      ({verification})=>{verification.dimensions[key]={status:'failed'}},
+    ]),
+    ({verification})=>{verification.execution_evidence_validated=false},
+    ({verification})=>{verification.verification_plan_sha256='0'.repeat(64)},
+    ({verification})=>{verification.applied_patch_sha256='0'.repeat(64)},
+    ({verification})=>{verification.replay_evidence_sha256='invalid'},
+    ({verification})=>{verification.verification_policy_version=2},
+    ({verification})=>{verification.coverage.sequence_replay_verified=false},
+    ({verification})=>{verification.replay_completed=false},
+    ({verification})=>{verification.replay_attempted=false},
+    ({verification})=>{verification.evidence_validated=false},
+    ({verification})=>{verification.status='unverified'},
+    ({replay})=>{replay.status='failed'},
+    ({replay})=>{replay.verification_plan.security_properties=[]},
+  ];
+  for(const verdict of ['VERIFIED','UNVERIFIED','INEFFECTIVE_PATCH']){
+    for(const change of changes){
+      const fixture=nativeProfitTask();
+      Object.assign(fixture.verification,{status:'verified',reason_code:'declared_attack_chain_verified',judge_verdict:verdict,evidence_validated:true});
+      change(fixture);
+      const summary=present(fixture.task);
+      assert.equal(summary.status,'unverified');assert.notEqual(summary.color,'success');
+      assert.notEqual(summary.title,'攻击交易验证通过');
+      assert.ok(!markdown(fixture.task).includes('## 攻击交易验证通过'));
+    }
+  }
 });
 
 test('AttackPilot identifies unavailable compiler versions without blaming the source or exposing host diagnostics',()=>{
@@ -553,6 +923,8 @@ function landingFixture() {
 
 test('AttackPilot ignores repeated deep submissions and cancels navigation after leaving the workbench',async()=>{
   const env=landingFixture();await env.settle();
+  const planCopy=env.nodes().filter(node=>node.type==='summary'||node.type==='Paragraph').map(node=>node.props.children).flat().join('');
+  assert.match(planCopy,/补充攻击交易安全条件/);assert.ok(!/正常功能|正常业务|正常交易/.test(planCopy));
   env.nodes().find(node=>node.props.id==='ap-tx-hash-0').props.onChange({target:{value:'0x'+'a'.repeat(64)}});await env.settle();
   const start=env.nodes().find(node=>node.type==='Button'&&Array.isArray(node.props.children)&&node.props.children[0]==='直接开始分析');
   const first=start.props.onClick();const duplicate=start.props.onClick();await flush();

@@ -29,7 +29,7 @@ DEFAULT_ENABLED_MODULES = {
     "patch_generation",
     "patch_verification",
 }
-REPORT_POLICY_VERSION = 18
+REPORT_POLICY_VERSION = 28
 ANALYSIS_POLICY_VERSION = 11
 
 
@@ -97,6 +97,9 @@ def _validate_runtime_artifacts(replay: dict, contracts: dict, task_root: Path |
 
     try:
         task_root = Path(WORK_ROOT if task_root is None else task_root).resolve()
+        if replay.get('schema_version') == 2:
+            _validate_sequence_runtime_artifacts(replay, contracts, task_root)
+            return
         attribution = replay.get('patch_attribution')
         attributed_contracts = attribution.get('contracts') if isinstance(attribution, dict) else None
         if (not isinstance(attribution, dict) or type(attribution.get('schema_version')) is not int
@@ -155,7 +158,10 @@ def _validate_runtime_artifacts(replay: dict, contracts: dict, task_root: Path |
                     runtime_codes={address: item['code'] for address, item in overrides.items()}
                     if role == 'patched' else None,
                 )
-                for key in ('completed', 'status', 'gas_used', 'logs', 'trace', 'execution_effects'):
+                keys = ('completed', 'status', 'gas_used', 'logs', 'trace', 'execution_effects')
+                if 'native_balance_change' in pair[role]:
+                    keys += ('native_balance_change',)
+                for key in keys:
                     if rebuilt.get(key) != pair[role].get(key):
                         raise ValueError(f'Recorded {role} {key} does not match its replay artifact')
                 transaction = {'accessList': context.get('access_list', [])} if 'access_list' in simulation else {}
@@ -166,6 +172,49 @@ def _validate_runtime_artifacts(replay: dict, contracts: dict, task_root: Path |
     except (OSError, ValueError, TypeError, KeyError, AttributeError,
             HistoricalReplayValidationError, TenderlyAPIError) as exc:
         raise AgentContractError('report', 'analysis_report_invalid') from exc
+
+
+def _validate_sequence_runtime_artifacts(replay, contracts, task_root):
+    from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+    from app.attackpilot.utils.bytecode_transplanter import BytecodeTransplanter
+    from app.attackpilot.utils.patch_attribution import attribution_digest, _instruction_boundaries
+
+    rebuilt = validate_sequential_evidence(replay, cache_root=task_root / 'cache')
+    codes = rebuilt.get('runtime_codes', {})
+    if (rebuilt.get('status') != 'validated' or not rebuilt.get('control_complete')
+            or not rebuilt.get('patched_complete') or set(codes) != set(contracts)):
+        raise ValueError('Missing complete sequential execution or inconsistent runtime scope')
+    attribution = replay.get('patch_attribution')
+    # Semantic result checks can validate a patch without a REVERT instruction.
+    # When guard attribution is supplied, verify its runtime positions as well.
+    attributed = {}
+    if isinstance(attribution, dict) and attribution.get('status') == 'available':
+        attributed = attribution.get('contracts')
+        if (attribution.get('schema_version') != 1
+                or attribution.get('applied_patch_sha256') != replay.get('applied_patch_sha256')
+                or attribution.get('evidence_sha256') != attribution_digest(attribution)
+                or not isinstance(attributed, dict) or set(attributed) != set(contracts)):
+            raise ValueError('Sequential guard attribution is inconsistent')
+    for address, code in codes.items():
+        raw = bytes.fromhex(code[2:])
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != contracts[address].get('patched_runtime_sha256'):
+            raise ValueError('Sequential runtime does not match its integrity digest')
+        if address not in attributed:
+            continue
+        contract = attributed[address]
+        if contract.get('patched_runtime_sha256') != digest or not isinstance(contract.get('guards'), list):
+            raise ValueError('Sequential guard runtime mismatch')
+        executable_end, _ = BytecodeTransplanter._metadata(raw)
+        boundaries = _instruction_boundaries(raw[:executable_end])
+        claimed = set()
+        for guard in contract['guards']:
+            pcs = guard.get('revert_pcs') if isinstance(guard, dict) else None
+            if (not isinstance(pcs, list) or not pcs or len(set(pcs)) != len(pcs)
+                    or any(type(pc) is not int or pc not in boundaries or pc >= executable_end
+                           or raw[pc] != 0xfd for pc in pcs) or claimed.intersection(pcs)):
+                raise ValueError('Sequential guard position is not an unambiguous REVERT')
+            claimed.update(pcs)
 
 
 def validate_completed_result(dapp: dict, result, report) -> None:
@@ -192,6 +241,20 @@ def validate_completed_result(dapp: dict, result, report) -> None:
                 or hashlib.sha256(patches.encode()).hexdigest() != state.get('applied_patch_sha256')):
             raise AgentContractError('report', 'analysis_report_invalid')
         replay = result.get('replay_evidence')
+        if replay.get('schema_version') == 2 and dapp.get('verification_plan') is not None:
+            from app.attackpilot.utils.security_checks import validate_verification_plan
+            try:
+                expected_plan = validate_verification_plan(dapp['verification_plan'],
+                                                          network_id=PLATFORM_TO_CHAIN_ID.get(dapp.get('platform')))
+                historical = {tx.lower(): evidence for tx, evidence in
+                              validated_baselines(result, dapp)['transactions'].items()}
+                expected_plan['attack_transaction_hashes'].sort(
+                    key=lambda tx: (historical[tx]['block_number'], historical[tx]['transaction_index']))
+                expected_plan = validate_verification_plan(expected_plan)
+            except (ValueError, TypeError, OverflowError, KeyError) as exc:
+                raise AgentContractError('report', 'analysis_report_invalid') from exc
+            if replay.get('verification_plan') != expected_plan:
+                raise AgentContractError('report', 'analysis_report_invalid')
         baselines = validated_baselines(result, dapp)['transactions']
         known = {tx.lower(): baseline for tx, baseline in baselines.items()}
         for pair in replay.get('transactions', []):
@@ -221,10 +284,28 @@ def validate_completed_result(dapp: dict, result, report) -> None:
         from app.attackpilot.utils.verification import adjudicate_patch_verification
         rebuilt_verdict = adjudicate_patch_verification(
             {'verdict': state.get('judge_verdict')}, replay, patches)
+        rebuilt_profit = rebuilt_verdict.get('dimensions', {}).get('profit')
+        recorded_profit = state.get('dimensions', {}).get('profit')
+        native_profit_present = any(isinstance(value, dict) and value.get('schema_version') == 1
+                                    for value in (rebuilt_profit, recorded_profit))
         if (rebuilt_verdict.get('status') != 'verified'
+                or rebuilt_verdict.get('scope') != state.get('scope')
                 or rebuilt_verdict.get('checked') != state.get('checked')
-                or rebuilt_verdict.get('coverage') != state.get('coverage')):
+                or rebuilt_verdict.get('coverage') != state.get('coverage')
+                or native_profit_present and rebuilt_profit != recorded_profit):
             raise AgentContractError('report', 'analysis_report_invalid')
+    else:
+        dimensions = state.get('dimensions')
+        profit = dimensions.get('profit') if isinstance(dimensions, dict) else None
+        if isinstance(profit, dict) and profit.get('schema_version') == 1:
+            # Measured balances remain authoritative when the defense verdict
+            # is unresolved, so recheck their source before persisting them.
+            from app.attackpilot.utils.verification import adjudicate_patch_verification
+            rebuilt = adjudicate_patch_verification(
+                {'verdict': state.get('judge_verdict')}, result.get('replay_evidence'),
+                result.get('applied_patches'))
+            if rebuilt.get('dimensions', {}).get('profit') != profit:
+                raise AgentContractError('report', 'analysis_report_invalid')
 
 
 def build_macro_only_report(dapp_name: str, processed_data: dict, enabled_modules: set) -> str:

@@ -121,6 +121,7 @@ class FailureTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('| 攻击路径拦截 | 未执行 |', text)
             self.assertIn('| 结构化证据校验 | 未执行回放 |', text)
             self.assertIn(explanation, text)
+            self.assertNotRegex(text, '正常功能|正常业务')
             self.assertFalse(evidence['evidence_trusted'])
 
     def dao(self):
@@ -912,6 +913,7 @@ class ReplayEvidenceRegressionTests(unittest.TestCase):
         self.assertTrue(report_evidence(judge, reordered)['evidence_trusted'])
 
     def test_report_does_not_promote_unmeasured_business_or_profit_dimensions(self):
+        from app.attackpilot.utils.report_evidence import render_verification_summary
         replay = self.report()
         state = self.adjudicate(replay)
         state['dimensions']['normal_regression'] = {'status': 'passed'}
@@ -921,6 +923,7 @@ class ReplayEvidenceRegressionTests(unittest.TestCase):
         self.assertEqual(rendered['verification']['dimensions']['normal_regression'], {'status': 'not_run'})
         self.assertEqual(rendered['verification']['dimensions']['profit'],
                          {'status': 'unavailable', 'usd': None})
+        self.assertNotRegex(render_verification_summary(rendered), '正常功能|正常业务')
 
     def test_report_rejects_legacy_markers_and_conflicting_judge_verdicts(self):
         replay = self.report()
@@ -1071,6 +1074,9 @@ class ReplayEvidenceRegressionTests(unittest.TestCase):
             }
             artifact = evidence_store.persist(request, response, role=role, original_hash=self.transaction_hash)
             pair[role] = execution_summary(response, artifact, [self.patched_address])
+            # Stored legacy reports predate the native balance-change field;
+            # immutable artifact review can add it when refreshing the result.
+            pair[role].pop('native_balance_change')
             if success:
                 pair[role].update(control_validation='validated',
                                   baseline_validation=validate_simulated_transaction(context, response))
@@ -1204,6 +1210,1572 @@ class ReplayEvidenceRegressionTests(unittest.TestCase):
                                             replay_evidence_digest(result['replay_evidence']))
 
 
+class SemanticSecurityVerificationTests(unittest.TestCase):
+    """Synthetic raw artifacts, declared invariants and the composite verdict gate."""
+
+    account = '0x' + '1' * 40
+    token = '0x' + '2' * 40
+    attack_hash = '0x' + 'a' * 64
+    normal_hash = '0x' + 'b' * 64
+
+    def setUp(self):
+        from app.attackpilot import settings
+        from app.attackpilot.utils.patch_replay import PatchReplayEvidenceStore
+        self.temp = tempfile.TemporaryDirectory(prefix='attackpilot-semantic-security-')
+        self.addCleanup(self.temp.cleanup)
+        self.cache = Path(self.temp.name) / 'cache'
+        self.settings_patch = patch.object(settings, 'CACHE_DIR', str(self.cache))
+        self.settings_patch.start()
+        self.addCleanup(self.settings_patch.stop)
+        self.store = PatchReplayEvidenceStore(self.cache)
+
+    @staticmethod
+    def word(value):
+        return '0x' + f'{value:064x}'
+
+    def plan(self):
+        from app.attackpilot.utils.security_checks import validate_verification_plan
+        return validate_verification_plan({
+            'schema_version': 1, 'network_id': '1', 'attack_transaction_hashes': [self.attack_hash],
+            'authority': {'kind': 'user_declared', 'reference': 'synthetic task input', 'evidence_refs': []},
+            'security_properties': [{
+                'id': 'vault-loss', 'kind': 'native_balance', 'account': self.account,
+                'operator': 'delta_gte', 'expected': '-1',
+                'transaction_hashes': [self.attack_hash], 'rationale': 'At most one raw unit may leave the vault.'}],
+            'normal_regression_cases': [{
+                'id': 'normal-withdraw', 'transaction_hashes': [self.normal_hash], 'assertions': [{
+                    'id': 'normal-loss', 'kind': 'native_balance', 'account': self.account,
+                    'operator': 'delta_gte', 'expected': '-1', 'rationale': 'One-unit withdrawal remains usable.'}]}],
+        })
+
+    def raw_result(self, before=10, after=9):
+        return {'simulation': {'status': True, 'gas_used': 42000},
+                'transaction': {'status': True, 'gas_used': 42000, 'transaction_info': {
+                    'logs': [], 'asset_changes': [], 'state_diff': [],
+                    'balance_diff': [{'address': self.account, 'original': str(before), 'dirty': str(after)}],
+                    'call_trace': {'type': 'CALL', 'to': self.account, 'input': '0x12345678',
+                                   'output': '0x', 'status': True, 'calls': [], 'absolute_position': 0}}}}
+
+    def execution(self, plan, *, tx_hash, role, before=10, after=9, raw=None):
+        from app.attackpilot.utils.security_checks import extract_security_observations
+        raw = raw if raw is not None else self.raw_result(before, after)
+        request = {'role': role, 'transaction_hash': tx_hash, 'nonce': before, 'after': after}
+        artifact = self.store.persist(request, raw, role=role, original_hash=tx_hash)
+        summary = execution_summary(raw, artifact, [self.account])
+        summary['security_observations'] = extract_security_observations(raw, artifact, plan, transaction_hash=tx_hash)
+        return summary
+
+    def fixture_report(self):
+        """Composite-gate fixture; tests mock only the independently tested sequence validator."""
+        from app.attackpilot.utils.security_checks import plan_digest
+        fixture = ReplayEvidenceRegressionTests()
+        fixture.setUp()
+        patches = (f'# File: {self.account}::Vault.sol\n<<<<<<< SEARCH\n'
+                   'uint amount = requested;\n=======\nuint amount = allowed;\n>>>>>>> REPLACE')
+        report = fixture.report(patches=patches)
+        plan = self.plan()
+        pair = report['transactions'][0]
+        pair['sequence_index'] = 0
+        pair['control'] = self.execution(plan, tx_hash=self.attack_hash, role='control', after=0)
+        pair['patched'] = self.execution(plan, tx_hash=self.attack_hash, role='patched', after=9)
+        normal_pair = {'original_transaction_hash': self.normal_hash, 'context': deepcopy(pair['context']),
+                       'sequence_index': 0,
+                       'control': self.execution(plan, tx_hash=self.normal_hash, role='normal-control'),
+                       'patched': self.execution(plan, tx_hash=self.normal_hash, role='normal-patched')}
+        report.update(schema_version=2, scope='sequential_attack_and_regression',
+                      verification_plan=plan, verification_plan_sha256=plan_digest(plan),
+                      normal_regression={'status': 'completed', 'cases': [
+                          {'id': 'normal-withdraw', 'transactions': [normal_pair]}]})
+        return patches, report
+
+    def adjudicate(self, report=None, patches=None, *, validation='validated', verdict='VERIFIED'):
+        if report is None:
+            patches, report = self.fixture_report()
+        with patch('app.attackpilot.utils.patch_replay.validate_sequential_evidence',
+                   return_value={'status': validation, 'reason_code': 'synthetic_sequence_check'}):
+            return adjudicate_patch_verification({'verdict': verdict}, report, patches)
+
+    def test_non_reverting_patch_can_pass_declared_chain_and_normal_assertions(self):
+        patches, report = self.fixture_report()
+        self.assertEqual(report['transactions'][0]['patched']['status'], 'success')
+        self.assertNotIn('require', patches)
+        result = self.adjudicate(report, patches)
+        self.assertEqual(result['status'], 'verified')
+        self.assertEqual(result['scope'], 'declared_attack_chain_and_normal_cases')
+        self.assertTrue(result['execution_evidence_validated'])
+        for dimension in ('sequence_replay', 'attack_interception', 'security_properties', 'normal_regression'):
+            self.assertEqual(result['dimensions'][dimension]['status'], 'passed')
+
+    def rollback_result(self, balance=13):
+        raw = self.raw_result()
+        sender, miner, target = ('0x' + digit * 40 for digit in ('3', '4', '5'))
+        raw['simulation'].update(status=False, network_id='1', **{
+            'from': sender, 'to': target, 'system_tx': False, 'deposit_tx': False,
+            'block_header': {'miner': miner},
+            'state_overrides': {self.account: {'balance': str(balance)}}})
+        raw['transaction'].update(status=False, network_id='1', **{
+            'from': sender, 'to': target, 'system_tx': False, 'deposit_tx': False})
+        info = raw['transaction']['transaction_info']
+        info.update(logs=[], asset_changes=None, state_diff=None, balance_diff=[
+            {'address': sender, 'original': '100000', 'dirty': '58000'},
+            {'address': miner, 'original': '0', 'dirty': '42000', 'is_miner': True}])
+        info['call_trace'].update(status=False, error_op='REVERT', to=target, **{'from': sender})
+        info['call_trace']['calls'] = [{'type': 'CALL', 'from': target, 'to': self.account,
+                                       'input': '0x12345678', 'output': '0x', 'status': False,
+                                       'error_op': 'REVERT', 'calls': [], 'absolute_position': 1}]
+        return raw
+
+    def test_attack_scope_passes_without_requesting_normal_business_samples(self):
+        from app.attackpilot.utils.security_checks import plan_digest
+        from app.attackpilot.utils.report_evidence import render_verification_summary
+        patches, report = self.fixture_report()
+        report['verification_plan']['normal_regression_cases'] = []
+        report['verification_plan_sha256'] = plan_digest(report['verification_plan'])
+        report['normal_regression'] = {'status': 'not_run', 'cases': [], 'transaction_count': 0}
+        # Observations bind the whole plan, so regenerate rather than stripping
+        # cases from an already signed execution summary.
+        plan = report['verification_plan']
+        report['transactions'][0]['control'] = self.execution(plan, tx_hash=self.attack_hash, role='attack-control', after=0)
+        report['transactions'][0]['patched'] = self.execution(plan, tx_hash=self.attack_hash, role='attack-patched',
+                                                            raw=self.rollback_result())
+        result = self.adjudicate(report, patches)
+        self.assertEqual(result['status'], 'verified')
+        self.assertEqual(result['scope'], 'declared_attack_chain')
+        self.assertEqual(result['reason_code'], 'declared_attack_chain_verified')
+        self.assertEqual(result['dimensions']['normal_regression']['status'], 'not_run')
+        check = result['dimensions']['security_properties']['checks'][0]
+        self.assertEqual(check['effect'], 'repaired')
+        self.assertEqual(check['patched'], {'before': '13', 'after': '13'})
+        self.assertEqual(check['control'], {'before': '10', 'after': '0'})
+        # No control-side balance is borrowed, including after a divergent prefix.
+        evidence = report_evidence({'verdict': 'VERIFIED', 'verification': result}, report)
+        self.assertTrue(evidence['evidence_trusted'])
+        self.assertEqual(evidence['label'], '攻击交易验证通过')
+        summary = render_verification_summary(evidence)
+        self.assertIn('| 攻击效果消除 | 通过 |', summary)
+        self.assertNotRegex(summary, '正常功能|正常业务')
+        for mutation in ('sequence', 'attack', 'security', 'scope', 'patch'):
+            changed = deepcopy(result)
+            if mutation in ('sequence', 'attack', 'security'):
+                dimension = {'sequence': 'sequence_replay', 'attack': 'attack_interception',
+                             'security': 'security_properties'}[mutation]
+                changed['dimensions'][dimension]['status'] = 'unavailable'
+            elif mutation == 'scope':
+                changed['scope'] = 'declared_attack_chain_and_normal_cases'
+            else:
+                changed['applied_patch_sha256'] = '0' * 64
+            self.assertFalse(report_evidence({'verdict': 'VERIFIED', 'verification': changed}, report)['evidence_trusted'])
+
+    def test_native_rollback_requires_final_state_and_consistent_whole_transaction_failure(self):
+        from app.attackpilot.utils.security_checks import extract_security_observations
+        plan = self.plan()
+        for mutation in ('missing_snapshot', 'missing_balance', 'status_conflict', 'nested_only',
+                         'missing_root', 'incomplete_trace', 'sender', 'miner', 'other_fee_account',
+                         'committed_transfer', 'committed_storage', 'committed_log', 'snapshot_diff_conflict',
+                         'system', 'deposit', 'unknown_network', 'wrong_sender', 'gas_conflict',
+                         'boolean_balance', 'oversized_balance', 'wrong_fee_snapshot'):
+            with self.subTest(mutation=mutation):
+                raw = self.rollback_result()
+                sim, tx = raw['simulation'], raw['transaction']
+                info = tx['transaction_info']
+                if mutation == 'missing_snapshot':
+                    sim.pop('state_overrides')
+                elif mutation == 'missing_balance':
+                    sim['state_overrides'][self.account] = {'code': '0x00'}
+                elif mutation == 'status_conflict':
+                    sim['status'] = True
+                elif mutation == 'nested_only':
+                    info['call_trace'].update(status=True, error_op=None)
+                elif mutation == 'missing_root':
+                    info['call_trace'] = None
+                elif mutation == 'incomplete_trace':
+                    info['call_trace']['calls'] = [{'type': 'UNSUPPORTED'}]
+                elif mutation == 'sender':
+                    sim['from'] = tx['from'] = info['call_trace']['from'] = self.account
+                elif mutation == 'miner':
+                    sim['block_header']['miner'] = self.account
+                elif mutation == 'other_fee_account':
+                    info['balance_diff'].append({'address': self.account, 'original': '13', 'dirty': '13', 'is_miner': True})
+                elif mutation == 'committed_transfer':
+                    info['balance_diff'].append({'address': self.account, 'original': '13', 'dirty': '12'})
+                elif mutation == 'committed_storage':
+                    info['state_diff'] = [{'raw': []}]
+                elif mutation == 'committed_log':
+                    info['logs'] = [{}]
+                elif mutation == 'snapshot_diff_conflict':
+                    info['balance_diff'].append({'address': self.account, 'original': '14', 'dirty': '14'})
+                elif mutation in ('system', 'deposit'):
+                    sim[mutation + '_tx'] = True
+                elif mutation == 'unknown_network':
+                    sim['network_id'] = tx['network_id'] = '42161'
+                elif mutation == 'wrong_sender':
+                    tx['from'] = self.token
+                elif mutation == 'gas_conflict':
+                    tx['gas_used'] += 1
+                elif mutation == 'boolean_balance':
+                    sim['state_overrides'][self.account]['balance'] = True
+                elif mutation == 'wrong_fee_snapshot':
+                    sim['state_overrides'][sim['from']] = {'balance': '100000'}
+                else:
+                    sim['state_overrides'][self.account]['balance'] = str(2**256)
+                observation = extract_security_observations(raw, {}, plan, transaction_hash=self.attack_hash)['observations'][0]
+                self.assertEqual(observation['status'], 'unknown')
+                self.assertIsNone(observation['before'])
+                self.assertIsNone(observation['after'])
+
+    def test_reverted_fee_accounts_use_measured_diffs_including_gas_and_rewards(self):
+        from app.attackpilot.utils.security_checks import extract_security_observations
+        plan, raw = self.plan(), self.rollback_result()
+        sender, miner = raw['simulation']['from'], raw['simulation']['block_header']['miner']
+        plan['security_properties'] = [dict(plan['security_properties'][0], id=role, account=account,
+                                            operator='delta_lte', expected='0')
+                                       for role, account in (('sender', sender), ('miner', miner))]
+        for snapshots in (False, True):
+            with self.subTest(snapshots=snapshots):
+                changed = deepcopy(raw)
+                if snapshots:
+                    changed['simulation']['state_overrides'].update({sender: {'balance': '58000'}, miner: {'balance': '42000'}})
+                else:
+                    changed['simulation'].pop('state_overrides')
+                observations = extract_security_observations(changed, {}, plan, transaction_hash=self.attack_hash)['observations']
+                self.assertEqual([(item['before'], item['after']) for item in observations], [('100000', '58000'), ('0', '42000')])
+                self.assertTrue(all(item['method'] == 'native_balance_diff' for item in observations))
+
+    def test_fee_account_snapshots_never_replace_missing_or_conflicting_balance_diffs(self):
+        from app.attackpilot.utils.security_checks import extract_security_observations
+        plan, raw = self.plan(), self.rollback_result()
+        sender, miner = raw['simulation']['from'], raw['simulation']['block_header']['miner']
+        for role, account, after in (('sender', sender, '58000'), ('miner', miner, '42000')):
+            plan['security_properties'] = [dict(plan['security_properties'][0], id=role, account=account,
+                                                operator='delta_lte', expected='0')]
+            for mutation in ('missing_diff', 'duplicate', 'snapshot_conflict', 'invalid_original', 'state_conflict'):
+                with self.subTest(role=role, mutation=mutation):
+                    changed = deepcopy(raw)
+                    changed['simulation']['state_overrides'][account] = {'balance': after}
+                    info = changed['transaction']['transaction_info']
+                    record = next(item for item in info['balance_diff'] if item['address'] == account)
+                    if mutation == 'missing_diff':
+                        info['balance_diff'].remove(record)
+                    elif mutation == 'duplicate':
+                        info['balance_diff'].append(deepcopy(record))
+                    elif mutation == 'snapshot_conflict':
+                        changed['simulation']['state_overrides'][account]['balance'] = '100001'
+                    elif mutation == 'invalid_original':
+                        record['original'] = True
+                    else:
+                        changed['simulation']['status'] = True
+                    observation = extract_security_observations(changed, {}, plan, transaction_hash=self.attack_hash)['observations'][0]
+                    self.assertEqual(observation['status'], 'unknown')
+                    self.assertIsNone(observation['before'])
+                    self.assertIsNone(observation['after'])
+
+    def test_attack_scope_checks_both_preserved_victim_funds_and_attacker_no_profit(self):
+        from app.attackpilot.utils.security_checks import plan_digest
+        patches, report = self.fixture_report()
+        plan, patched_raw = report['verification_plan'], self.rollback_result()
+        sender = patched_raw['simulation']['from']
+        plan['normal_regression_cases'] = []
+        plan['security_properties'].append(dict(plan['security_properties'][0], id='attacker-no-profit',
+                                                account=sender, operator='delta_lte', expected='0'))
+        report['verification_plan_sha256'] = plan_digest(plan)
+        report['normal_regression'] = {'status': 'not_run', 'cases': [], 'transaction_count': 0}
+        control_raw = self.raw_result(after=0)
+        control_raw['transaction']['transaction_info']['balance_diff'].append(
+            {'address': sender, 'original': '100000', 'dirty': '150000'})
+        pair = report['transactions'][0]
+        pair['control'] = self.execution(plan, tx_hash=self.attack_hash, role='control', raw=control_raw)
+        pair['patched'] = self.execution(plan, tx_hash=self.attack_hash, role='patched', raw=patched_raw)
+        result = self.adjudicate(report, patches)
+        self.assertEqual(result['status'], 'verified', result)
+        self.assertEqual([check['effect'] for check in result['dimensions']['security_properties']['checks']], ['repaired', 'repaired'])
+        self.assertEqual(result['dimensions']['security_properties']['checks'][1]['patched'], {'before': '100000', 'after': '58000'})
+        patched_raw['transaction']['transaction_info']['balance_diff'][0]['dirty'] = '100001'
+        pair['patched'] = self.execution(plan, tx_hash=self.attack_hash, role='still-profitable', raw=patched_raw)
+        failed = self.adjudicate(report, patches)
+        self.assertEqual(failed['reason_code'], 'declared_security_property_failed')
+        self.assertEqual(failed['dimensions']['security_properties']['checks'][1]['status'], 'failed')
+
+    def test_native_rollback_handles_cased_code_aliases_but_rejects_conflicting_balances(self):
+        from app.attackpilot.utils.security_checks import extract_security_observations
+        plan, raw = self.plan(), self.rollback_result()
+        account = '0x' + 'a1' * 20
+        plan['security_properties'][0]['account'] = account
+        raw['simulation']['state_overrides'] = {account: {'code': '0x00'}, account.upper().replace('0X', '0x'): {'balance': '13'}}
+        observation = extract_security_observations(raw, {}, plan, transaction_hash=self.attack_hash)['observations'][0]
+        self.assertEqual(observation['status'], 'available')
+        self.assertEqual(observation['method'], 'evm_revert_post_balance_snapshot')
+        raw['simulation']['state_overrides'][account]['balance'] = '14'
+        self.assertEqual(extract_security_observations(raw, {}, plan, transaction_hash=self.attack_hash)
+                         ['observations'][0]['status'], 'unknown')
+
+    def test_reverted_native_summary_cannot_override_missing_or_forged_raw_evidence(self):
+        from app.attackpilot.utils.security_checks import evaluate_security_properties
+        plan = self.plan()
+        pair = {'original_transaction_hash': self.attack_hash,
+                'control': self.execution(plan, tx_hash=self.attack_hash, role='control', after=0),
+                'patched': self.execution(plan, tx_hash=self.attack_hash, role='patched', raw=self.rollback_result())}
+        self.assertEqual(evaluate_security_properties(plan, [pair])['status'], 'passed')
+        for mutation in ('summary', 'missing_artifact', 'success_label'):
+            with self.subTest(mutation=mutation):
+                changed = deepcopy(pair)
+                if mutation == 'summary':
+                    changed['patched']['security_observations']['observations'][0]['after'] = '14'
+                elif mutation == 'missing_artifact':
+                    changed['patched']['artifact']['sha256'] = '0' * 64
+                else:
+                    changed['patched']['status'] = 'success'
+                self.assertNotEqual(evaluate_security_properties(plan, [changed])['status'], 'passed')
+
+    def test_successful_compile_or_model_verdict_does_not_replace_measurements(self):
+        patches, report = self.fixture_report()
+        for mutation in ('missing_state', 'forged_summary', 'missing_artifact', 'bad_state'):
+            with self.subTest(mutation=mutation):
+                changed = deepcopy(report)
+                execution = changed['transactions'][0]['patched']
+                if mutation == 'missing_state':
+                    raw = self.raw_result()
+                    raw['transaction']['transaction_info']['balance_diff'] = []
+                    execution.update(self.execution(changed['verification_plan'], tx_hash=self.attack_hash,
+                                                    role=mutation, raw=raw))
+                elif mutation == 'forged_summary':
+                    execution['security_observations']['observations'][0]['after'] = '10'
+                elif mutation == 'missing_artifact':
+                    execution['artifact']['sha256'] = '0' * 64
+                else:
+                    execution.update(self.execution(changed['verification_plan'], tx_hash=self.attack_hash,
+                                                    role=mutation, after=0))
+                self.assertNotEqual(self.adjudicate(changed, patches)['status'], 'verified')
+
+    def test_control_must_violate_the_declared_property(self):
+        patches, report = self.fixture_report()
+        report['transactions'][0]['control'] = self.execution(report['verification_plan'],
+            tx_hash=self.attack_hash, role='already-safe-original')
+        result = self.adjudicate(report, patches)
+        self.assertEqual(result['reason_code'], 'declared_security_property_failed')
+        self.assertTrue(result['dimensions']['security_properties']['checks'][0]['control_satisfies'])
+
+    def test_sequence_validator_rejection_blocks_all_claims(self):
+        result = self.adjudicate(validation='unavailable')
+        self.assertEqual(result['status'], 'unverified')
+        self.assertFalse(result['execution_evidence_validated'])
+
+    def test_partial_attack_chain_preserves_partial_dimensions(self):
+        from app.attackpilot.utils.security_checks import plan_digest
+        patches, report = self.fixture_report()
+        second = '0x' + 'c' * 64
+        plan = report['verification_plan']
+        plan['attack_transaction_hashes'].append(second)
+        report['verification_plan_sha256'] = plan_digest(plan)
+        report['transactions'].append({'original_transaction_hash': second, 'context': {'network_id': '1'},
+            'control': {'completed': True}, 'patched': {'completed': False, 'status': 'not_executed',
+            'reason_code': 'sequence_stopped_after_revert'}})
+        result = self.adjudicate(report, patches)
+        self.assertEqual(result['reason_code'], 'attack_sequence_incomplete')
+        self.assertEqual(result['dimensions']['sequence_replay']['status'], 'partial')
+        self.assertFalse(result['replay_completed'])
+
+    def test_normal_business_requires_success_reachability_and_measured_assertions(self):
+        patches, report = self.fixture_report()
+        for mutation in ('revert', 'unreached', 'failed_assertion', 'missing_case'):
+            with self.subTest(mutation=mutation):
+                changed = deepcopy(report)
+                execution = changed['normal_regression']['cases'][0]['transactions'][0]['patched']
+                if mutation == 'revert':
+                    execution['status'] = 'revert'
+                elif mutation == 'unreached':
+                    execution['trace']['call_targets'] = [self.token]
+                elif mutation == 'failed_assertion':
+                    execution.update(self.execution(changed['verification_plan'], tx_hash=self.normal_hash,
+                                                    role=mutation, after=0))
+                else:
+                    changed['normal_regression']['cases'] = []
+                self.assertNotEqual(self.adjudicate(changed, patches)['status'], 'verified')
+
+    def test_plan_digest_patch_runtime_and_source_binding_are_required(self):
+        patches, report = self.fixture_report()
+        for field in ('verification_plan_sha256', 'applied_patch_sha256', 'runtime_integrity'):
+            with self.subTest(field=field):
+                changed = deepcopy(report)
+                changed[field] = None
+                self.assertNotEqual(self.adjudicate(changed, patches)['status'], 'verified')
+
+    def test_model_labels_do_not_veto_complete_measured_verification(self):
+        for verdict in ('UNVERIFIED', 'WRONG_ROOT_CAUSE', 'INEFFECTIVE_PATCH', 'BROKEN_LOGIC', None):
+            with self.subTest(verdict=verdict):
+                result = self.adjudicate(verdict=verdict)
+                self.assertEqual(result['status'], 'verified', result)
+                self.assertEqual(result['next_action'], 'complete')
+                self.assertTrue(result['terminal'])
+                self.assertTrue(result['evidence_validated'])
+                self.assertEqual(result['decision_authority'], 'validated_execution_evidence')
+                self.assertEqual(result['judge_verdict'], verdict)
+                self.assertEqual(result['dimensions']['security_properties']['status'], 'passed')
+
+    def test_plan_validation_rejects_ambiguous_or_unbound_conditions(self):
+        from app.attackpilot.utils.security_checks import validate_verification_plan
+        for mutation in ('duplicate_hash', 'wrong_network', 'bool_expected', 'unknown_kind', 'unbound_tx',
+                         'empty_assertions', 'attack_as_normal', 'investigation_without_refs'):
+            with self.subTest(mutation=mutation):
+                value = self.plan()
+                if mutation == 'duplicate_hash':
+                    value['attack_transaction_hashes'] *= 2
+                elif mutation == 'wrong_network':
+                    value['network_id'] = True
+                elif mutation == 'bool_expected':
+                    value['security_properties'][0]['expected'] = True
+                elif mutation == 'unknown_kind':
+                    value['security_properties'][0]['kind'] = 'profit_usd'
+                elif mutation == 'unbound_tx':
+                    value['security_properties'][0]['transaction_hashes'] = [self.normal_hash]
+                elif mutation == 'empty_assertions':
+                    value['normal_regression_cases'][0]['assertions'] = []
+                elif mutation == 'attack_as_normal':
+                    value['normal_regression_cases'][0]['transaction_hashes'] = [self.attack_hash]
+                else:
+                    value['authority']['kind'] = 'investigation_derived'
+                with self.assertRaises(ValueError):
+                    validate_verification_plan(value)
+
+    def test_raw_storage_word_and_mask_are_measured_without_decoded_labels(self):
+        from app.attackpilot.utils.security_checks import extract_security_observations, validate_verification_plan
+        plan = self.plan()
+        plan['security_properties'] = [{'id': 'owner', 'rationale': 'Owner lower byte remains zero.',
+            'kind': 'storage', 'account': self.account, 'slot': self.word(2), 'mask': self.word(255),
+            'operator': 'after_eq', 'expected': self.word(0), 'transaction_hashes': [self.attack_hash]}]
+        plan = validate_verification_plan(plan)
+        raw = self.raw_result()
+        raw['transaction']['transaction_info']['state_diff'] = [{'address': self.account, 'raw': [
+            {'address': self.account, 'key': self.word(2), 'original': self.word(256), 'dirty': self.word(512)}]}]
+        measured = extract_security_observations(raw, {}, plan, transaction_hash=self.attack_hash)
+        item = measured['observations'][0]
+        self.assertEqual((item['before'], item['after']), ('0', '0'))
+        raw['transaction']['transaction_info']['state_diff'] = []
+        self.assertEqual(extract_security_observations(raw, {}, plan, transaction_hash=self.attack_hash)
+                         ['observations'][0]['status'], 'unknown')
+
+    def test_token_balances_use_raw_amounts_and_contiguous_transfer_balances(self):
+        from app.attackpilot.utils.security_checks import extract_security_observations, validate_verification_plan
+        plan = self.plan()
+        plan['security_properties'][0].update(kind='token_balance', token=self.token)
+        plan = validate_verification_plan(plan)
+        raw = self.raw_result()
+        transfer = {'type': 'Transfer', 'from': self.account, 'to': self.token, 'raw_amount': '2',
+                    'from_before_balance': '10', 'to_before_balance': '0', 'trace_absolute_position': 1,
+                    'dollar_value': 999999, 'amount': 0, 'token_info': {'standard': 'ERC20',
+                    'contract_address': self.token, 'decimals': 18}}
+        raw['transaction']['transaction_info']['asset_changes'] = [transfer,
+            {**transfer, 'raw_amount': '1', 'from_before_balance': '8', 'trace_absolute_position': 2}]
+        measured = extract_security_observations(raw, {}, plan, transaction_hash=self.attack_hash)
+        self.assertEqual(measured['observations'][0]['after'], '7')
+        raw['transaction']['transaction_info']['asset_changes'][1]['from_before_balance'] = '9'
+        self.assertEqual(extract_security_observations(raw, {}, plan, transaction_hash=self.attack_hash)
+                         ['observations'][0]['status'], 'unknown')
+
+    def test_investigation_plan_requires_an_existing_unchanged_task_artifact(self):
+        from app.attackpilot.utils.security_checks import validate_plan_authority
+        path = self.cache / 'trace' / 'proof.json'
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b'{"synthetic":true}')
+        plan = self.plan()
+        plan['authority'] = {'kind': 'investigation_derived', 'reference': 'synthetic investigation',
+            'evidence_refs': [{'reference': 'cache/trace/proof.json',
+                               'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}]}
+        self.assertTrue(validate_plan_authority(plan))
+        path.write_bytes(b'{"synthetic":false}')
+        self.assertFalse(validate_plan_authority(plan))
+        plan['authority']['evidence_refs'][0]['reference'] = '../outside.json'
+        self.assertFalse(validate_plan_authority(plan))
+
+
+    def getter_plan(self):
+        from app.attackpilot.utils.security_checks import validate_verification_plan
+        plan = self.plan()
+        plan['security_properties'] = [{
+            'id': 'owner', 'kind': 'call_result', 'account': self.account,
+            'calldata': '0x8da5cb5b', 'operator': 'after_eq', 'expected': self.word(7),
+            'transaction_hashes': [self.attack_hash], 'rationale': 'Owner getter must retain the authorized address.'}]
+        return validate_verification_plan(plan)
+
+    def probe_execution(self, plan, output, *, role, raw_mutation=None, request_mutation=None):
+        from app.attackpilot.utils.security_checks import rule_digest
+        rule = plan['security_properties'][0]
+        raw = self.raw_result()
+        info = raw['transaction']['transaction_info']
+        info['balance_diff'] = []
+        info['call_trace'].update(input=rule['calldata'], output=self.word(output))
+        raw['transaction'].update(to=self.account, input=rule['calldata'])
+        if raw_mutation:
+            raw_mutation(raw)
+        request = {'simulations': [{'to': self.account, 'input': rule['calldata'], 'value': '0', 'gas_price': '0'}]}
+        if request_mutation:
+            request_mutation(request)
+        artifact = self.store.persist(request, {'simulation_results': [raw]}, role=role, original_hash=self.attack_hash)
+        artifact['result_index'] = 0
+        return {'completed': True, 'status': 'success', 'security_probes': [{
+            'property_id': rule['id'], 'rule_sha256': rule_digest(rule), 'artifact': artifact,
+            'output': info['call_trace']['output']}]}
+
+    def test_permission_getter_proves_preservation_when_patched_storage_diff_omits_slot(self):
+        from app.attackpilot.utils.security_checks import evaluate_security_properties
+        plan = self.getter_plan()
+        pair = {'original_transaction_hash': self.attack_hash,
+                'control': self.probe_execution(plan, 9, role='control-probe'),
+                'patched': self.probe_execution(plan, 7, role='patched-probe')}
+        measured = evaluate_security_properties(plan, [pair])
+        self.assertEqual(measured['status'], 'passed')
+        self.assertFalse(measured['checks'][0]['control_satisfies'])
+        self.assertTrue(measured['checks'][0]['patched_satisfies'])
+        self.assertNotIn('before', measured['checks'][0]['patched'])
+
+    def test_getter_side_effects_or_unexecuted_probe_never_prove_safety(self):
+        from app.attackpilot.utils.security_checks import evaluate_security_properties
+        plan = self.getter_plan()
+        control = self.probe_execution(plan, 9, role='original')
+        for field in ('balance_diff', 'asset_changes', 'state_diff', 'logs'):
+            with self.subTest(field=field):
+                patched = self.probe_execution(plan, 7, role='modified-' + field,
+                    raw_mutation=lambda raw, f=field: raw['transaction']['transaction_info'].update({f: [{}]}))
+                result = evaluate_security_properties(plan, [{'original_transaction_hash': self.attack_hash,
+                                                            'control': control, 'patched': patched}])
+                self.assertEqual(result['status'], 'unavailable')
+        missing = evaluate_security_properties(plan, [{'original_transaction_hash': self.attack_hash,
+                    'control': control, 'patched': {'completed': False, 'status': 'not_executed'}}])
+        self.assertEqual(missing['status'], 'unavailable')
+
+    def test_probe_request_and_output_must_match_declared_reader(self):
+        from app.attackpilot.utils.security_checks import evaluate_security_properties
+        plan = self.getter_plan()
+        for mutation in ('account', 'calldata', 'value', 'gas_price', 'output', 'index'):
+            with self.subTest(mutation=mutation):
+                patched = self.probe_execution(plan, 7, role=mutation,
+                    request_mutation=(lambda request: request['simulations'][0].update(
+                        {dict(account='to', calldata='input').get(mutation, mutation):
+                         self.token if mutation == 'account' else '0x00000000' if mutation == 'calldata' else '1'}))
+                        if mutation in {'account', 'calldata', 'value', 'gas_price'} else None)
+                if mutation == 'output':
+                    patched['security_probes'][0]['output'] = self.word(8)
+                elif mutation == 'index':
+                    patched['security_probes'][0]['artifact']['result_index'] = 1
+                result = evaluate_security_properties(plan, [{'original_transaction_hash': self.attack_hash,
+                    'control': self.probe_execution(plan, 9, role='original-' + mutation), 'patched': patched}])
+                self.assertEqual(result['status'], 'unavailable')
+
+    def test_probe_rules_require_tail_scope_and_exact_abi_word(self):
+        from app.attackpilot.utils.security_checks import validate_verification_plan
+        for mutation in ('non_tail', 'short_output', 'short_input', 'delta'):
+            with self.subTest(mutation=mutation):
+                plan = self.getter_plan()
+                rule = plan['security_properties'][0]
+                if mutation == 'non_tail':
+                    plan['attack_transaction_hashes'].append('0x' + 'd' * 64)
+                elif mutation == 'short_output':
+                    rule['expected'] = '0x07'
+                elif mutation == 'short_input':
+                    rule['calldata'] = '0x12'
+                else:
+                    rule.update(operator='delta_gte', expected='0')
+                with self.assertRaises(ValueError):
+                    validate_verification_plan(plan)
+
+    def test_repaired_funds_and_preserved_permissions_can_pass_together(self):
+        from app.attackpilot.utils.security_checks import evaluate_security_properties, validate_verification_plan
+        plan = self.plan()
+        plan['security_properties'].append({
+            'id': 'owner-preserved', 'kind': 'storage', 'account': self.account,
+            'slot': self.word(2), 'operator': 'after_eq', 'expected': self.word(7),
+            'transaction_hashes': [self.attack_hash], 'rationale': 'Existing authorized owner must remain valid.'})
+        plan = validate_verification_plan(plan)
+
+        def measured(role, balance_after, owner_after=7):
+            raw = self.raw_result(after=balance_after)
+            raw['transaction']['transaction_info']['state_diff'] = [{'address': self.account, 'raw': [{
+                'address': self.account, 'key': self.word(2), 'original': self.word(7),
+                'dirty': self.word(owner_after)}]}]
+            return self.execution(plan, tx_hash=self.attack_hash, role=role, raw=raw)
+
+        pair = {'original_transaction_hash': self.attack_hash,
+                'control': measured('vulnerable-control', 0), 'patched': measured('repaired-patch', 9)}
+        result = evaluate_security_properties(plan, [pair])
+        self.assertEqual(result['status'], 'passed')
+        self.assertEqual([check['effect'] for check in result['checks']], ['repaired', 'preserved'])
+        self.assertEqual((result['repaired_check_count'], result['preserved_check_count']), (1, 1))
+        pair['patched'] = measured('patch-breaks-owner', 9, 8)
+        failed = evaluate_security_properties(plan, [pair])
+        self.assertEqual(failed['status'], 'failed')
+        self.assertEqual(failed['checks'][1]['effect'], 'violated')
+        pair['patched'] = measured('safe-patch', 9)
+        pair['control'] = measured('already-safe-control', 9)
+        unchanged = evaluate_security_properties(plan, [pair])
+        self.assertEqual(unchanged['status'], 'failed')
+        self.assertEqual(unchanged['reason_code'], 'control_violation_not_observed')
+        self.assertTrue(all(check['effect'] == 'preserved' for check in unchanged['checks']))
+
+    def test_safe_prefix_and_repaired_violating_tail_share_one_declared_invariant(self):
+        from app.attackpilot.utils.security_checks import evaluate_security_properties, validate_verification_plan
+        plan = self.plan()
+        tail = '0x' + 'c' * 64
+        plan['attack_transaction_hashes'].append(tail)
+        plan['security_properties'][0]['transaction_hashes'].append(tail)
+        plan = validate_verification_plan(plan)
+        pairs = [
+            {'original_transaction_hash': self.attack_hash,
+             'control': self.execution(plan, tx_hash=self.attack_hash, role='safe-prefix-control'),
+             'patched': self.execution(plan, tx_hash=self.attack_hash, role='safe-prefix-patched')},
+            {'original_transaction_hash': tail,
+             'control': self.execution(plan, tx_hash=tail, role='violating-tail', before=9, after=0),
+             'patched': self.execution(plan, tx_hash=tail, role='repaired-tail', before=9, after=8)},
+        ]
+        result = evaluate_security_properties(plan, pairs)
+        self.assertEqual(result['status'], 'passed')
+        self.assertEqual([check['effect'] for check in result['checks']], ['preserved', 'repaired'])
+        pairs[0]['patched'] = self.execution(plan, tx_hash=self.attack_hash,
+                                             role='unsafe-prefix-patch', after=0)
+        self.assertEqual(evaluate_security_properties(plan, pairs)['status'], 'failed')
+
+    def test_real_dao_artifacts_reach_complete_semantic_verdict_without_validator_mock(self):
+        """Cross-module integration uses local RPC fixtures and a synthetic provider."""
+        async def run():
+            helper = StatefulSequenceRegressionTests()
+            dao, transactions = helper.make_dao(Path(self.temp.name))
+            simulate = dao.bundle_downloader.download.side_effect
+
+            async def unchanged_normal_business(*, payload):
+                results = await simulate(payload=payload)
+                if payload['simulations'][0]['input'] == '0x00000003' and 'state_objects' in payload['simulations'][0]:
+                    results[0]['transaction']['transaction_info']['state_diff'][0]['raw'][0]['dirty'] = self.word(2)
+                return results
+
+            dao.bundle_downloader.download.side_effect = unchanged_normal_business
+            plan = helper.plan(transactions, normal=True, probe=True)
+            _, report = await dao.bundle_simulate_txs_in_tenderly(
+                transactions[:2], {helper.address: helper.runtime}, verification_plan=plan)
+            patches = (f'# File: {helper.address}::Vault.sol\n<<<<<<< SEARCH\n'
+                       'uint amount = requested;\n=======\nuint amount = allowed;\n>>>>>>> REPLACE')
+            patch_digest = hashlib.sha256(patches.encode()).hexdigest()
+            report.update(applied_patch_sha256=patch_digest,
+                          required_trigger_transaction_hashes=[item['hash'] for item in transactions[:2]],
+                          patch_attribution={'status': 'unavailable', 'reason_code': 'modified_guard_missing'},
+                          runtime_integrity={'schema_version': 1, 'status': 'validated',
+                              'applied_patch_sha256': patch_digest, 'contracts': {helper.address: {
+                                  'original_runtime_sha256': hashlib.sha256(bytes.fromhex(helper.original_runtime[2:])).hexdigest(),
+                                  'original_compiled_runtime_sha256': hashlib.sha256(bytes.fromhex(helper.original_runtime[2:])).hexdigest(),
+                                  'patched_runtime_sha256': hashlib.sha256(bytes.fromhex(helper.runtime[2:])).hexdigest(),
+                                  'storage_layout_checked': True, 'immutable_checked': True}}})
+            result = adjudicate_patch_verification({'verdict': 'VERIFIED'}, report, patches)
+            self.assertEqual(result['status'], 'verified', result)
+            self.assertEqual(result['dimensions']['security_properties']['checks'][0]['kind'], 'call_result')
+            self.assertTrue(result['coverage']['sequence_replay_verified'])
+            self.assertEqual(dao.bundle_downloader.download.await_count, 4)
+
+        asyncio.run(run())
+
+
+class NativeReplayBalanceChangeTests(unittest.TestCase):
+    sender = '0x' + 'a' * 40
+    transaction_hash = '0x' + 'c' * 64
+
+    def raw(self, before=10 ** 24, after=10 ** 24 + 9007199254740993, *, network='1', success=True):
+        shared = {'from': self.sender.upper().replace('0X', '0x'), 'network_id': network,
+                  'status': success, 'gas_used': 42000}
+        return {'simulation': dict(shared), 'transaction': {
+            **shared, 'transaction_info': {'logs': [], 'asset_changes': [], 'state_diff': [],
+                'call_trace': {'type': 'CALL', 'from': self.sender, 'to': '0x' + 'b' * 40,
+                               'input': '0x', 'status': success, 'calls': []},
+                'balance_diff': [{'address': self.sender, 'original': str(before), 'dirty': str(after)}]}}}
+
+    def summary(self, raw=None, *, role='control'):
+        digest = hashlib.sha256(role.encode()).hexdigest()
+        artifact = {'sha256': digest, 'request_digest': hashlib.sha256((role + '-request').encode()).hexdigest(),
+                    'relative_path': f'cache/patch_replay/artifacts/{digest}.json'}
+        return execution_summary(raw if raw is not None else self.raw(), artifact, [])
+
+    def report(self):
+        return {'schema_version': 2, 'transactions': [{
+            'original_transaction_hash': self.transaction_hash,
+            'context': {'from': self.sender, 'network_id': '1'},
+            'control': self.summary(),
+            'patched': self.summary(self.raw(after=10 ** 24 - 42000, success=False), role='patched')}]}
+
+    def test_full_raw_sender_after_twenty_records_preserves_integer_precision(self):
+        from app.attackpilot.utils.native_profit import extract_native_balance_change
+        raw = self.raw()
+        records = raw['transaction']['transaction_info']['balance_diff']
+        records[:0] = [{'address': f'0x{number:040x}', 'original': '0', 'dirty': '0'} for number in range(25)]
+        summary = self.summary(raw)
+        self.assertTrue(summary['balances']['changes']['balance_diff']['sample_truncated'])
+        self.assertNotIn(self.sender, [item['address'] for item in summary['balances']['changes']['balance_diff']['sample']])
+        observed = extract_native_balance_change(raw)
+        self.assertEqual(summary['native_balance_change'], observed)
+        self.assertEqual(observed, {'schema_version': 1, 'status': 'available', 'account': self.sender,
+            'network_id': '1', 'symbol': 'ETH', 'decimals': 18, 'gas_included': True,
+            'before_wei': str(10 ** 24), 'after_wei': str(10 ** 24 + 9007199254740993),
+            'delta_wei': '9007199254740993'})
+
+    def test_revert_reads_real_sender_fee_diff_without_subtracting_gas_twice(self):
+        from app.attackpilot.utils.native_profit import extract_native_balance_change
+        raw = self.raw(before=100000, after=58000, success=False)
+        raw['transaction']['transaction_info']['balance_diff'][0].update(is_miner=True)
+        self.assertEqual(extract_native_balance_change(raw)['delta_wei'], '-42000')
+        raw['transaction']['transaction_info']['balance_diff'] = []
+        raw['simulation']['state_overrides'] = {self.sender: {'balance': '100000'}}
+        self.assertEqual(extract_native_balance_change(raw)['reason_code'], 'sender_balance_missing')
+
+    def test_bnb_uses_explicit_network_identity(self):
+        from app.attackpilot.utils.native_profit import extract_native_balance_change
+        observed = extract_native_balance_change(self.raw(network='56'))
+        self.assertEqual((observed['network_id'], observed['symbol']), ('56', 'BNB'))
+        self.assertEqual(extract_native_balance_change(self.raw(network='10'))['reason_code'], 'unsupported_network')
+
+    def test_missing_duplicate_conflicting_and_invalid_raw_records_fail_closed(self):
+        from app.attackpilot.utils.native_profit import extract_native_balance_change
+        for mutation in ('missing', 'null', 'empty', 'duplicate', 'conflict', 'malformed', 'negative',
+                         'overflow', 'float', 'bool', 'scientific', 'invalid_other'):
+            with self.subTest(mutation=mutation):
+                raw = self.raw()
+                info = raw['transaction']['transaction_info']
+                if mutation == 'missing':
+                    del info['balance_diff']
+                elif mutation == 'null':
+                    info['balance_diff'] = None
+                elif mutation == 'empty':
+                    info['balance_diff'] = []
+                elif mutation in ('duplicate', 'conflict'):
+                    info['balance_diff'].append(deepcopy(info['balance_diff'][0]))
+                    if mutation == 'conflict':
+                        info['balance_diff'][1]['dirty'] = '0'
+                elif mutation == 'malformed':
+                    info['balance_diff'][0]['address'] = 'attacker'
+                elif mutation == 'invalid_other':
+                    info['balance_diff'].append({'address': '0x' + 'd' * 40, 'original': '-1', 'dirty': '0'})
+                else:
+                    info['balance_diff'][0]['dirty'] = {
+                        'negative': '-1', 'overflow': str(1 << 256), 'float': 1.0,
+                        'bool': True, 'scientific': '1e18'}[mutation]
+                self.assertEqual(extract_native_balance_change(raw)['status'], 'unavailable')
+
+    def test_execution_context_must_match_both_provider_records(self):
+        from app.attackpilot.utils.native_profit import extract_native_balance_change
+        for field, value in (('from', '0x' + 'd' * 40), ('network_id', '56'), ('status', False),
+                             ('gas_used', 1), ('from', None), ('network_id', True), ('gas_used', -1)):
+            with self.subTest(field=field, value=value):
+                raw = self.raw()
+                raw['simulation'][field] = value
+                self.assertEqual(extract_native_balance_change(raw)['status'], 'unavailable')
+        raw = self.raw()
+        del raw['simulation']['from']
+        self.assertEqual(extract_native_balance_change(raw)['reason_code'], 'missing_execution_context')
+
+    def test_raw_uint256_accepts_hex_boundaries_without_losing_precision(self):
+        from app.attackpilot.utils.native_profit import extract_native_balance_change
+        raw = self.raw(before=0, after=(1 << 256) - 1)
+        record = raw['transaction']['transaction_info']['balance_diff'][0]
+        record['original'] = '0x' + '0' * 5000
+        record['dirty'] = hex((1 << 256) - 1)
+        observed = extract_native_balance_change(raw)
+        self.assertEqual(observed['delta_wei'], str((1 << 256) - 1))
+
+    def test_builder_binds_each_side_to_account_network_artifact_and_report_digest(self):
+        from app.attackpilot.utils.native_profit import build_native_profit_evidence
+        from app.attackpilot.utils.verification import replay_evidence_digest
+        report = self.report()
+        result = build_native_profit_evidence(report, execution_validated=True)
+        self.assertEqual(result['status'], 'available')
+        self.assertEqual(result['replay_evidence_sha256'], replay_evidence_digest(report))
+        row = result['transactions'][0]
+        self.assertEqual(row['transaction_hash'], self.transaction_hash)
+        self.assertEqual(row['account'], self.sender)
+        self.assertEqual(row['control']['delta_wei'], '9007199254740993')
+        self.assertEqual(row['patched']['delta_wei'], '-42000')
+        self.assertEqual(row['patched']['artifact_sha256'], report['transactions'][0]['patched']['artifact']['sha256'])
+        self.assertIsNone(result['usd'])
+
+    def test_builder_never_accepts_summary_as_source_validation_or_promotes_legacy(self):
+        from app.attackpilot.utils.native_profit import build_native_profit_evidence
+        report = self.report()
+        report['transactions'][0]['patched']['native_balance_change']['delta_wei'] = '99999999999999999'
+        unavailable = {'status': 'unavailable', 'usd': None}
+        self.assertEqual(build_native_profit_evidence(report), unavailable)
+        self.assertEqual(build_native_profit_evidence(report, execution_validated=1), unavailable)
+        for pair in report['transactions']:
+            for role in ('control', 'patched'):
+                pair[role].pop('native_balance_change')
+        self.assertEqual(build_native_profit_evidence(report, execution_validated=True), unavailable)
+
+    def test_builder_rejects_forged_amounts_and_mismatched_identities(self):
+        from app.attackpilot.utils.native_profit import build_native_profit_evidence
+        for mutation in ('delta', 'before', 'after', 'account', 'network', 'symbol', 'schema', 'artifact',
+                         'gas', 'reason', 'context_hash', 'duplicate_hash'):
+            with self.subTest(mutation=mutation):
+                report = self.report()
+                pair = report['transactions'][0]
+                observed = pair['patched']['native_balance_change']
+                if mutation == 'artifact':
+                    pair['patched']['artifact']['sha256'] = 'invalid'
+                elif mutation == 'context_hash':
+                    pair['context']['transaction_hash'] = '0x' + 'd' * 64
+                elif mutation == 'duplicate_hash':
+                    report['transactions'].append(deepcopy(pair))
+                elif mutation == 'reason':
+                    observed.clear()
+                    observed.update(schema_version=1, status='unavailable', reason_code=['untrusted'])
+                else:
+                    key, value = {'delta': ('delta_wei', '0'), 'before': ('before_wei', '-1'),
+                        'after': ('after_wei', str(1 << 256)), 'account': ('account', '0x' + 'd' * 40),
+                        'network': ('network_id', '56'), 'symbol': ('symbol', 'BNB'),
+                        'schema': ('schema_version', True), 'gas': ('gas_included', False)}[mutation]
+                    observed[key] = value
+                result = build_native_profit_evidence(report, execution_validated=True)
+                self.assertNotEqual(result['status'], 'available')
+                if mutation in ('context_hash', 'duplicate_hash'):
+                    self.assertEqual(result, {'status': 'unavailable', 'usd': None})
+                else:
+                    self.assertEqual(result['transactions'][0]['patched']['status'], 'unavailable')
+
+    def test_builder_keeps_partial_and_unexecuted_rows_without_inventing_zero(self):
+        from app.attackpilot.utils.native_profit import build_native_profit_evidence
+        report = self.report()
+        pair = report['transactions'][0]
+        pair['patched'] = {'completed': False, 'status': 'not_executed',
+                           'reason_code': 'sequence_stopped_after_revert'}
+        result = build_native_profit_evidence(report, execution_validated=True)
+        self.assertEqual(result['status'], 'partial')
+        self.assertEqual(result['transactions'][0]['patched'], {
+            'status': 'not_executed', 'reason_code': 'sequence_stopped_after_revert'})
+        self.assertNotIn('delta_wei', result['transactions'][0]['patched'])
+        pair['patched']['completed'] = True
+        self.assertEqual(build_native_profit_evidence(report, execution_validated=True)[
+            'transactions'][0]['patched']['status'], 'unavailable')
+        pair['patched']['completed'] = False
+        pair['control']['native_balance_change'] = {
+            'schema_version': 1, 'status': 'unavailable', 'reason_code': 'sender_balance_missing'}
+        result = build_native_profit_evidence(report, execution_validated=True)
+        self.assertEqual(result['status'], 'unavailable')
+        report['verification_plan'] = {'attack_transaction_hashes': [self.transaction_hash, '0x' + 'd' * 64]}
+        self.assertEqual(build_native_profit_evidence(report, execution_validated=True),
+                         {'status': 'unavailable', 'usd': None})
+
+
+class StatefulSequenceRegressionTests(unittest.IsolatedAsyncioTestCase):
+    """Synthetic local RPC records exercise the real durable DAO protocol."""
+    address = '0x' + '1' * 40
+    sender = '0x' + '2' * 40
+    runtime = '0x600160005500'
+    original_runtime = '0x60005400'
+
+    def make_dao(self, root, count=3, *, same_block=False):
+        from app.attackpilot.daos.tenderly import BundleTenderlyDao
+        from app.attackpilot.utils.patch_replay import PatchReplayEvidenceStore
+        dao = BundleTenderlyDao('Ethereum')
+        dao.evidence_store = PatchReplayEvidenceStore(root / 'cache')
+        transactions, by_input = [], {}
+        for index in range(count):
+            block, position = (100, index + 4) if same_block else (100 + index, 4)
+            tx = {'hash': f'0x{index + 1:064x}', 'blockNumber': hex(block),
+                  'transactionIndex': hex(position), 'blockHash': f'0x{block:064x}',
+                  'chainId': '0x1', 'from': self.sender, 'to': self.address,
+                  'input': f'0x{index + 1:08x}', 'value': '0x0', 'gas': '0x15f90',
+                  'gasPrice': '0x1', 'nonce': hex(index)}
+            receipt = {'transactionHash': tx['hash'], 'blockNumber': tx['blockNumber'],
+                       'transactionIndex': tx['transactionIndex'], 'blockHash': tx['blockHash'],
+                       'status': '0x1', 'gasUsed': hex(35000), 'logs': []}
+            for relative, value in {
+                f'tx_detail/tx/{tx["hash"]}.json': tx,
+                f'tx_detail/tx_receipt/{tx["hash"]}.json': receipt,
+                f'timestamp/{block}.json': {'schema_version': 1, 'block_number': block,
+                                          'block_hash': tx['blockHash'], 'timestamp': 1700000000 + block},
+            }.items():
+                path = root / 'cache' / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(value))
+            transactions.append({'hash': tx['hash']})
+            by_input[tx['input']] = tx
+
+        async def simulate(*, payload):
+            steps = payload['simulations']
+            patched = 'state_objects' in steps[0]
+            state, results = 0, []
+            start_nonce = int(by_input[steps[0]['input']]['nonce'], 16)
+            for index, step in enumerate(steps):
+                self.assertEqual(step['block_number'], steps[0]['block_number'])
+                self.assertEqual(step['transaction_index'], steps[0]['transaction_index'])
+                if index:
+                    self.assertNotIn('state_objects', step)
+                tx = by_input.get(step['input'])
+                probe = tx is None
+                block = int(step.get('block_header', {}).get('number', hex(step['block_number'])), 16)
+                timestamp = int(step.get('block_header', {}).get('timestamp', hex(1700000000 + block)), 16)
+                shared = {'network_id': '1', 'from': step['from'], 'to': step['to'],
+                          'input': step['input'], 'value': step['value'], 'gas': step['gas'],
+                          'gas_price': step['gas_price'], 'nonce': start_nonce + index,
+                          'status': True, 'gas_used': 35000}
+                info = {'logs': [], 'balance_diff': [], 'asset_changes': [], 'state_diff': [],
+                        'call_trace': {'type': 'CALL', 'from': step['from'], 'to': step['to'],
+                                       'input': step['input'], 'value': '0', 'status': True,
+                                       'output': f'0x{(1 if patched else 9):064x}' if probe else '0x',
+                                       'absolute_position': 1, 'calls': []}}
+                if not probe:
+                    dirty = state + (1 if patched else 2)
+                    info['state_diff'] = [{'address': self.address, 'raw': [{
+                        'address': self.address, 'key': '0x' + '0' * 64,
+                        'original': f'0x{state:064x}', 'dirty': f'0x{dirty:064x}'}]}]
+                    state = dirty
+                results.append({'contracts': [{'address': self.address, 'deployed_bytecode': self.original_runtime}],
+                                'simulation': {**shared, 'id': f'{"patched" if patched else "control"}-{index}',
+                                               'block_number': step['block_number'],
+                                               'transaction_index': step['transaction_index'],
+                                               'block_header': {'number': block, 'timestamp': timestamp,
+                                                                'hash': f'0x{block:064x}'}},
+                                'transaction': {**shared, 'block_number': block, 'transaction_info': info}})
+            return results
+        dao.bundle_downloader.download = AsyncMock(side_effect=simulate)
+        return dao, transactions
+
+    def plan(self, transactions, *, normal=True, probe=False):
+        attacks = [item['hash'] for item in transactions[:2]]
+        rule = {'id': 'owner', 'kind': 'call_result' if probe else 'storage',
+                'account': self.address, 'operator': 'after_eq', 'expected': f'0x{1:064x}',
+                'transaction_hashes': [attacks[-1]], 'rationale': 'Synthetic protected ownership value'}
+        rule['calldata' if probe else 'slot'] = '0x8da5cb5b' if probe else '0x' + '0' * 64
+        return {'schema_version': 1, 'network_id': '1', 'attack_transaction_hashes': attacks,
+                'authority': {'kind': 'user_declared', 'reference': 'synthetic offline verification', 'evidence_refs': []},
+                'security_properties': [rule],
+                'normal_regression_cases': ([{'id': 'normal-flow', 'transaction_hashes': [transactions[2]['hash']],
+                    'assertions': [{'id': 'normal-storage', 'kind': 'storage', 'account': self.address,
+                                    'slot': '0x' + '0' * 64, 'operator': 'matches_control',
+                                    'rationale': 'Synthetic normal business state'}]}] if normal else [])}
+
+    async def test_native_measurements_are_rebuilt_from_the_actual_sequence_artifacts(self):
+        from app.attackpilot.utils.native_profit import build_native_profit_evidence
+        from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+        with tempfile.TemporaryDirectory(prefix='attackpilot-native-sequence-') as temp:
+            root = Path(temp)
+            dao, transactions = self.make_dao(root)
+            simulate = dao.bundle_downloader.download.side_effect
+            async def with_sender_balances(*, payload):
+                results = await simulate(payload=payload)
+                patched = 'state_objects' in payload['simulations'][0]
+                delta = -35000 if patched else 9007199254740993
+                for index, raw in enumerate(results):
+                    before = 10 ** 24 + index * delta
+                    records = [{'address': f'0x{number:040x}', 'original': '0', 'dirty': '0'}
+                               for number in range(25)]
+                    records.append({'address': raw['transaction']['from'],
+                                    'original': str(before), 'dirty': str(before + delta)})
+                    raw['transaction']['transaction_info']['balance_diff'] = records
+                return results
+            dao.bundle_downloader.download.side_effect = with_sender_balances
+            _, report = await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+            checked = validate_sequential_evidence(report, cache_root=root / 'cache')
+            self.assertEqual(checked['status'], 'validated')
+            measurements = build_native_profit_evidence(report, execution_validated=True)
+            self.assertEqual(measurements['status'], 'available')
+            self.assertEqual(len(measurements['transactions']), 2)
+            self.assertTrue(all(row['control']['delta_wei'] == '9007199254740993'
+                                and row['patched']['delta_wei'] == '-35000'
+                                for row in measurements['transactions']))
+            changed = deepcopy(report)
+            forged = changed['transactions'][0]['patched']['native_balance_change']
+            forged.update(after_wei=forged['before_wei'], delta_wei='0')
+            # Arithmetic alone is internally consistent, but immutable source
+            # reconstruction rejects the changed summary before it is trusted.
+            self.assertEqual(validate_sequential_evidence(changed, cache_root=root / 'cache')['status'], 'unavailable')
+            self.assertEqual(build_native_profit_evidence(changed), {'status': 'unavailable', 'usd': None})
+
+    async def test_two_independent_sequences_carry_state_and_advance_historical_headers(self):
+        from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+        for same_block in (False, True):
+            with self.subTest(same_block=same_block), tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+                root = Path(temp)
+                dao, transactions = self.make_dao(root, same_block=same_block)
+                ok, report = await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+                self.assertTrue(ok)
+                self.assertEqual(dao.bundle_downloader.download.await_count, 2)
+                self.assertEqual(report['sequence']['control']['executed_count'], 2)
+                first, second = report['transactions']
+                self.assertNotEqual(first['control']['artifact']['sha256'], first['patched']['artifact']['sha256'])
+                self.assertEqual(first['patched']['artifact']['sha256'], second['patched']['artifact']['sha256'])
+                self.assertEqual(second['patched']['artifact']['result_index'], 1)
+                request, raw = dao.evidence_store.read_artifact(second['patched']['artifact'])
+                self.assertEqual(raw['transaction']['transaction_info']['state_diff'][0]['raw'][0]['original'], f'0x{1:064x}')
+                self.assertEqual(validate_sequential_evidence(report, cache_root=root / 'cache')['status'], 'validated')
+
+    async def test_cross_block_execution_headers_allow_only_known_hashes_and_bind_execution_trace(self):
+        from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+        for hash_kind in ('execution', 'base', 'zero'):
+            with self.subTest(hash_kind=hash_kind), tempfile.TemporaryDirectory(prefix='attackpilot-sequence-header-') as temp:
+                root = Path(temp)
+                dao, transactions = self.make_dao(root)
+                simulate = dao.bundle_downloader.download.side_effect
+                async def provider_state_base_metadata(*, payload):
+                    results = await simulate(payload=payload)
+                    base_number = payload['simulations'][0]['block_number']
+                    for raw in results:
+                        header = raw['simulation']['block_header']
+                        raw['transaction']['block_number'] = base_number
+                        raw['transaction']['transaction_info']['call_trace']['block_number'] = header['number']
+                        if hash_kind == 'base':
+                            header['hash'] = f'0x{base_number:064x}'
+                        elif hash_kind == 'zero':
+                            header['hash'] = '0x' + '0' * 64
+                    return results
+                dao.bundle_downloader.download.side_effect = provider_state_base_metadata
+                _, report = await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+                self.assertEqual(validate_sequential_evidence(report, cache_root=root / 'cache')['status'], 'validated')
+                _, result = dao.evidence_store.read_artifact(report['transactions'][1]['control']['artifact'])
+                self.assertEqual(result['transaction']['block_number'], 100)
+                self.assertEqual(result['simulation']['block_header']['number'], 101)
+                self.assertEqual(result['transaction']['transaction_info']['call_trace']['block_number'], 101)
+
+    async def test_cross_block_header_trace_and_receipt_mismatches_still_reject(self):
+        from app.attackpilot.errors import HistoricalReplayValidationError
+        from app.attackpilot.utils.sequence_replay import resolve_sequence, sequence_payload, validate_sequence_result
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-header-') as temp:
+            dao, transactions = self.make_dao(Path(temp))
+            originals = resolve_sequence(dao.evidence_store, transactions[:2], 1)
+            base, context = originals[0][0], originals[1][0]
+            results = await dao.bundle_downloader.download(payload=sequence_payload(originals))
+            raw = results[1]
+            raw['simulation']['block_header']['hash'] = base['block_hash']
+            raw['transaction']['block_number'] = base['block_number']
+            raw['transaction']['transaction_info']['call_trace']['block_number'] = context['block_number']
+            self.assertEqual(validate_sequence_result(context, base, raw, control=True)['status'], 'validated')
+            for mutation in ('unrelated_hash', 'number', 'timestamp', 'trace_base', 'outer_block',
+                             'gas_used', 'status', 'logs'):
+                changed = deepcopy(raw)
+                header = changed['simulation']['block_header']
+                if mutation == 'unrelated_hash': header['hash'] = '0x' + 'f' * 64
+                elif mutation == 'number': header['number'] = base['block_number']
+                elif mutation == 'timestamp': header['timestamp'] = base['timestamp']
+                elif mutation == 'trace_base':
+                    changed['transaction']['transaction_info']['call_trace']['block_number'] = base['block_number']
+                elif mutation == 'outer_block': changed['transaction']['block_number'] = context['block_number'] + 1
+                elif mutation == 'gas_used': changed['simulation']['gas_used'] += 1
+                elif mutation == 'status':
+                    changed['simulation']['status'] = changed['transaction']['status'] = False
+                    changed['transaction']['transaction_info']['call_trace']['status'] = False
+                else:
+                    changed['transaction']['transaction_info']['logs'] = [
+                        {'address': self.address, 'topics': [], 'data': '0x'}]
+                with self.subTest(mutation=mutation), self.assertRaises(HistoricalReplayValidationError):
+                    validate_sequence_result(context, base, changed, control=True)
+
+    async def test_same_block_headers_accept_execution_or_zero_hash_but_not_unrelated_base_hash(self):
+        from app.attackpilot.errors import HistoricalReplayValidationError
+        from app.attackpilot.utils.sequence_replay import resolve_sequence, sequence_payload, validate_sequence_result
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-header-') as temp:
+            dao, transactions = self.make_dao(Path(temp), same_block=True)
+            originals = resolve_sequence(dao.evidence_store, transactions[:2], 1)
+            payload = sequence_payload(originals)
+            self.assertTrue(all('block_header' not in step for step in payload['simulations']))
+            base, context = originals[0][0], originals[1][0]
+            raw = (await dao.bundle_downloader.download(payload=payload))[1]
+            for block_hash in (context['block_hash'], '0x' + '0' * 64):
+                raw['simulation']['block_header']['hash'] = block_hash
+                self.assertEqual(validate_sequence_result(context, base, raw, control=True)['status'], 'validated')
+            unrelated_base = {**base, 'block_hash': '0x' + 'f' * 64}
+            raw['simulation']['block_header']['hash'] = unrelated_base['block_hash']
+            with self.assertRaises(HistoricalReplayValidationError):
+                validate_sequence_result(context, unrelated_base, raw, control=True)
+
+    async def test_control_failure_diagnostic_preserves_all_receipt_differences_and_the_artifact(self):
+        from app.attackpilot.errors import HistoricalReplayValidationError
+        for gas_differs in (True, False):
+            with self.subTest(gas_differs=gas_differs), tempfile.TemporaryDirectory(prefix='attackpilot-sequence-diagnostic-') as temp:
+                root = Path(temp)
+                dao, transactions = self.make_dao(root)
+                receipt_file = root / 'cache' / 'tx_detail' / 'tx_receipt' / (transactions[1]['hash'] + '.json')
+                saved_receipt = receipt_file.read_bytes()
+                simulate = dao.bundle_downloader.download.side_effect
+                async def mismatched_control(*, payload):
+                    self.assertNotIn('state_objects', payload['simulations'][0])
+                    results = await simulate(payload=payload)
+                    second = results[1]
+                    if gas_differs:
+                        second['simulation']['gas_used'] += 123
+                        second['transaction']['gas_used'] += 123
+                    second['transaction']['transaction_info']['logs'] = [
+                        {'address': self.address, 'topics': ['0x' + 'a' * 64], 'data': '0x1234'}]
+                    second['simulation']['provider_body'] = 'secret https://provider.invalid/private?token=secret'
+                    return results
+                dao.bundle_downloader.download.side_effect = mismatched_control
+                with self.assertRaises(HistoricalReplayValidationError) as caught:
+                    await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+                error = caught.exception
+                self.assertEqual(error.reason_code, 'execution_mismatch' if gas_differs else 'event_mismatch')
+                diagnostic = error.sequence_validation_diagnostic
+                self.assertEqual(error.replay_evidence['validation_failure'], diagnostic)
+                self.assertEqual(diagnostic['schema_version'], 1)
+                self.assertEqual((diagnostic['role'], diagnostic['sequence_index']), ('control', 1))
+                self.assertEqual(diagnostic['transaction_hash'], transactions[1]['hash'])
+                self.assertEqual(diagnostic['field'], 'sequence.simulation.receipt' if gas_differs else 'sequence.logs')
+                self.assertEqual(diagnostic['error_code'], error.reason_code)
+                self.assertEqual(diagnostic['state_base'], {'block_number': 100, 'transaction_index': 4})
+                self.assertEqual(diagnostic['execution_position'], {'block_number': 101, 'transaction_index': 4})
+                comparison = diagnostic['receipt_comparison']
+                self.assertFalse(comparison['events_match'])
+                self.assertEqual(comparison['gas_match'], not gas_differs)
+                self.assertTrue(comparison['status_match'])
+                self.assertEqual(comparison['expected']['gas_used'], 35000)
+                self.assertEqual(comparison['expected']['log_count'], 0)
+                self.assertEqual(comparison['transaction']['log_count'], 1)
+                self.assertNotEqual(comparison['expected']['ordered_logs_sha256'],
+                                    comparison['transaction']['ordered_logs_sha256'])
+                self.assertNotIn('secret', json.dumps(diagnostic))
+                self.assertNotIn('https', json.dumps(diagnostic))
+                self.assertNotIn('input', json.dumps(diagnostic))
+                self.assertEqual(dao.bundle_downloader.download.await_count, 1)
+                self.assertNotIn('patched', error.replay_evidence['sequence'])
+                reference = error.replay_evidence['sequence']['control']['artifact']
+                self.assertTrue((root / reference['relative_path']).is_file())
+                request, response = dao.evidence_store.read_artifact(reference, whole_response=True)
+                self.assertEqual(len(response['simulation_results']), 2)
+                self.assertIsNone(dao.evidence_store.cached_response(request))
+                self.assertEqual(receipt_file.read_bytes(), saved_receipt)
+
+    async def test_sequence_failure_diagnostic_parse_errors_do_not_mask_the_original_error(self):
+        from app.attackpilot.errors import HistoricalReplayValidationError
+        from app.attackpilot.utils.sequence_replay import resolve_sequence, sequence_payload, sequence_validation_diagnostic
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-diagnostic-') as temp:
+            dao, transactions = self.make_dao(Path(temp))
+            originals = resolve_sequence(dao.evidence_store, transactions[:2], 1)
+            base, context = originals[0][0], originals[1][0]
+            raw = (await dao.bundle_downloader.download(payload=sequence_payload(originals)))[1]
+            raw['simulation']['gas_used'] = 'secret-invalid-number'
+            raw['transaction']['gas_used'] += 1
+            raw['transaction']['transaction_info']['logs'] = {'secret': 'invalid-log-collection'}
+            error = HistoricalReplayValidationError('inconsistent', 'execution_mismatch',
+                                                    details={'field': 'sequence.simulation.receipt'})
+            diagnostic = sequence_validation_diagnostic(context, base, raw, role='control', index=1, error=error)
+            self.assertEqual(error.reason_code, 'execution_mismatch')
+            self.assertEqual(error.details, {'field': 'sequence.simulation.receipt'})
+            comparison = diagnostic['receipt_comparison']
+            self.assertIsNone(comparison['simulation']['gas_used'])
+            self.assertFalse(comparison['gas_match'])
+            self.assertIsNone(comparison['events_match'])
+            self.assertIsNone(comparison['transaction']['log_count'])
+            self.assertIsNone(comparison['transaction']['ordered_logs_sha256'])
+            self.assertNotIn('secret', json.dumps(diagnostic))
+
+    async def test_bundle_cache_reuse_consumes_no_new_request_reservations(self):
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+            dao, transactions = self.make_dao(Path(temp))
+            await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+            self.assertEqual(dao.estimate_replay_budget(transactions[:2], {self.address: self.runtime})['required_requests'], 0)
+            _, report = await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+            self.assertTrue(report['transactions'][1]['patched']['artifact']['reused'])
+            self.assertEqual(dao.bundle_downloader.download.await_count, 2)
+            self.assertEqual(dao.evidence_store.remaining_requests(), 6)
+
+    async def test_revert_stops_suffix_without_inventing_execution(self):
+        from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+            root = Path(temp)
+            dao, transactions = self.make_dao(root)
+            simulate = dao.bundle_downloader.download.side_effect
+            async def fail_first(*, payload):
+                result = await simulate(payload=payload)
+                if 'state_objects' in payload['simulations'][0]:
+                    result = result[:1]
+                    result[0]['simulation']['status'] = False
+                    result[0]['transaction']['status'] = False
+                    info = result[0]['transaction']['transaction_info']
+                    info['state_diff'] = []
+                    info['call_trace'].update(status=False, error='synthetic attack blocked', error_op='REVERT')
+                return result
+            dao.bundle_downloader.download.side_effect = fail_first
+            _, report = await dao.bundle_simulate_txs_in_tenderly(transactions, {self.address: self.runtime})
+            self.assertEqual(report['sequence']['patched']['stopped_at'], 0)
+            self.assertEqual(report['transactions'][1]['patched']['status'], 'not_executed')
+            self.assertFalse(report['transactions'][2]['patched']['completed'])
+            check = validate_sequential_evidence(report, cache_root=root / 'cache')
+            self.assertEqual(check['status'], 'validated')
+            self.assertFalse(check['patched_complete'])
+
+    async def test_sequence_artifact_and_context_tampering_cannot_validate(self):
+        from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+            root = Path(temp)
+            dao, transactions = self.make_dao(root)
+            _, report = await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+            for mutation in ('index', 'context', 'order', 'suffix', 'gas', 'request_digest'):
+                changed = deepcopy(report)
+                if mutation == 'index': changed['transactions'][1]['patched']['artifact']['result_index'] = 0
+                elif mutation == 'context': changed['sequence']['base_context']['transaction_index'] += 1
+                elif mutation == 'order': changed['transactions'].reverse()
+                elif mutation == 'suffix': changed['sequence']['patched']['executed_count'] = 1
+                elif mutation == 'gas': changed['transactions'][1]['patched']['gas_used'] += 1
+                else: changed['sequence']['patched']['artifact']['request_digest'] = '0' * 64
+                with self.subTest(mutation=mutation):
+                    self.assertNotEqual(validate_sequential_evidence(changed, cache_root=root / 'cache')['status'], 'validated')
+            reference = report['transactions'][0]['patched']['artifact']
+            artifact = root / reference['relative_path']
+            artifact.write_bytes(artifact.read_bytes() + b' ')
+            self.assertNotEqual(validate_sequential_evidence(report, cache_root=root / 'cache')['status'], 'validated')
+
+    async def test_rebased_patched_state_and_post_revert_results_are_rejected(self):
+        for mutation in ('state_reset', 'post_revert', 'header_ignored'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+                dao, transactions = self.make_dao(Path(temp))
+                simulate = dao.bundle_downloader.download.side_effect
+                async def corrupt(*, payload):
+                    results = await simulate(payload=payload)
+                    if 'state_objects' in payload['simulations'][0]:
+                        if mutation == 'state_reset':
+                            results[1]['transaction']['transaction_info']['state_diff'][0]['raw'][0]['original'] = '0x' + '0' * 64
+                        elif mutation == 'header_ignored':
+                            results[1]['simulation']['block_header']['number'] = 100
+                        else:
+                            results[0]['simulation']['status'] = results[0]['transaction']['status'] = False
+                    return results
+                dao.bundle_downloader.download.side_effect = corrupt
+                with self.assertRaises(Exception):
+                    await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+
+    async def test_normal_cases_use_separate_sequences_and_share_the_same_patch(self):
+        from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+            root = Path(temp)
+            dao, transactions = self.make_dao(root)
+            plan = self.plan(transactions)
+            budget = dao.estimate_replay_budget(transactions[:2], {self.address: self.runtime}, plan)
+            self.assertEqual(budget['planned_requests'], 4)
+            _, report = await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime}, verification_plan=plan)
+            self.assertEqual(dao.bundle_downloader.download.await_count, 4)
+            self.assertEqual(report['normal_regression']['transaction_count'], 1)
+            self.assertEqual(len(report['normal_regression']['cases'][0]['transactions']), 1)
+            self.assertEqual(validate_sequential_evidence(report, cache_root=root / 'cache')['status'], 'validated')
+
+    async def test_entire_round_budget_and_identity_checked_before_first_remote_request(self):
+        from app.attackpilot.utils.patch_replay import PatchReplayBudgetError
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+            root = Path(temp)
+            dao, transactions = self.make_dao(root)
+            for index in range(7):
+                dao.evidence_store.reserve_request({'synthetic_reservation': index})
+            with self.assertRaises(PatchReplayBudgetError):
+                await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime})
+            dao.bundle_downloader.download.assert_not_awaited()
+            self.assertEqual(dao.evidence_store.remaining_requests(), 1)
+            with self.assertRaises(Exception):
+                await dao.bundle_simulate_txs_in_tenderly(list(reversed(transactions)), {self.address: self.runtime})
+            dao.bundle_downloader.download.assert_not_awaited()
+
+    async def test_tail_getter_probes_execute_after_stateful_transactions_and_bind_raw_outputs(self):
+        from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+            root = Path(temp)
+            dao, transactions = self.make_dao(root)
+            plan = self.plan(transactions, normal=False, probe=True)
+            _, report = await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime}, verification_plan=plan)
+            descriptor = report['sequence']['patched']
+            self.assertEqual((descriptor['requested_count'], descriptor['transaction_count'], descriptor['probe_count']), (3, 2, 1))
+            probes = report['transactions'][-1]['patched']['security_probes']
+            self.assertEqual(probes[0]['artifact']['result_index'], 2)
+            self.assertEqual(probes[0]['output'], f'0x{1:064x}')
+            self.assertEqual(validate_sequential_evidence(report, cache_root=root / 'cache')['status'], 'validated')
+            changed = deepcopy(report)
+            changed['transactions'][-1]['patched']['security_probes'][0]['output'] = f'0x{9:064x}'
+            self.assertNotEqual(validate_sequential_evidence(changed, cache_root=root / 'cache')['status'], 'validated')
+
+    async def test_normal_regression_rejects_original_contract_from_another_code_version(self):
+        from app.attackpilot.utils.patch_replay import validate_sequential_evidence
+        for wrong in (False, True):
+            with self.subTest(wrong_version=wrong), tempfile.TemporaryDirectory(prefix='attackpilot-sequence-') as temp:
+                root = Path(temp)
+                dao, transactions = self.make_dao(root)
+                simulate = dao.bundle_downloader.download.side_effect
+                async def versioned(*, payload):
+                    results = await simulate(payload=payload)
+                    if wrong and payload['simulations'][0]['input'] == '0x00000003' and 'state_objects' not in payload['simulations'][0]:
+                        results[0]['contracts'][0]['deployed_bytecode'] = '0x00'
+                    return results
+                dao.bundle_downloader.download.side_effect = versioned
+                _, report = await dao.bundle_simulate_txs_in_tenderly(transactions[:2], {self.address: self.runtime},
+                                                                      verification_plan=self.plan(transactions))
+                report['runtime_integrity'] = {'contracts': {self.address: {
+                    'original_runtime_sha256': hashlib.sha256(bytes.fromhex(self.original_runtime[2:])).hexdigest(),
+                    'patched_runtime_sha256': hashlib.sha256(bytes.fromhex(self.runtime[2:])).hexdigest()}}}
+                checked = validate_sequential_evidence(report, cache_root=root / 'cache')
+                self.assertEqual(checked['status'] == 'validated', not wrong)
+
+    async def test_durable_sequence_semantics_report_and_completed_workflow_share_one_gate(self):
+        await self.assert_durable_workflow_scope(normal=True)
+
+    async def test_attack_only_scope_passes_durable_replay_report_and_completed_workflow(self):
+        await self.assert_durable_workflow_scope(normal=False)
+
+    async def test_native_comparison_survives_durable_verdict_report_and_completion_checks(self):
+        await self.assert_durable_workflow_scope(normal=False, native=True)
+
+    async def test_saved_native_comparison_reads_immutable_sources_without_changing_defense_or_storage(self):
+        await self.assert_durable_workflow_scope(normal=True, native=True, saved=True)
+
+    async def assert_durable_workflow_scope(self, *, normal, native=False, saved=False):
+        from app.attackpilot import settings, workflow
+        from app.attackpilot.errors import AgentContractError
+        from app.attackpilot.utils.report_evidence import render_verification_summary
+        with tempfile.TemporaryDirectory(prefix='attackpilot-sequence-live-gate-') as temp:
+            root = Path(temp)
+            dao, transactions = self.make_dao(root)
+            simulate = dao.bundle_downloader.download.side_effect
+            async def preserve_normal(*, payload):
+                results = await simulate(payload=payload)
+                if payload['simulations'][0]['input'] == '0x00000003' and 'state_objects' in payload['simulations'][0]:
+                    results[0]['transaction']['transaction_info']['state_diff'][0]['raw'][0]['dirty'] = f'0x{2:064x}'
+                if native:
+                    delta = -35000 if 'state_objects' in payload['simulations'][0] else 9007199254740993
+                    for index, raw in enumerate(results):
+                        if raw['transaction'].get('input') not in ('0x00000001', '0x00000002', '0x00000003'):
+                            continue
+                        before = 10 ** 24 + index * delta
+                        records = [{'address': f'0x{number:040x}', 'original': '0', 'dirty': '0'}
+                                   for number in range(25)]
+                        records.append({'address': raw['transaction']['from'],
+                                        'original': str(before), 'dirty': str(before + delta)})
+                        raw['transaction']['transaction_info']['balance_diff'] = records
+                return results
+            dao.bundle_downloader.download.side_effect = preserve_normal
+            plan = self.plan(transactions, normal=normal, probe=True)
+            _, replay = await dao.bundle_simulate_txs_in_tenderly(
+                transactions[:2], {self.address: self.runtime}, verification_plan=plan)
+            patches = (f'# File: {self.address}::Vault.sol\n<<<<<<< SEARCH\n'
+                       'uint amount = requested;\n=======\nuint amount = allowed;\n>>>>>>> REPLACE')
+            patch_digest = hashlib.sha256(patches.encode()).hexdigest()
+            replay.update(applied_patch_sha256=patch_digest,
+                          required_trigger_transaction_hashes=[item['hash'] for item in transactions[:2]],
+                          patch_attribution={'status': 'unavailable', 'reason_code': 'modified_guard_missing'},
+                          runtime_integrity={'schema_version': 1, 'status': 'validated',
+                              'applied_patch_sha256': patch_digest, 'contracts': {self.address: {
+                                  'original_runtime_sha256': hashlib.sha256(bytes.fromhex(self.original_runtime[2:])).hexdigest(),
+                                  'original_compiled_runtime_sha256': hashlib.sha256(bytes.fromhex(self.original_runtime[2:])).hexdigest(),
+                                  'patched_runtime_sha256': hashlib.sha256(bytes.fromhex(self.runtime[2:])).hexdigest(),
+                                  'storage_layout_checked': True, 'immutable_checked': True}}})
+            dapp = {'name': 'Synthetic continuous business verification', 'platform': 'Ethereum',
+                    'transaction_hash': [item['hash'] for item in transactions[:2]],
+                    'enabled_modules': sorted(workflow.DEFAULT_ENABLED_MODULES), 'verification_plan': deepcopy(plan)}
+            baselines = {}
+            for pair in replay['transactions']:
+                baseline = deepcopy(pair['control']['baseline_validation'])
+                # This synthetic fixture also supplies the separately established
+                # historical-analysis baseline required at task completion.
+                baseline['method'] = 'rpc_receipt_vs_tenderly_original_replay'
+                baselines[pair['original_transaction_hash']] = baseline
+            with patch.object(settings, 'CACHE_DIR', root / 'cache'), patch.object(workflow, 'WORK_ROOT', root):
+                state = adjudicate_patch_verification({'verdict': 'VERIFIED'}, replay, patches)
+                self.assertEqual(state['status'], 'verified', state)
+                self.assertEqual(state['scope'], 'declared_attack_chain_and_normal_cases' if normal else 'declared_attack_chain')
+                evidence = report_evidence({'verdict': 'VERIFIED', 'verification': state}, replay)
+                self.assertTrue(evidence['evidence_trusted'])
+                report = render_verification_summary(evidence)
+                self.assertEqual(state['dimensions']['profit']['status'], 'available' if native else 'unavailable')
+                # The final decision is established by immutable execution
+                # evidence. Model labels remain recorded explanations and
+                # cannot veto a fully measured pass or stand in for a check.
+                for advisory in ('UNVERIFIED', 'INEFFECTIVE_PATCH', 'WRONG_ROOT_CAUSE', 'BROKEN_LOGIC', None):
+                    with self.subTest(advisory=advisory):
+                        model_explanation = {} if advisory is None else {'verdict': advisory}
+                        decided = adjudicate_patch_verification(model_explanation, replay, patches)
+                        self.assertEqual(decided['status'], 'verified', decided)
+                        self.assertEqual(decided['decision_authority'], 'validated_execution_evidence')
+                        self.assertEqual(decided['judge_verdict'], advisory)
+                        self.assertEqual(decided['next_action'], 'complete')
+                        self.assertTrue(decided['terminal'])
+                        presented = report_evidence({'verdict': advisory, 'verification': decided}, replay)
+                        self.assertTrue(presented['evidence_trusted'])
+                        self.assertEqual(presented['verification']['status'], 'verified')
+                if native:
+                    profit = state['dimensions']['profit']
+                    self.assertEqual(evidence['verification']['dimensions']['profit'], profit)
+                    self.assertEqual(len(profit['transactions']), 2)
+                    self.assertTrue(all(row['control']['delta_wei'] == '9007199254740993'
+                                        and row['patched']['delta_wei'] == '-35000'
+                                        for row in profit['transactions']))
+                    self.assertIn('原生币收益对比', report)
+                    # A dissenting model cannot erase the independently
+                    # measured pass or the recorded native balance changes.
+                    unresolved = adjudicate_patch_verification({'verdict': 'INEFFECTIVE_PATCH'}, replay, patches)
+                    self.assertEqual(unresolved['status'], 'verified')
+                    self.assertEqual(unresolved['judge_verdict'], 'INEFFECTIVE_PATCH')
+                    self.assertEqual(unresolved['dimensions']['profit'], profit)
+                result = {'report': report, 'verification': state, 'replay_evidence': replay,
+                          'applied_patches': patches, 'report_policy_version': workflow.REPORT_POLICY_VERSION,
+                          'request_fingerprint': workflow.request_fingerprint(dapp),
+                          'enabled_modules': dapp['enabled_modules'],
+                          'baseline_validation': {'schema_version': 1, 'transactions': baselines}}
+                workflow.validate_completed_result(dapp, result, report)
+                for advisory in ('UNVERIFIED', 'INEFFECTIVE_PATCH', None):
+                    decided_result = deepcopy(result)
+                    decided_result['verification'] = adjudicate_patch_verification(
+                        {'verdict': advisory}, replay, patches)
+                    decided_result['report'] = render_verification_summary(report_evidence(
+                        {'verdict': advisory, 'verification': decided_result['verification']}, replay))
+                    with self.subTest(completed_with_advisory=advisory):
+                        workflow.validate_completed_result(dapp, decided_result, decided_result['report'])
+                if native:
+                    unresolved_result = deepcopy(result)
+                    unresolved_result['verification'] = deepcopy(unresolved)
+                    unresolved_result['report'] = render_verification_summary(report_evidence(
+                        {'verdict': 'INEFFECTIVE_PATCH', 'verification': unresolved}, replay))
+                    workflow.validate_completed_result(dapp, unresolved_result, unresolved_result['report'])
+                    for mutation in ('delta', 'artifact'):
+                        changed_unresolved = deepcopy(unresolved_result)
+                        if mutation == 'delta':
+                            changed_unresolved['verification']['dimensions']['profit'][
+                                'transactions'][0]['patched']['delta_wei'] = '0'
+                        else:
+                            changed_unresolved['replay_evidence']['transactions'][0]['patched'][
+                                'artifact']['sha256'] = '0' * 64
+                        with self.subTest(unverified_profit_mutation=mutation), self.assertRaises(AgentContractError):
+                            workflow.validate_completed_result(dapp, changed_unresolved, changed_unresolved['report'])
+                if saved:
+                    self.assert_saved_native_scope(root, replay, result, unresolved, dapp)
+                if native:
+                    changed = deepcopy(result)
+                    changed['verification']['dimensions']['profit']['transactions'][0]['patched']['delta_wei'] = '0'
+                    # Rendering recovers the bound replay measurements rather
+                    # than trusting a forged presentation dimension.
+                    rendered = report_evidence({'verdict': 'VERIFIED', 'verification': changed['verification']}, replay)
+                    self.assertEqual(rendered['verification']['dimensions']['profit'], profit)
+                    with self.assertRaises(AgentContractError):
+                        workflow.validate_completed_result(dapp, changed, report)
+                for mutation in (*(['normal_result'] if normal else []),
+                                 *(['native_measurement'] if native else []), 'getter_output', 'plan_threshold'):
+                    changed = deepcopy(result)
+                    altered = changed['replay_evidence']
+                    if mutation == 'normal_result':
+                        altered['normal_regression']['cases'][0]['transactions'][0]['patched']['gas_used'] += 1
+                    elif mutation == 'getter_output':
+                        altered['transactions'][-1]['patched']['security_probes'][0]['output'] = f'0x{9:064x}'
+                    elif mutation == 'native_measurement':
+                        measurement = altered['transactions'][0]['patched']['native_balance_change']
+                        measurement.update(after_wei=measurement['before_wei'], delta_wei='0')
+                    else:
+                        altered['verification_plan']['security_properties'][0]['expected'] = f'0x{9:064x}'
+                    with self.subTest(mutation=mutation):
+                        rejected = adjudicate_patch_verification({'verdict': 'VERIFIED'}, altered, patches)
+                        self.assertNotEqual(rejected['status'], 'verified')
+                        self.assertFalse(report_evidence({'verdict': 'VERIFIED', 'verification': state}, altered)['evidence_trusted'])
+                        with self.assertRaises(AgentContractError):
+                            workflow.validate_completed_result(dapp, changed, changed['report'])
+            self.assertEqual(dao.bundle_downloader.download.await_count, 4 if normal else 2)
+
+    def assert_saved_native_scope(self, root, replay, result, unresolved, dapp):
+        from app.attackpilot.store import public_task
+        from app.attackpilot.utils.native_profit import build_saved_native_profit_evidence
+        from app.attackpilot.utils.verification import replay_evidence_digest
+
+        unavailable = {'status': 'unavailable', 'usd': None}
+        legacy = deepcopy(replay)
+        groups = [legacy, *legacy['normal_regression']['cases']]
+        for group in groups:
+            for pair in group['transactions']:
+                for role in ('control', 'patched'):
+                    pair[role].pop('native_balance_change', None)
+                    pair[role]['trace']['policy_version'] = 5
+        # The old extractor could not observe the fee payer after a revert.
+        # Reading native metrics may refresh derived observations in memory,
+        # while preserving this historical evidence and its defense verdict.
+        legacy['transactions'][0]['patched']['security_observations'] = {
+            'schema_version': 1, 'status': 'unavailable', 'observations': []}
+        original = deepcopy(legacy)
+        files = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+                 for path in root.rglob('*') if path.is_file()}
+        measured = build_saved_native_profit_evidence(legacy, root / 'cache')
+        self.assertEqual(measured['status'], 'available')
+        self.assertEqual(measured['replay_evidence_sha256'], replay_evidence_digest(legacy))
+        self.assertEqual(measured['transactions'], unresolved['dimensions']['profit']['transactions'])
+        self.assertEqual(legacy, original)
+        self.assertEqual(files, {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+                                 for path in root.rglob('*') if path.is_file()})
+
+        # Native metrics can be missing even with the current trace parser.
+        # Current traces still undergo exact comparison; compatibility is
+        # restricted to the recognized previous parser policy.
+        from app.attackpilot.utils.patch_replay import TRACE_SUMMARY_POLICY_VERSION
+        current_trace = deepcopy(legacy)
+        for group in [current_trace, *current_trace['normal_regression']['cases']]:
+            for pair in group['transactions']:
+                for role in ('control', 'patched'):
+                    pair[role]['trace']['policy_version'] = TRACE_SUMMARY_POLICY_VERSION
+        self.assertEqual(build_saved_native_profit_evidence(current_trace, root / 'cache')['status'],
+                         'available')
+        current_trace['transactions'][0]['patched']['trace']['call_targets'] = []
+        self.assertEqual(build_saved_native_profit_evidence(current_trace, root / 'cache'), unavailable)
+
+        old_state = deepcopy(unresolved)
+        # This stored result predates execution-based final decisions. Native
+        # hydration alone preserves that historical status; the migration
+        # path independently decides whether to refresh the final verdict.
+        old_state.update(status='unverified', evidence_validated=False, reason_code='judge_unresolved',
+                         reason='Historical model label remained unresolved.',
+                         next_action='review_same_evidence', terminal=False, retryable=True)
+        old_state['replay_evidence_sha256'] = replay_evidence_digest(legacy)
+        old_state['dimensions']['profit'] = unavailable
+        displayed = report_evidence({'verdict': 'INEFFECTIVE_PATCH', 'verification': old_state}, legacy,
+                                    cache_root=root / 'cache')['verification']
+        self.assertEqual(displayed['status'], 'unverified')
+        self.assertEqual(displayed['reason_code'], old_state['reason_code'])
+        self.assertEqual(displayed['dimensions']['profit'], measured)
+        task = {'task_id': '12345678-1234-4234-8234-123456789abc', 'is_demo': False, 'payload': dapp,
+                'result': {**result, 'verification': old_state, 'replay_evidence': legacy}}
+        saved_task = deepcopy(task)
+        with patch('app.attackpilot.store.task_dir', return_value=root) as task_path:
+            public = public_task(task)
+        task_path.assert_called_once_with(task['task_id'])
+        self.assertEqual(public['result']['verification']['status'], 'unverified')
+        self.assertEqual(public['result']['verification']['dimensions']['profit'], measured)
+        self.assertEqual(task, saved_task)
+        invalid_binding = deepcopy(old_state)
+        invalid_binding['replay_evidence_sha256'] = '0' * 64
+        self.assertEqual(report_evidence({'verification': invalid_binding}, legacy, cache_root=root / 'cache')[
+            'verification']['dimensions']['profit'], unavailable)
+
+        for mutation in ('sender', 'network', 'hash', 'artifact', 'request', 'index', 'status', 'gas',
+                         'trace', 'plan', 'pair_missing', 'already_has_native'):
+            with self.subTest(saved_source_mutation=mutation):
+                changed = deepcopy(legacy)
+                pair = changed['transactions'][0]
+                execution = pair['patched']
+                if mutation == 'sender':
+                    pair['context']['from'] = '0x' + 'f' * 40
+                elif mutation == 'network':
+                    pair['context']['network_id'] = '56'
+                elif mutation == 'hash':
+                    pair['original_transaction_hash'] = '0x' + 'f' * 64
+                elif mutation == 'artifact':
+                    execution['artifact']['sha256'] = '0' * 64
+                elif mutation == 'request':
+                    execution['artifact']['request_digest'] = '0' * 64
+                elif mutation == 'index':
+                    execution['artifact']['result_index'] = 1
+                elif mutation == 'status':
+                    execution['status'] = 'revert'
+                elif mutation == 'gas':
+                    execution['gas_used'] += 1
+                elif mutation == 'trace':
+                    execution['trace']['policy_version'] = -1
+                elif mutation == 'plan':
+                    changed['verification_plan']['attack_transaction_hashes'].reverse()
+                elif mutation == 'pair_missing':
+                    changed['transactions'].pop()
+                else:
+                    execution['native_balance_change'] = {'schema_version': 1, 'status': 'available'}
+                self.assertEqual(build_saved_native_profit_evidence(changed, root / 'cache'), unavailable)
+        path = root / legacy['transactions'][0]['patched']['artifact']['relative_path']
+        source = path.read_bytes()
+        try:
+            path.write_bytes(source + b'\n')
+            self.assertEqual(build_saved_native_profit_evidence(legacy, root / 'cache'), unavailable)
+        finally:
+            path.write_bytes(source)
+        missing = root / 'missing-native-cache'
+        self.assertEqual(build_saved_native_profit_evidence(legacy, missing), unavailable)
+        self.assertFalse(missing.exists())
+        self.assertEqual(build_saved_native_profit_evidence(legacy, []), unavailable)
+        self.assertEqual(files, {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+                                 for path in root.rglob('*') if path.is_file()})
+
+
 class PatchSourceRecoveryTests(unittest.IsolatedAsyncioTestCase):
     address = '0x' + '8' * 40
     hashes = ['0x' + digit * 64 for digit in 'cd']
@@ -1256,6 +2828,9 @@ class PatchSourceRecoveryTests(unittest.IsolatedAsyncioTestCase):
         session.loader = (SimpleNamespace(apikey_bucket=Mock(get=AsyncMock(return_value='offline-source-key')))
                           if configured else None)
         agent = object.__new__(FixAgent)
+        agent.chain_id = 1
+        agent.processed_data = {'dapp': {'platform': 'Ethereum'},
+                                'transaction_hash_list': list(self.hashes)}
         agent._check_cancelled = Mock(); agent.session_id = 'offline-source-refresh'
         agent.metrics_collector = None; agent.logger = Mock()
         agent._replay_selection = Mock()
@@ -1282,6 +2857,32 @@ class PatchSourceRecoveryTests(unittest.IsolatedAsyncioTestCase):
     def fault_data(self):
         return {'fix_report': {'faulty_functions': [{'trigger_point': {
             'transaction_hash': self.hashes[0], 'index': 0}}]}}
+
+    async def test_verified_source_bytes_reach_compilation_unchanged(self):
+        source = ' \r\n// 保留源码字节\r\n' + self.source + '\r\n\t'
+        response = self.source_response()
+        responses = [
+            {**response, 'SourceCode': source},
+            {**response, 'SourceCode': ' \r\n{' + json.dumps({
+                'language': 'Solidity', 'sources': {'Synthetic.sol': {'content': source}},
+                'settings': {'metadata': {'useLiteralContent': True}},
+            }) + '}\r\n\t'},
+        ]
+        for verified in responses:
+            with self.subTest(structured=verified['SourceCode'].lstrip().startswith('{')):
+                original = deepcopy(verified)
+                async with self.scenario([verified]) as case:
+                    outcome = await case.agent.handle(self.fault_data())
+
+                    self.assertFalse(outcome[0])
+                    self.assertEqual(case.agent.verification['reason_code'], 'compiler_unavailable')
+                    entity = case.agent._load_compile_result.call_args.args[0][self.address]
+                    self.assertEqual(entity.sources['Synthetic.sol'].encode('utf-8'), source.encode('utf-8'))
+                    self.assertEqual(case.trees[self.hashes[0]].contracts[
+                        self.address].contract_info[0]['source'], source)
+                    self.assertEqual(verified, original)
+                    case.agent.query.assert_not_awaited()
+                    case.agent.run_patch_verification_from_tenderly.assert_not_awaited()
 
     async def test_empty_placeholder_source_recovers_without_changing_metadata_or_historical_evidence(self):
         from app.attackpilot.entities.contract import ContractEntity
@@ -1636,6 +3237,7 @@ class PatchCompilerRegressionTests(unittest.IsolatedAsyncioTestCase):
         from app.attackpilot.agents.FixAgent import FixAgent
 
         agent = FixAgent.__new__(FixAgent)
+        agent.chain_id = 1
         agent._check_cancelled = Mock()
         agent.session_id = 'offline-compiler-test'
         agent.metrics_collector = None
@@ -2149,7 +3751,7 @@ class ReportDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(fixture.transaction_hash, report)
                 self.assertIn(hypothesis['final_trace'], report)
                 self.assertIn(fixture.patches, report)
-                self.assertIn('正常功能回归 | 未执行', report)
+                self.assertNotRegex(report, '正常功能|正常业务')
                 self.assertIn('整条攻击链顺序回放 | 未验证', report)
                 self.assertNotIn('private model endpoint', report)
                 self.assertEqual(agent.report_generation, {
@@ -2158,6 +3760,12 @@ class ReportDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 })
                 self.assertEqual(state['status'], 'verified' if verified else 'unverified')
                 agent.query.assert_awaited_once()
+                prompt = agent.query.await_args.args[0]
+                self.assertIn('Keep this report focused on the supplied attack transactions', prompt)
+                self.assertIn('Do not add normal-function regression sections, missing-normal-case warnings,', prompt)
+                self.assertIn('Report missing attack-replay evidence explicitly.', prompt)
+                self.assertNotIn('normal-path coverage', prompt)
+                self.assertNotIn('Only dimensions.normal_regression', prompt)
 
     async def test_empty_or_unusable_prose_uses_complete_prior_analysis(self):
         tx = '0x' + '5' * 64
@@ -2664,3 +4272,228 @@ class ResultIntegrityTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(delivered['report_generation']['status'], 'evidence_fallback')
             self.assertIn('触发交易拦截通过', delivered['report'])
             memory.query.assert_awaited_once()
+
+
+class GenericRevertMarkerTests(unittest.TestCase):
+    """Bare REVERT source markers must not obscure an observed contract call."""
+
+    address = '0x' + '1' * 40
+
+    def bare_revert(self):
+        marker = {
+            'input': '0x', 'output': '0x', 'caller_op': '', 'function_op': '',
+            'gas': 0, 'gas_used': 0, 'caller_pc': 0, 'function_pc': 0,
+            'error': 'execution reverted', 'error_op': 'REVERT', 'calls': None,
+            'address': self.address, 'from': self.address, 'to': self.address,
+            'absolute_position': 1415,
+        }
+        return {
+            'call_type': 'CALL', 'to': self.address, 'input': '0x', 'output': '0x',
+            'error': 'execution reverted', 'error_op': 'REVERT',
+            'absolute_position': 1416, 'error_absolute_position': 1415,
+            'gas': 3259609, 'gas_used': 32928, 'calls': [marker],
+        }
+
+    def test_terminal_empty_data_marker_keeps_call_trace_complete(self):
+        summary = trace_summary({'call_trace': self.bare_revert()}, [self.address],
+                                execution_status=0)
+        self.assertTrue(summary['complete'])
+        self.assertTrue(summary['call_targets_complete'])
+        self.assertEqual(summary['call_targets'], [self.address])
+        self.assertEqual(summary['issues'], [])
+        self.assertEqual(len(summary['reverted_calls']), 1)
+        call = summary['reverted_calls'][0]
+        self.assertEqual(call['path'], [])
+        self.assertEqual(call['error_op'], 'REVERT')
+        self.assertEqual(call['revert_reason'], 'execution reverted')
+        self.assertTrue(call['failure_confirmed'])
+
+    def test_empty_data_marker_rejects_missing_or_conflicting_terminal_evidence(self):
+        mutations = {
+            'parent_nonempty_output': lambda parent, marker: parent.update(output='0x00'),
+            'arbitrary_matching_error': lambda parent, marker: (
+                parent.update(error='custom failure'), marker.update(error='custom failure')),
+            'different_error': lambda parent, marker: marker.update(error='other failure'),
+            'parent_not_revert': lambda parent, marker: parent.update(error_op='INVALID'),
+            'successful_parent': lambda parent, marker: parent.update(status=True),
+            'successful_marker': lambda parent, marker: marker.update(status=True),
+            'nonzero_gas': lambda parent, marker: marker.update(gas=1),
+            'nonzero_gas_used': lambda parent, marker: marker.update(gas_used=1),
+            'nonzero_caller_pc': lambda parent, marker: marker.update(caller_pc=1),
+            'nonzero_function_pc': lambda parent, marker: marker.update(function_pc=1),
+            'marker_has_input': lambda parent, marker: marker.update(input='0x12'),
+            'marker_has_output': lambda parent, marker: marker.update(output='0x12'),
+            'marker_has_children': lambda parent, marker: marker.update(calls=[]),
+            'marker_call_opcode': lambda parent, marker: marker.update(caller_op='CALL'),
+            'different_address': lambda parent, marker: marker.update(to='0x' + '2' * 40),
+            'different_position': lambda parent, marker: marker.update(absolute_position=1414),
+            'parent_not_adjacent': lambda parent, marker: parent.update(absolute_position=1417),
+            'missing_parent_error_position': lambda parent, marker: parent.pop('error_absolute_position'),
+            'partial_source_coordinates': lambda parent, marker: marker.update(error_line_number=1),
+            'truncated_marker': lambda parent, marker: marker.update(truncated=True),
+            'marker_not_terminal': lambda parent, marker: parent['calls'].append({
+                'type': 'SLOAD', 'calls': None}),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(mutation=name):
+                parent = self.bare_revert()
+                mutate(parent, parent['calls'][0])
+                summary = trace_summary({'call_trace': parent}, [self.address], execution_status=0)
+                self.assertFalse(summary['complete'])
+                self.assertIn({'code': 'unrecognized_untyped_node', 'path': [0]},
+                              summary['issues'])
+
+
+class VerificationPlanBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    TX = '0x' + 'd' * 64
+    ACCOUNT = '0x' + 'e' * 40
+
+    def fixture(self, directory):
+        cache = Path(directory) / 'cache'
+        cache.mkdir()
+        raw = b'{"observation":"synthetic immutable evidence"}'
+        (cache / 'observed.json').write_bytes(raw)
+        return cache, {
+            'schema_version': 1, 'network_id': 1, 'attack_transaction_hashes': [self.TX],
+            'authority': {'kind': 'investigation_derived', 'reference': 'observed synthetic execution',
+                          'evidence_refs': [{'path': 'cache/observed.json', 'sha256': hashlib.sha256(raw).hexdigest()}]},
+            'security_properties': [{'id': 'balance', 'kind': 'native_balance', 'account': self.ACCOUNT,
+                'operator': 'delta_gte', 'expected': '0', 'rationale': 'declared protected balance',
+                'transaction_hashes': [self.TX]}],
+            'normal_regression_cases': None,
+        }
+
+    def test_model_integer_network_and_path_alias_canonicalize_without_inventing_samples(self):
+        from app.attackpilot.utils.security_checks import resolve_task_verification_plan
+        from app.attackpilot.agents.FixAgent import FixAgent
+        from app.attackpilot import settings
+        with tempfile.TemporaryDirectory(prefix='attackpilot-plan-boundary-') as directory:
+            cache, plan = self.fixture(directory)
+            original = deepcopy(plan)
+            resolved = resolve_task_verification_plan(plan, network_id=1, transaction_hashes=[self.TX], cache_root=cache)
+            self.assertEqual(resolved['network_id'], '1')
+            self.assertEqual(resolved['authority']['evidence_refs'][0]['reference'], 'cache/observed.json')
+            self.assertNotIn('path', resolved['authority']['evidence_refs'][0])
+            self.assertEqual(resolved['normal_regression_cases'], [])
+            self.assertEqual(resolved['security_properties'], plan['security_properties'])
+            self.assertEqual(plan, original)
+            patcher = object.__new__(FixAgent)
+            patcher.chain_id = 1
+            patcher.processed_data = {'dapp': {'platform': 'Ethereum'}, 'transaction_hash_list': [self.TX]}
+            with patch.object(settings, 'CACHE_DIR', str(cache)):
+                self.assertEqual(patcher._resolve_verification_plan({'verification_plan': plan}), resolved)
+
+    def test_network_identity_stays_strict_for_wrong_chains_floats_and_booleans(self):
+        from app.attackpilot.utils.security_checks import resolve_task_verification_plan, verification_plan_diagnostic
+        with tempfile.TemporaryDirectory(prefix='attackpilot-plan-boundary-') as directory:
+            cache, base = self.fixture(directory)
+            for network in (True, False, 1.0, 0, -1, 'Ethereum', '1.0', 56, '56'):
+                with self.subTest(network=network):
+                    plan = deepcopy(base); plan['network_id'] = network
+                    with self.assertRaises(ValueError) as caught:
+                        resolve_task_verification_plan(plan, network_id=1, transaction_hashes=[self.TX], cache_root=cache)
+                    expected = 'network_id_mismatch' if network in (56, '56') else 'network_id_invalid'
+                    self.assertEqual(verification_plan_diagnostic(caught.exception)['code'], expected)
+
+    def test_reference_alias_conflict_and_untrusted_file_evidence_still_rejected(self):
+        from app.attackpilot.utils.security_checks import resolve_task_verification_plan, verification_plan_diagnostic
+        changes = {'conflict': 'reference_conflict', 'missing': 'evidence_unavailable',
+                   'wrong_digest': 'evidence_hash_mismatch', 'traversal': 'reference_invalid',
+                   'symlink': 'evidence_unavailable'}
+        for change, code in changes.items():
+            with self.subTest(change=change), tempfile.TemporaryDirectory(prefix='attackpilot-plan-boundary-') as directory:
+                cache, plan = self.fixture(directory)
+                ref = plan['authority']['evidence_refs'][0]
+                if change == 'conflict': ref['reference'] = 'cache/different.json'
+                elif change == 'missing': (cache / 'observed.json').unlink()
+                elif change == 'wrong_digest': ref['sha256'] = '0' * 64
+                elif change == 'traversal': ref['path'] = 'cache/../observed.json'
+                else:
+                    (cache / 'real.json').write_bytes((cache / 'observed.json').read_bytes())
+                    (cache / 'observed.json').unlink(); (cache / 'observed.json').symlink_to(cache / 'real.json')
+                with self.assertRaises(ValueError) as caught:
+                    resolve_task_verification_plan(plan, network_id=1, transaction_hashes=[self.TX], cache_root=cache)
+                self.assertEqual(verification_plan_diagnostic(caught.exception)['code'], code)
+
+    def test_all_plan_consumers_share_evidence_limit_and_recheck_digest(self):
+        from app.attackpilot import settings
+        from app.attackpilot.utils import security_checks as checks
+        with tempfile.TemporaryDirectory(prefix='attackpilot-plan-boundary-') as directory:
+            cache, plan = self.fixture(directory)
+            resolved = checks.resolve_task_verification_plan(plan, network_id=1, transaction_hashes=[self.TX], cache_root=cache)
+            with patch.object(settings, 'CACHE_DIR', str(cache)), patch.object(checks, 'MAX_EVIDENCE_BYTES', 64):
+                self.assertTrue(checks.validate_plan_authority(resolved))
+                self.assertEqual(checks.resolve_task_verification_plan(plan, network_id=1, transaction_hashes=[self.TX]), resolved)
+                raw = b'x' * 65; (cache / 'observed.json').write_bytes(raw)
+                plan['authority']['evidence_refs'][0]['sha256'] = hashlib.sha256(raw).hexdigest()
+                with self.assertRaises(ValueError) as caught:
+                    checks.resolve_task_verification_plan(plan, network_id=1, transaction_hashes=[self.TX])
+                self.assertEqual(checks.verification_plan_diagnostic(caught.exception)['code'], 'evidence_too_large')
+                self.assertFalse(checks.validate_plan_authority(resolved))
+
+    def test_execution_transaction_limit_is_reported_as_budget_instead_of_plan_format(self):
+        from app.attackpilot.utils.security_checks import validate_verification_plan
+        from app.attackpilot.utils.sequence_replay import resolve_sequence
+        from app.attackpilot.utils.patch_replay import PatchReplayBudgetError
+        with tempfile.TemporaryDirectory(prefix='attackpilot-plan-boundary-') as directory:
+            _, plan = self.fixture(directory)
+            hashes = [f'0x{index + 1:064x}' for index in range(17)]
+            plan['attack_transaction_hashes'] = hashes
+            plan['security_properties'][0]['transaction_hashes'] = [hashes[-1]]
+            self.assertEqual(len(validate_verification_plan(plan)['attack_transaction_hashes']), 17)
+            with self.assertRaises(PatchReplayBudgetError) as caught:
+                resolve_sequence(Mock(), [{'hash': tx} for tx in hashes], 1)
+            self.assertEqual(caught.exception.reason_code, 'replay_transaction_limit')
+
+    async def test_final_patcher_rejection_exposes_source_and_field_without_generation(self):
+        from app.attackpilot import settings
+        from app.attackpilot.agents.FixAgent import FixAgent
+        with tempfile.TemporaryDirectory(prefix='attackpilot-plan-boundary-') as directory:
+            cache, plan = self.fixture(directory)
+            plan['network_id'] = True
+            patcher = object.__new__(FixAgent)
+            patcher._check_cancelled = lambda: None
+            patcher.chain_id = 1
+            patcher.processed_data = {'dapp': {'platform': 'Ethereum'}, 'transaction_hash_list': [self.TX]}
+            patcher.query = AsyncMock()
+            with patch.object(settings, 'CACHE_DIR', str(cache)):
+                outcome = await patcher.handle({'fix_report': {'verification_plan': plan}})
+            self.assertFalse(outcome[0])
+            self.assertEqual(patcher.verification['plan_diagnostic'], {
+                'schema_version': 1, 'code': 'network_id_invalid', 'field': 'network_id',
+                'origin': 'investigation_derived', 'retryable': False})
+            self.assertEqual(patcher.verification['patch_generation_budget']['requests_used'], 0)
+            patcher.query.assert_not_awaited()
+
+    def test_old_blocked_task_gets_safe_read_only_diagnostic_with_actual_plan_source(self):
+        from app.attackpilot.store import public_task
+        from app.attackpilot.utils.report_evidence import report_evidence, render_verification_summary
+        state = {'schema_version': 2, 'status': 'blocked', 'stage': 'preconditions',
+                 'reason_code': 'invalid_verification_plan', 'replay_attempted': False, 'replay_completed': False,
+                 'reason': '验证计划未通过输入及证据校验：verification_plan.network_id must be a positive chain ID string；尚未生成或回放补丁。'}
+        task = {'is_demo': False, 'payload': {'transaction_hash': [self.TX]}, 'result': {'verification': state}}
+        original = deepcopy(task)
+        shown = public_task(task)['result']['verification']
+        self.assertEqual(shown['status'], 'blocked')
+        self.assertEqual(shown['plan_diagnostic']['code'], 'network_id_invalid')
+        self.assertEqual(shown['plan_diagnostic']['origin'], 'investigation_derived')
+        self.assertEqual(task, original)
+        evidence = report_evidence({'verification': shown}, None)
+        self.assertIn('| 验证计划失败字段 | network_id |', render_verification_summary(evidence))
+        self.assertIn('系统调查生成', render_verification_summary(evidence))
+
+    def test_untrusted_diagnostic_or_exception_text_is_never_rendered(self):
+        from app.attackpilot.utils.security_checks import canonical_plan_diagnostic
+        from app.attackpilot.utils.report_evidence import report_evidence, render_verification_summary
+        valid = {'schema_version': 1, 'code': 'network_id_invalid', 'field': 'network_id',
+                 'origin': 'unknown', 'retryable': False}
+        for mutation in ({'schema_version': True}, {'origin': []}, {'field': '/private/file'},
+                         {'code': 'arbitrary'}, {'reason': 'secret value'}, {'retryable': 0}):
+            self.assertIsNone(canonical_plan_diagnostic({**valid, **mutation}))
+        state = {'schema_version': 2, 'status': 'blocked', 'stage': 'preconditions',
+                 'reason_code': 'invalid_verification_plan', 'replay_attempted': False, 'replay_completed': False,
+                 'plan_diagnostic': {**valid, 'secret': 'private credential'},
+                 'reason': '验证计划未通过输入及证据校验：private credential；尚未生成或回放补丁。'}
+        evidence = report_evidence({'verification': state}, None)
+        self.assertNotIn('plan_diagnostic', evidence['verification'])
+        self.assertNotIn('private credential', render_verification_summary(evidence))

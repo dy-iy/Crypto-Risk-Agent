@@ -297,7 +297,7 @@ def build_automated_review(
         "generated_at": datetime.now().isoformat(),
         "review_type": "deterministic_cross_agent_consistency",
         "score_scope": "text_reference_coverage_only",
-        "evidence_boundary": "文字交叉引用与结构化回放核验分别检查；分数不能证明根因正确、交易安全或正常功能通过。",
+        "evidence_boundary": "文字交叉引用与结构化回放核验分别检查；分数不能代替根因与攻击回放证据的核验。",
         "status": status,
         "score": score,
         "checks": checks,

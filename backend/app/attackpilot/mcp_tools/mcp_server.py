@@ -618,10 +618,143 @@ async def _refresh_patch_source(session, tree, address):
     return True
 
 
+async def _resolve_patch_source_target(tree, item, expected_function, *, session=None, refresh_source=False):
+    """Resolve the named fault against observed source ownership, never a guessed callee."""
+    if not isinstance(expected_function, str) or not expected_function.strip():
+        raise ValueError('source_target_function_invalid')
+    ancestry, seen = [], set()
+    frame = item
+    while frame is not None:
+        if id(frame) in seen or len(ancestry) >= 128:
+            raise ValueError('source_target_invalid_ancestry')
+        seen.add(id(frame))
+        ancestry.append(frame)
+        frame = getattr(frame, 'parent', None)
+    addresses = {str(getattr(frame, 'to_addr', '')).lower() for frame in ancestry}
+    prepared = {}
+    for address in sorted(addresses):
+        contract = tree.contracts.get(address)
+        if contract is None:
+            continue
+        if session is not None and (refresh_source or address in getattr(session, '_source_refresh_results', {})):
+            await _refresh_patch_source(session, tree, address)
+            contract = tree.contracts[address]
+        if not contract.has_source_code:
+            continue
+        files = contract.contract_info
+        if (any(not isinstance(f, dict) or type(f.get('id')) is not int
+                or not isinstance(f.get('path'), str) or not f['path']
+                or not isinstance(f.get('source'), str) or not f['source'].strip() for f in files)
+                or len({f['path'] for f in files}) != len(files)
+                or len({f['id'] for f in files}) != len(files)):
+            continue
+        data = {
+            'address': address, 'contract_name': contract.contract_name,
+            'compiler_version': contract.compiler_version, 'evm_version': contract.evm_version,
+            'optimizations_used': contract.optimizations_used, 'optimization_runs': contract.optimization_runs,
+            'compiler_settings': contract.compiler_settings, 'libraries': contract.libraries,
+            'sources': {f['path']: f['source'] for f in files},
+        }
+        digest = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        cache = getattr(tree, '_patch_source_compilation_cache', None)
+        if cache is None:
+            cache = tree._patch_source_compilation_cache = {}
+        key = (address, digest)
+        entity = ContractEntityForCompile(data)
+        if key not in cache:
+            cache[key] = await ContractDao(None).get_compile_item_from_entity(entity)
+        compiled = cache[key]
+        try:
+            declarations = ContractDao.source_functions_at_location(entity, compiled, expected_function)
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            continue
+        if declarations:
+            prepared[address] = (contract, entity, compiled, declarations)
+
+    def matches(frame, address, location, relation):
+        if address not in prepared:
+            return []
+        contract, entity, compiled, _ = prepared[address]
+        file_id = getattr(location, 'file_index', -1)
+        files = [file for file in contract.contract_info if file['id'] == file_id]
+        mapped = []
+        entry_only = False
+        if len(files) == 1:
+            try:
+                mapped = ContractDao.source_functions_at_location(
+                    entity, compiled, expected_function, filename=files[0]['path'],
+                    start=getattr(location, 'code_start', -1), length=getattr(location, 'code_length', -1))
+            except (ValueError, TypeError, KeyError, UnicodeError):
+                return []
+        elif relation == 'observed_frame' and getattr(frame, 'call_type', '') in {'CALL', 'STATICCALL', 'DELEGATECALL', 'CALLCODE'}:
+            calldata = getattr(frame, 'input_data', '')
+            if isinstance(calldata, str) and re.fullmatch(r'0x[0-9a-fA-F]{8}(?:[0-9a-fA-F]{2})*', calldata):
+                try:
+                    entry = ContractDao._resolve_compiled_source_function(entity, calldata[:10].lower(), compiled)
+                    mapped = ContractDao.source_functions_at_location(
+                        entity, compiled, expected_function, filename=entry['filename'],
+                        start=entry['code_start'], length=entry['code_length'])
+                    entry_only = True
+                except (ValueError, TypeError, KeyError, UnicodeError):
+                    return []
+        results = []
+        for source in mapped:
+            files = [file for file in contract.contract_info if file['path'] == source['filename']]
+            if len(files) != 1:
+                continue
+            results.append({
+                'address': address, 'contract': contract, 'file_index': files[0]['id'],
+                'resolved_trigger_index': frame.absolute_position,
+                'source_mapping': {**source, 'file_index': files[0]['id'],
+                                   'source_mapping': ('compiled_ast_function_selector' if entry_only
+                                                      else 'compiled_ast_observed_source_range'),
+                                   'execution_scope': ('selected_function_entry' if entry_only
+                                                       else 'observed_source_range'),
+                                   'expected_function': expected_function,
+                                   'requested_trigger_index': item.absolute_position,
+                                   'resolved_trigger_index': frame.absolute_position,
+                                   'trace_relation': relation},
+            })
+        return results
+
+    local = []
+    for frame in ancestry:
+        local.extend(matches(frame, str(getattr(frame, 'to_addr', '')).lower(),
+                             getattr(frame, 'function_loc', None), 'observed_frame'))
+        parent = getattr(frame, 'parent', None)
+        if parent is not None:
+            local.extend(matches(parent, str(getattr(parent, 'to_addr', '')).lower(),
+                                 getattr(frame, 'caller_loc', None), 'observed_caller'))
+
+    def identity(result):
+        source = result['source_mapping']
+        return (result['address'], source['filename'], source['code_start'], source['code_length'],
+                source['declaring_contract'], source['function_signature'])
+
+    candidates = local
+    if not candidates:
+        # A model can name a downstream callsite as the trigger. Correct it only
+        # to an actually observed invocation of the same source-owning contract
+        # in this transaction; merely declaring the function is insufficient.
+        if len(prepared) > 1:
+            raise ValueError('source_target_ambiguous')
+        for frame in tree.node_map.values():
+            candidates.extend(matches(frame, str(getattr(frame, 'to_addr', '')).lower(),
+                                      getattr(frame, 'function_loc', None), 'same_transaction_observed_frame'))
+    identities = {identity(candidate) for candidate in candidates}
+    if len(identities) != 1:
+        raise ValueError('source_target_ambiguous' if identities else 'source_target_unresolved')
+    return min(candidates, key=lambda candidate: candidate['resolved_trigger_index'])
+
+
 @mcp.tool()
-async def get_patch_items(session_id: str, faulty_index: str, refresh_source: bool = False) -> Dict:
+async def get_patch_items(session_id: str, faulty_index: str, refresh_source: bool = False,
+                          expected_function: Optional[str] = None) -> Dict:
     """
     Based on the index, obtain the source code information and compilation configuration of the specified node, which is used for patch generation and compilation.
+    When expected_function is supplied, compiler AST and observed frames must
+    identify that qualified function; a downstream callsite can be corrected to
+    its observed source-owning function in the same transaction.
     """
     try:
         session = _get_session_context(session_id)
@@ -637,7 +770,38 @@ async def get_patch_items(session_id: str, faulty_index: str, refresh_source: bo
             contracts = mix_trace_tree.contracts
             item = mix_trace_tree.node_map.get(index, None)
 
-            contract_address = item.to_addr.lower()
+            target = None
+            if expected_function is not None:
+                try:
+                    target = await _resolve_patch_source_target(
+                        mix_trace_tree, item, expected_function, session=session, refresh_source=refresh_source)
+                except ValueError as exc:
+                    reason = str(exc)
+                    unresolved = {'source_target': {'status': 'unresolved', 'reason_code': reason,
+                                                     'expected_function': expected_function,
+                                                     'requested_trigger_index': faulty_index}}
+                    # This is only a bounded source-fetch hint. A retry must
+                    # still establish compiler AST ownership before patching.
+                    qualifier = (expected_function.split('.', 1)[0]
+                                 if isinstance(expected_function, str) and '.' in expected_function else None)
+                    missing, ancestor, seen = {}, item, set()
+                    while ancestor is not None and id(ancestor) not in seen:
+                        seen.add(id(ancestor))
+                        address = str(getattr(ancestor, 'to_addr', '')).lower()
+                        candidate = contracts.get(address)
+                        lookup = getattr(candidate, 'source_lookup', None)
+                        if (candidate is not None and qualifier == candidate.contract_name
+                                and not candidate.has_source_code and isinstance(lookup, dict)
+                                and lookup.get('status') == 'failed' and lookup.get('retryable') is True):
+                            missing[address] = candidate
+                        ancestor = getattr(ancestor, 'parent', None)
+                    if len(missing) == 1:
+                        address, candidate = next(iter(missing.items()))
+                        unresolved.update(address=address, contract_info=candidate.contract_info,
+                                          source_lookup=candidate.source_lookup, file_index=-1)
+                    return unresolved
+
+            contract_address = target['address'] if target else item.to_addr.lower()
             contract = contracts.get(contract_address, None)
             if contract is None:
                 return {}
@@ -645,12 +809,14 @@ async def get_patch_items(session_id: str, faulty_index: str, refresh_source: bo
                 await _refresh_patch_source(session, mix_trace_tree, contract_address)
                 contract = contracts[contract_address]
 
-            file_index = -1
-            source_mapping = getattr(item, 'source_resolution', None)
+            file_index = target['file_index'] if target else -1
+            source_mapping = target['source_mapping'] if target else getattr(item, 'source_resolution', None)
             refreshed_source = (isinstance(contract.source_lookup, dict)
                                 and contract.source_lookup.get('status') == 'available'
                                 and contract.source_lookup.get('refresh_attempted') is True)
-            if refreshed_source and isinstance(source_mapping, dict):
+            if target:
+                pass
+            elif refreshed_source and isinstance(source_mapping, dict):
                 file_index = source_mapping.get('file_index', -1)
             elif not refreshed_source and hasattr(item, "function_loc") and item.function_loc:
                 file_index = item.function_loc.file_index
@@ -661,7 +827,7 @@ async def get_patch_items(session_id: str, faulty_index: str, refresh_source: bo
                     file_index = resolved['file_index']
                     source_mapping = item.source_resolution
 
-            return {
+            result = {
                 "address": contract_address,
                 "file_index": file_index,
                 "contract_info": contract.contract_info,
@@ -675,6 +841,12 @@ async def get_patch_items(session_id: str, faulty_index: str, refresh_source: bo
                 "compiler_settings": contract.compiler_settings,
                 "libraries": contract.libraries
             }
+            if target:
+                result['resolved_trigger_index'] = target['resolved_trigger_index']
+                result['source_target'] = {'status': 'resolved', 'expected_function': expected_function,
+                                           'requested_trigger_index': faulty_index,
+                                           'resolved_trigger_index': f'{tx_hash}::{target["resolved_trigger_index"]}'}
+            return result
         return {}
     except Exception:
         raise ToolError("Unable to map the requested patch source.") from None

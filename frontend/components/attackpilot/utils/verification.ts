@@ -21,7 +21,7 @@ export interface PatchVerificationPresentation {
 }
 
 export interface PatchVerificationDimension {
-  key: "attack_interception" | "normal_regression" | "profit";
+  key: "sequence_replay" | "attack_interception" | "security_properties" | "profit";
   label: string;
   value: string;
 }
@@ -32,10 +32,82 @@ export interface PatchCompileDiagnostic {
   description: string;
 }
 
+export interface NativeProfitSidePresentation {
+  status: "available" | "unavailable" | "not_executed";
+  text: string;
+}
+
+export interface NativeProfitComparison {
+  status: "available" | "partial" | "unavailable";
+  value: string;
+  scopeDescription: string;
+  transactions: {
+    transactionHash: string;
+    account: string;
+    symbol: "ETH" | "BNB";
+    control: NativeProfitSidePresentation;
+    patched: NativeProfitSidePresentation;
+  }[];
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+const planDiagnosticFields: Record<string, string> = {
+  network_id_invalid: "network_id",
+  network_id_mismatch: "network_id",
+  execution_chain_unavailable: "network_id",
+  reference_invalid: "authority.evidence_refs",
+  reference_conflict: "authority.evidence_refs",
+  evidence_unavailable: "authority.evidence_refs",
+  evidence_hash_mismatch: "authority.evidence_refs",
+  evidence_too_large: "authority.evidence_refs",
+  authority_invalid: "authority",
+  attack_scope_mismatch: "attack_transaction_hashes",
+  transaction_count_exceeded: "attack_transaction_hashes",
+  observation_scope_invalid: "security_properties.transaction_hashes",
+  normal_cases_invalid: "normal_regression_cases",
+  plan_invalid: "verification_plan",
+};
+
+const planDiagnosticDescriptions: Record<string, string> = {
+  network_id: "网络标识（network_id）的格式或执行网络未通过检查",
+  "authority.evidence_refs": "证据引用（authority.evidence_refs）的格式、可用性或摘要未通过检查",
+  authority: "条件来源声明（authority）未通过检查",
+  attack_transaction_hashes: "攻击交易范围（attack_transaction_hashes）未通过检查",
+  "security_properties.transaction_hashes": "安全条件的交易观察范围（security_properties.transaction_hashes）未通过检查",
+  normal_regression_cases: "兼容计划字段（normal_regression_cases）的格式或断言未通过检查",
+  verification_plan: "整体格式（verification_plan）未通过检查",
+};
+
+/** Interpret public diagnostic enums only; never display provider messages or paths. */
+function planDiagnosticPresentation(value: unknown) {
+  const diagnostic = asRecord(value);
+  if (!diagnostic || diagnostic.schema_version !== 1 || diagnostic.retryable !== false
+    || !["investigation_derived", "user_declared", "unknown"].includes(diagnostic.origin as string)
+    || typeof diagnostic.code !== "string" || !Object.hasOwn(planDiagnosticFields, diagnostic.code)
+    || diagnostic.field !== planDiagnosticFields[diagnostic.code]
+    || Object.keys(diagnostic).some(key => !["schema_version", "code", "field", "origin", "retryable"].includes(key))) return null;
+  const description = planDiagnosticDescriptions[diagnostic.field as string];
+  if (diagnostic.origin === "investigation_derived") {
+    return {
+      description: `系统调查生成的验证计划中，${description}；尚未生成或回放补丁。`,
+      nextStep: "修正系统生成验证计划及字段校验的流程后，再运行验证。无需为此补交未提供过的计划。",
+    };
+  }
+  if (diagnostic.origin === "user_declared") {
+    return {
+      description: `提交的验证计划中，${description}；尚未生成或回放补丁。`,
+      nextStep: "核对提交计划中对应字段的格式、范围与证据来源，修正后再运行验证。",
+    };
+  }
+  return {
+    description: `验证计划中，${description}；尚未生成或回放补丁。`,
+    nextStep: "查看验证记录，确认计划来自提交输入还是系统调查，再修正对应生成或输入流程。",
+  };
 }
 
 function replayCoverage(value: unknown) {
@@ -56,7 +128,187 @@ function replayCoverage(value: unknown) {
   };
 }
 
+function declaredVerificationEvidence(task: Task | null) {
+  const result = asRecord(task?.result);
+  const verification = asRecord(result?.verification);
+  const replay = asRecord(result?.replay_evidence);
+  const plan = asRecord(replay?.verification_plan);
+  const coverage = asRecord(verification?.coverage);
+  const dimensions = asRecord(verification?.dimensions);
+  if (verification?.schema_version !== 2 || verification.evidence_version !== 2
+    || verification.verification_policy_version !== VERIFICATION_POLICY_VERSION
+    || !["declared_attack_chain", "declared_attack_chain_and_normal_cases"].includes(verification.scope as string)
+    || verification.execution_evidence_validated !== true
+    || replay?.schema_version !== 2 || replay.scope !== "sequential_attack_and_regression"
+    || !dimensions || coverage?.mode !== "sequential_attack_and_regression" || !plan
+    || ![verification.replay_evidence_sha256, verification.applied_patch_sha256, verification.verification_plan_sha256]
+      .every(value => typeof value === "string" && /^[0-9a-f]{64}$/.test(value))
+    || verification.applied_patch_sha256 !== replay.applied_patch_sha256
+    || verification.verification_plan_sha256 !== replay.verification_plan_sha256
+    || !Array.isArray(plan.attack_transaction_hashes) || !plan.attack_transaction_hashes.length
+    || plan.attack_transaction_hashes.some(hash => typeof hash !== "string" || !/^0x[0-9a-f]{64}$/i.test(hash))
+    || !Array.isArray(plan.security_properties) || !Array.isArray(plan.normal_regression_cases)
+    || (verification.scope === "declared_attack_chain") !== (plan.normal_regression_cases.length === 0)) return null;
+  return { verification, replay, plan, coverage, dimensions };
+}
+
+const nativeProfitScopeDescription = "交易发起地址；净变化已含 gas；逐笔统计。仅覆盖原生币，不代表全部攻击地址或代币的总利润。";
+const sha256Pattern = /^[0-9a-f]{64}$/;
+const transactionHashPattern = /^0x[0-9a-f]{64}$/i;
+const addressPattern = /^0x[0-9a-f]{40}$/i;
+
+/** Format wei with integer arithmetic so even a single wei remains visible. */
+function formatNativeDelta(delta: bigint, symbol: "ETH" | "BNB") {
+  const zero = BigInt(0);
+  const absolute = delta < zero ? -delta : delta;
+  const wei = absolute.toString().padStart(19, "0");
+  const fraction = wei.slice(-18).replace(/0+$/, "");
+  return `${delta > zero ? "+" : delta < zero ? "-" : ""}${wei.slice(0, -18)}${fraction ? `.${fraction}` : ""} ${symbol}`;
+}
+
+function nativeProfitSide(value: unknown, executionValue: unknown, symbol: "ETH" | "BNB", patched: boolean): NativeProfitSidePresentation | null {
+  const side = asRecord(value);
+  const execution = asRecord(executionValue);
+  if (!side || !execution) return null;
+  if (side.status === "unavailable" && typeof side.reason_code === "string") {
+    return { status: "unavailable", text: "证据不足" };
+  }
+  if (patched && side.status === "not_executed" && typeof side.reason_code === "string"
+    && execution.completed === false && execution.status === "not_executed") {
+    return { status: "not_executed", text: "未执行" };
+  }
+  const artifact = asRecord(execution.artifact);
+  const unsigned = (amount: unknown): amount is string => typeof amount === "string"
+    && /^(0|[1-9][0-9]{0,77})$/.test(amount);
+  if (side.status !== "available" || execution.completed !== true
+    || typeof side.artifact_sha256 !== "string" || !sha256Pattern.test(side.artifact_sha256)
+    || side.artifact_sha256 !== artifact?.sha256
+    || !unsigned(side.before_wei) || !unsigned(side.after_wei)
+    || typeof side.delta_wei !== "string" || !/^(0|-?[1-9][0-9]{0,77})$/.test(side.delta_wei)) return null;
+  const delta = BigInt(side.delta_wei);
+  if (BigInt(side.after_wei) - BigInt(side.before_wei) !== delta) return null;
+  return { status: "available", text: formatNativeDelta(delta, symbol) };
+}
+
+/** Present bound measurements only; monetary observations never create a defense verdict. */
+export function getNativeProfitComparison(task: Task | null): NativeProfitComparison {
+  const unavailable: NativeProfitComparison = {
+    status: "unavailable", value: "无法确认", scopeDescription: nativeProfitScopeDescription, transactions: [],
+  };
+  if (task?.is_demo) return unavailable;
+  const result = asRecord(task?.result);
+  const verification = asRecord(result?.verification);
+  const replay = asRecord(result?.replay_evidence);
+  const dimensions = asRecord(verification?.dimensions);
+  const profit = asRecord(dimensions?.profit);
+  const declared = declaredVerificationEvidence(task);
+  const boundLegacyReplay = verification?.schema_version === 2 && verification.evidence_version === 1
+    && verification.verification_policy_version === VERIFICATION_POLICY_VERSION
+    && verification.scope === "attack_path_only" && verification.evidence_validated === true
+    && verification.replay_attempted === true && verification.replay_completed === true
+    && typeof verification.applied_patch_sha256 === "string" && sha256Pattern.test(verification.applied_patch_sha256)
+    && replay?.schema_version === 1 && replay.status === "completed"
+    && verification.applied_patch_sha256 === replay.applied_patch_sha256
+    && getPatchVerificationPresentation(task).status === "verified";
+  if ((!declared && !boundLegacyReplay) || profit?.schema_version !== 1
+    || !["available", "partial", "unavailable"].includes(profit.status as string)
+    || profit.metric !== "transaction_sender_native_balance_change" || profit.scope !== "per_transaction_senders"
+    || profit.gas_included !== true || profit.usd !== null
+    || typeof verification?.replay_evidence_sha256 !== "string" || !sha256Pattern.test(verification.replay_evidence_sha256)
+    || profit.replay_evidence_sha256 !== verification.replay_evidence_sha256
+    || !Array.isArray(replay?.transactions) || !replay.transactions.length
+    || !Array.isArray(profit.transactions) || profit.transactions.length !== replay.transactions.length
+    || (declared && (declared.plan.attack_transaction_hashes as string[]).length !== replay.transactions.length)) return unavailable;
+  const seen = new Set<string>();
+  const transactions: NativeProfitComparison["transactions"] = [];
+  for (let index = 0; index < profit.transactions.length; index++) {
+    const row = asRecord(profit.transactions[index]);
+    const pair = asRecord(replay.transactions[index]);
+    const context = asRecord(pair?.context);
+    const hash = row?.transaction_hash;
+    const account = row?.account;
+    const network = row?.network_id;
+    const symbol = network === "1" ? "ETH" : network === "56" ? "BNB" : null;
+    if (!row || !pair || !context || typeof hash !== "string" || !transactionHashPattern.test(hash)
+      || typeof pair.original_transaction_hash !== "string" || hash.toLowerCase() !== pair.original_transaction_hash.toLowerCase()
+      || typeof account !== "string" || !addressPattern.test(account)
+      || typeof context.from !== "string" || account.toLowerCase() !== context.from.toLowerCase()
+      || network !== context.network_id || !symbol || row.symbol !== symbol || seen.has(hash.toLowerCase())
+      || (declared && ((declared.plan.attack_transaction_hashes as string[])[index]?.toLowerCase() !== hash.toLowerCase()
+        || declared.plan.network_id !== network))) return unavailable;
+    const control = nativeProfitSide(row.control, pair.control, symbol, false);
+    const patched = nativeProfitSide(row.patched, pair.patched, symbol, true);
+    if (!control || !patched) return unavailable;
+    seen.add(hash.toLowerCase());
+    transactions.push({ transactionHash: hash, account, symbol, control, patched });
+  }
+  const complete = transactions.filter(row => row.control.status === "available" && row.patched.status === "available").length;
+  const anyAvailable = transactions.some(row => row.control.status === "available" || row.patched.status === "available");
+  const status = complete === transactions.length ? "available" : anyAvailable ? "partial" : "unavailable";
+  return {
+    status, scopeDescription: nativeProfitScopeDescription, transactions,
+    value: transactions.length === 1
+      ? `原版 ${transactions[0].control.text} → 补丁 ${transactions[0].patched.text}`
+      : `已统计 ${complete}/${transactions.length} 笔`,
+  };
+}
+
+/** Explain backend findings from bound evidence without recalculating their verdict. */
+function declaredVerificationGaps(evidence: NonNullable<ReturnType<typeof declaredVerificationEvidence>>) {
+  const descriptions: string[] = [];
+  const nextSteps: string[] = [];
+  const values: Partial<Record<PatchVerificationDimension["key"], string>> = {};
+  const security = asRecord(evidence.dimensions.security_properties);
+  const attack = asRecord(evidence.dimensions.attack_interception);
+  const kinds: Record<string, string> = {
+    native_balance: "原生币余额", token_balance: "代币余额", storage: "存储状态", call_result: "合约读取结果",
+  };
+  if (security?.status === "unavailable") {
+    const checks = Array.isArray(security.checks) ? security.checks.map(asRecord).filter(item => item !== null) : [];
+    const missingPatched = checks.filter(check => check.status === "unknown" && check.patched_satisfies === null);
+    const missingControl = checks.filter(check => check.status === "unknown" && check.control_satisfies === null);
+    const names = (items: Record<string, unknown>[]) => [...new Set(items.map(item =>
+      typeof item.kind === "string" && Object.hasOwn(kinds, item.kind) ? kinds[item.kind] : "安全条件"))].join("、");
+    if (missingPatched.length || missingControl.length) {
+      const missing = [
+        ...(missingControl.length ? [`原版${names(missingControl)}观测`] : []),
+        ...(missingPatched.length ? [`补丁版${names(missingPatched)}观测`] : []),
+      ].join("及");
+      const observedViolation = missingPatched.some(check => check.control_satisfies === false);
+      descriptions.push(`${observedViolation ? "已记录原版违反声明的安全条件，但" : ""}缺少${missing}，尚不能确认声明的安全条件得到满足。`);
+      nextSteps.push(`补齐${missing}，重新核对原版与补丁版的安全条件对照。`);
+      values.security_properties = `缺${missing}`;
+    } else if (security.reason_code === "security_properties_missing"
+      && (evidence.plan.security_properties as unknown[]).length === 0) {
+      descriptions.push("验证计划未声明可执行的安全条件，资金、权限与状态尚未验证。");
+      nextSteps.push("根据调查证据补充可执行的资金、权限或状态条件，再运行验证。");
+      values.security_properties = "缺安全条件";
+    }
+  }
+  if (attack?.status === "unavailable" && attack.reason_code === "attack_effect_not_established") {
+    values.attack_interception = "缺攻击效果证据";
+  }
+  return { description: descriptions.join(""), nextStep: nextSteps.join(""), values };
+}
+
 const reasonDescriptions: Record<string, string> = {
+  invalid_verification_plan: "验证计划的格式、交易范围或证据引用未通过检查。",
+  verification_plan_invalid: "安全条件验证计划无效，尚未完成验证。",
+  verification_plan_unbound: "验证计划缺少本次输入或调查证据的绑定。",
+  verification_plan_mismatch: "执行记录与实际验证计划不一致。",
+  attack_sequence_incomplete: "连续攻击链在某步停止，后续交易尚未执行。",
+  historical_sequence_result_mismatch: "原版连续回放未还原历史执行结果，尚不能判断补丁效果。",
+  sequence_evidence_invalid: "连续执行记录未通过原始证据校验。",
+  sequential_evidence_invalid: "连续执行的原始记录、状态衔接或区块环境未通过检查。",
+  attack_sequence_input_mismatch: "实际执行的攻击序列与验证计划不一致。",
+  verification_plan_network_mismatch: "验证计划与实际执行网络不一致。",
+  runtime_integrity_missing: "缺少与本次补丁绑定的历史代码、存储布局或不可变变量校验。",
+  sequential_block_context_unsupported: "模拟服务未提供可核实的区块推进，连续回放尚未完成。",
+  declared_security_property_failed: "执行对照未证明补丁消除了声明的安全条件违规。",
+  security_observations_unavailable: "资金、权限或存储条件缺少完整执行观测。",
+  attack_effect_not_established: "尚无实际执行证据确认攻击效果已被消除。",
+  normal_regression_failed: "当前记录声明的执行对照或断言未通过，尚不能确认补丁效果。",
+  normal_regression_unavailable: "当前记录声明的执行对照或断言尚不完整，尚不能确认补丁效果。",
   missing_source: "缺少可用源码，已停止补丁生成与回放。",
   source_fetch_failed: "源码获取失败，请检查区块浏览器连接或稍后重试。",
   source_not_verified: "目标合约尚未提供已验证源码，无法生成可验证补丁。",
@@ -103,7 +355,7 @@ const reasonDescriptions: Record<string, string> = {
   judge_unresolved: "现有回放证据不足以确认补丁效果。",
   ineffective_patch: "回放结果表明补丁未能阻止本次攻击。",
   wrong_root_cause: "回放结果未能支持当前根因与修复方案。",
-  broken_logic: "回放发现补丁影响了正常业务逻辑。",
+  broken_logic: "回放发现补丁改变了预期执行逻辑。",
   turn_limit_reached: "已达到修复尝试上限，尚未确认有效补丁。",
   replay_evidence_missing: "缺少完整回放记录，无法确认补丁效果。",
   module_disabled: "本次任务未启用补丁验证。",
@@ -125,7 +377,7 @@ const reasonDescriptions: Record<string, string> = {
   patch_artifact_missing: "缺少可追溯的独立补丁回放响应记录，无法核对执行结果。",
   patched_events_unresolved: "补丁回放的回滚事件记录缺失或不一致，无法确认实际拦截结果。",
   patched_trace_unavailable: "缺少完整补丁执行轨迹，无法确认回滚位置。",
-  patched_trace_format_unsupported: "回放轨迹使用了当前尚未支持的格式，暂时无法核实补丁效果。",
+  patched_trace_format_unsupported: "执行轨迹包含当前解析器尚未支持的节点，解析结果不完整，暂时无法核实补丁执行与攻击效果。",
   patched_trace_invalid: "回放轨迹的结构或执行状态存在矛盾，暂时无法核实补丁效果。",
   patch_revert_not_matched: "回滚原因尚未与实际修改的校验对应。",
   patch_guard_location_unproven: "缺少执行位置与实际修改校验的对应证据，无法确认回滚由补丁触发；错误文案相同不能证明执行了新增校验。",
@@ -164,7 +416,7 @@ const unverifiedReasons = {
     "required_trigger_replay_missing", "modified_code_not_reached", "patch_artifact_missing",
     "patched_events_unresolved", "patched_trace_unavailable", "patch_revert_not_matched",
     "patch_guard_location_unproven", "revert_propagation_unproven",
-    "historical_runtime_context_mismatch", "interception_unconfirmed",
+    "historical_runtime_context_mismatch", "historical_sequence_result_mismatch", "interception_unconfirmed",
     "original_runtime_mismatch", "storage_layout_changed", "immutable_layout_mismatch", "constructor_or_immutable_changed", "patch_runtime_unchanged",
   ],
   capability: [
@@ -187,6 +439,14 @@ const unverifiedReasons = {
 };
 
 const reasonNextSteps: Record<string, string> = {
+  invalid_verification_plan: "查看验证记录，确认具体失败字段及计划来源后再处理。",
+  verification_plan_unbound: "补充本次交易的安全条件和可核实来源，再执行验证。",
+  normal_regression_unavailable: "核对当前记录声明的执行对照及断言，补齐缺失的验证证据。",
+  attack_effect_not_established: "核对补丁回滚归因或安全条件的原版与补丁版执行对照，补齐缺失观测后再确认攻击效果。",
+  normal_regression_failed: "按当前记录中未通过的断言修订补丁，再执行原版与补丁版对照。",
+  security_observations_unavailable: "补充可读取的余额、存储槽或实际 getter 条件，核实缺失观测。",
+  attack_sequence_incomplete: "检查停止位置及未执行交易，补齐连续执行记录后再确认整条攻击链。",
+  historical_sequence_result_mismatch: "系统需核对并补齐攻击步骤之间的链上状态变化，再重新执行原版与补丁版回放。",
   compiler_unavailable: "补齐合约所需的准确 Solidity 编译器版本后，再运行补丁验证。",
   original_compile_failed: "核对原始源码、依赖和编译设置，修复编译问题后再运行验证。",
   analysis_report_invalid: "核对输入交易与分析记录，修复报告不一致后重新运行分析。",
@@ -249,11 +509,29 @@ export function getPatchVerificationPresentation(task: Task | null): PatchVerifi
   const replay = asRecord(result?.replay_evidence);
   const status = verification?.status;
   const reasonCode = typeof verification?.reason_code === "string" ? verification.reason_code : "";
-  let reason = describeReason(reasonCode);
-  const nextStep = Object.hasOwn(reasonNextSteps, reasonCode) ? reasonNextSteps[reasonCode] : undefined;
+  const planDiagnostic = reasonCode === "invalid_verification_plan"
+    ? planDiagnosticPresentation(verification?.plan_diagnostic) : null;
+  let reason = planDiagnostic?.description ?? describeReason(reasonCode);
+  const nextStep = planDiagnostic?.nextStep
+    ?? (Object.hasOwn(reasonNextSteps, reasonCode) ? reasonNextSteps[reasonCode] : undefined);
   const hasCompletedReplay = verification?.schema_version === 2 && verification?.replay_completed === true;
   const dimensions = asRecord(verification?.dimensions);
   const interception = asRecord(dimensions?.attack_interception);
+  const declared = declaredVerificationEvidence(task);
+  const attackOnly = declared?.verification.scope === "declared_attack_chain";
+  if (declared && status === "verified" && verification?.evidence_validated === true
+    && verification.replay_completed === true && verification.replay_attempted === true
+    && declared.replay.status === "completed"
+    && declared.coverage.sequence_replay_verified === true
+    && ["sequence_replay", "attack_interception", "security_properties", ...(!attackOnly ? ["normal_regression"] : [])]
+      .every(key => asRecord(declared.dimensions[key])?.status === "passed")
+    && (declared.plan.security_properties as unknown[]).length > 0) {
+    return {
+      status: "verified", label: "攻击交易验证通过", headerLabel: "攻击交易验证通过", color: "success",
+      title: "攻击交易验证通过",
+      description: `已连续执行 ${(declared.plan.attack_transaction_hashes as unknown[]).length} 笔攻击交易，确认本次攻击输入下的补丁效果及声明的安全条件。结论仅覆盖本次攻击输入。`,
+    };
+  }
   const coverage = replayCoverage(verification?.coverage);
   if (reasonCode === "patch_interception_not_established" && coverage
     && coverage.intercepted === 0 && coverage.unaffected > 0 && coverage.unresolved === 0
@@ -289,14 +567,14 @@ export function getPatchVerificationPresentation(task: Task | null): PatchVerifi
     return {
       status, label: "触发交易拦截通过", headerLabel: "触发交易拦截通过", color: "success",
       title: "触发交易拦截通过",
-      description: `已确认拦截 ${coverage.intercepted} 笔触发交易；另有 ${coverage.unaffected} 笔独立历史回放未触及修改代码。各笔回放不传递状态，不能据此确认整条攻击链或正常功能通过。`,
+      description: `已确认拦截 ${coverage.intercepted} 笔触发交易；另有 ${coverage.unaffected} 笔独立历史回放未触及修改代码。各笔回放不传递状态，不能据此确认整条攻击链通过。`,
     };
   }
   if ((status === "verified" || status === "failed") && hasCompletedReplay && verification?.evidence_version === undefined) {
     return {
       status: "unverified", label: "历史结果待核实", headerLabel: "历史回放待核实", color: "default",
       title: "历史回放结果待核实",
-      description: "此记录尚未经过新版执行证据校验，正常功能未验证。",
+      description: "此记录尚未经过新版执行证据校验，尚不能确认攻击拦截效果。",
     };
   }
 
@@ -348,6 +626,13 @@ export function getPatchVerificationPresentation(task: Task | null): PatchVerifi
       };
     }
     const presentation = presentUnverified(reasonCode, reason);
+    if (declared && ["attack_effect_not_established", "security_observations_unavailable",
+      "normal_regression_unavailable", "declared_security_property_failed", "normal_regression_failed"].includes(reasonCode)) {
+      const gaps = declaredVerificationGaps(declared);
+      if (gaps.description) presentation.description = `${reason ?? ""}${gaps.description}`;
+      if (gaps.nextStep) presentation.nextStep = gaps.nextStep;
+    }
+    if (planDiagnostic) presentation.nextStep = planDiagnostic.nextStep;
     if (reasonCode === "patch_interception_not_established" && coverage
       && coverage.intercepted === 0 && coverage.unaffected > 0 && coverage.unresolved === 0) {
       presentation.nextStep = reasonNextSteps.modified_code_not_reached;
@@ -387,21 +672,31 @@ export function getPatchCompileDiagnostics(task: Task | null): PatchCompileDiagn
   }).slice(0, 3);
 }
 
-/** A replay verdict covers the submitted attack path, not all business flows. */
+/** Present the replay dimensions that cover the submitted attack path. */
 export function getPatchVerificationDimensions(task: Task | null): PatchVerificationDimension[] {
   if (task?.is_demo) return [];
   const verification = asRecord(asRecord(task?.result)?.verification);
   if (!verification || (verification.replay_completed !== true && !asRecord(verification.dimensions))) return [];
   const presentation = getPatchVerificationPresentation(task);
+  const declared = declaredVerificationEvidence(task);
+  const profit = { key: "profit" as const, label: "原生币收益对比", value: getNativeProfitComparison(task).value };
+  if (declared) {
+    const labels: Record<string, string> = { passed: "已通过", failed: "未通过", not_run: "未执行", partial: "执行不完整", unavailable: "待核实" };
+    const gaps = declaredVerificationGaps(declared);
+    return [
+      { key: "sequence_replay", label: "连续攻击链" },
+      { key: "attack_interception", label: "攻击效果消除" },
+      { key: "security_properties", label: "资金、权限与状态" },
+    ].map(item => ({ ...item, key: item.key as PatchVerificationDimension["key"],
+      value: gaps.values[item.key as PatchVerificationDimension["key"]]
+        ?? labels[String(asRecord(declared.dimensions[item.key])?.status)] ?? "待核实" }))
+      .concat([profit]);
+  }
   const coverage = replayCoverage(verification.coverage);
-  // The current attack_path_only protocol records no normal-business
-  // experiment or complete profit measurement. Dimension flags cannot
-  // manufacture either measurement, even in an otherwise verified replay.
   return [
     { key: "attack_interception", label: coverage ? "触发交易拦截" : "攻击拦截", value: presentation.status === "verified" ? "已通过"
       : presentation.status === "failed" ? "未通过" : "待核实" },
-    { key: "normal_regression", label: "正常功能", value: "未验证" },
-    { key: "profit", label: "回放利润", value: "无法确认" },
+    profit,
   ];
 }
 
@@ -409,9 +704,15 @@ export function getPatchVerificationDimensions(task: Task | null): PatchVerifica
 export function buildPatchVerificationMarkdown(task: Task | null): string {
   const summary = getPatchVerificationPresentation(task);
   const dimensions = getPatchVerificationDimensions(task);
+  const profit = getNativeProfitComparison(task);
   return [
     `**${summary.title}**`, "", summary.description,
     ...(dimensions.length ? ["", ...dimensions.map(item => `- ${item.label}：${item.value}`)] : []),
+    ...(profit.transactions.length ? [
+      "", profit.scopeDescription, "",
+      "| 交易 | 统计地址 | 原版净变化 | 补丁净变化 |", "|---|---|---|---|",
+      ...profit.transactions.map(row => `| ${row.transactionHash} | ${row.account} | ${row.control.text} | ${row.patched.text} |`),
+    ] : []),
     ...(summary.nextStep ? ["", `下一步：${summary.nextStep}`] : []),
   ].join("\n");
 }

@@ -15,6 +15,9 @@ diffs, or SEARCH/REPLACE blocks. Explain code changes in prose only. Inline iden
 and evidence references are allowed. Fenced text, plaintext, or mermaid blocks may show
 an attack trace only; label them as original observations or analysis inputs, not patched
 execution observations. Never put source code or patch fragments in those trace blocks.
+Keep this report focused on the supplied attack transactions and recorded security
+conditions. Do not add normal-function regression sections, missing-normal-case warnings,
+or requests for additional normal-business transactions.
 
 Evidence precedence and scope:
 1. <Verification_Evidence> contains the machine-gated verification state and structured
@@ -23,6 +26,10 @@ Evidence precedence and scope:
    A legacy text log is diagnostic context only; it cannot establish a completed,
    context-matched, successful replay. Unknown or missing balance, price, event, state,
    profit, or trace data stays unknown, never zero or an empty successful result.
+   A profit dimension with metric=transaction_sender_native_balance_change records
+   each transaction sender's native-currency balance delta, including gas. Cite its
+   account and transaction scope; do not call it all-address, all-asset, or USD profit,
+   and do not sum independent replay rows into a total attack profit.
 2. <Applied_Patches> is the only source for descriptions of the actual code change.
    <Fix_Strategy> is an earlier proposal, not proof that a change was applied. If the
    proposal differs from the applied record, explain only the recorded applied change
@@ -47,10 +54,8 @@ Claim requirements:
   imply that the exploit was blocked or that total realized loss was zero.
 - A completed paired attack replay can support only its recorded attack-interception
   checks. A revert string alone does not prove a trace location, storage rollback,
-  absent events, the entire root cause, or preservation of legitimate behavior.
-  Only dimensions.normal_regression with actual recorded normal cases supports a
-  normal-function regression claim. An upstream stop does not validate an unexecuted
-  downstream patch. Report each unavailable coverage dimension explicitly.
+  absent events, or the entire root cause. An upstream stop does not validate an
+  unexecuted downstream patch. Report missing attack-replay evidence explicitly.
 - A checked code address and revert reason establish rollback in a modified contract
   with a reason consistent with a changed guard. They do not by themselves identify
   an exact changed statement/hunk, establish coverage of every patch, or locate the
@@ -62,8 +67,8 @@ Claim requirements:
   Analyze asset types and entrypoint responsibilities before proposing such a check.
 - Before recommending removal of a shared whitelist entry, sentinel registration,
   permission, or branch, inspect its legitimate uses. Preserve supported normal paths;
-  recommend a local type/entrypoint validation where appropriate. If those paths were
-  not tested, state that limitation instead of claiming a safe production fix.
+  recommend a local type/entrypoint validation where appropriate. Do not claim
+  production readiness or execution coverage outside the recorded attack inputs.
 - Infrastructure errors, compile failures, missing source, skipped replay, and exhausted
   attempts mean unverified outcomes, not a disproved root cause. Explain the recorded
   stage and reason without inventing a timeout or another result.
@@ -79,7 +84,7 @@ Use Markdown narrative with these sections:
 2. Root Cause Analysis: mechanism, cited data, necessary versus observed conditions.
 3. Attack Path Reconstruction: observed steps, source inferences, and missing stages.
 4. Mitigation & Verification: applied-change explanation from Applied_Patches only,
-   verification scope, unexecuted changes, normal-path coverage, and separate proposals.
+   attack-replay verification scope, unexecuted changes, and separate proposals.
 If evidence is incomplete, produce an accurate partial report without claiming closure.
 
 <Fault_Report>
@@ -115,7 +120,7 @@ missing evidence are different categories; none is interchangeable with another.
 
 Patch feedback:
 - A machine-gated completed replay may confirm the particular check it covers. Do not
-  upgrade the entire attack story, target-chain settlement, normal functionality, or
+  upgrade the entire attack story, target-chain settlement, or
   every applied patch to fact because a verdict says VERIFIED.
 - Revoke an inference only when a valid context-matched replay and cited observations
   directly contradict that inference. Record the specific rejected claim and evidence
@@ -123,6 +128,10 @@ Patch feedback:
   cause; a blocked request or compile/service error disproves neither.
 - If evidence is missing, blocked, skipped, or inconclusive, keep the inference open
   and record the exact evidence gap. A model verdict alone is not execution evidence.
+- For declared attack scopes, the coordinator's verification.status is determined
+  by validated execution evidence. Preserve that status even when the separate
+  model interpretation is UNVERIFIED, negative, missing, or unavailable. Do not
+  request another model review merely to confirm passing execution checks.
 
 Reconciliation:
 - Match every material amount and branch claim to its chain, transaction, asset,

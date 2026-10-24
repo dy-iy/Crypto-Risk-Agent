@@ -15,6 +15,7 @@ from app.attackpilot.prompt.trace_debug_prompt import (
 from app.attackpilot.settings import (
     TX_DEBUG_TURN,
     TX_DEBUG_MAX_IDLE_TURNS,
+    PLATFORM_TO_CHAIN_ID,
 )
 from app.attackpilot.utils.llm import MODEL_MAX_OUTPUT_TOKENS
 
@@ -75,6 +76,39 @@ class TraceAgent(AgentBase):
             'final_trace': final_trace,
             'diagnostic_reason': reason.strip(),
         }
+
+    def _prepare_patch_hypothesis(self, fault_report, fix_report):
+        """Check model plans while investigation can still correct their inputs."""
+        from app.attackpilot.utils.security_checks import resolve_task_verification_plan
+
+        fix_report = patch_hypothesis(fault_report, fix_report, self.tx_list)
+        processed = getattr(self, 'processed_data', {})
+        dapp = processed.get('dapp') or getattr(self, 'dapp', {})
+        explicit = dapp.get('verification_plan', processed.get('verification_plan'))
+        known = processed.get('transaction_hash_list') or dapp.get('transaction_hash') or self.tx_list
+        platform = dapp.get('platform') or getattr(self, 'dapp', {}).get('platform')
+        plan = resolve_task_verification_plan(
+            fix_report.get('verification_plan'), explicit=explicit,
+            network_id=PLATFORM_TO_CHAIN_ID.get(platform),
+            transaction_hashes=known)
+        result = dict(fix_report)
+        if plan is not None:
+            result['verification_plan'] = plan
+        else:
+            result.pop('verification_plan', None)
+        return result
+
+    @staticmethod
+    def _verification_plan_feedback(error):
+        return (
+            'Invalid verification_plan: ' + str(error)[:600] + '. '
+            'Correct the indicated field using the supplied execution chain, all original '
+            'transaction hashes, and existing task cache evidence with its actual SHA-256. '
+            'Do not invent authorities, hashes, measurements or normal cases. The explicit '
+            'input plan remains authoritative. If a defensible investigation plan is unavailable, '
+            'omit verification_plan and explain the missing evidence; the patch hypothesis '
+            'may still be reviewed without claiming verification.'
+        )
 
     def _inject_session(self, args: Dict) -> Dict:
         if not self.session_id:
@@ -206,11 +240,16 @@ class TraceAgent(AgentBase):
                     fault_report = func_args.get("fault_report", "")
                     fix_report = func_args.get("fix_report", "")
                     try:
-                        fix_report = patch_hypothesis(fault_report, fix_report, self.tx_list)
+                        fix_report = self._prepare_patch_hypothesis(fault_report, fix_report)
                     except AgentContractError as exc:
                         invalid_contract = exc
                         self.memory.append({'role': 'tool', 'tool_call_id': call_id, 'name': func_name,
                                             'content': 'Invalid patch hypothesis: provide a nonempty fault_report and a fix_report object with nonempty faulty_functions, each containing an original transaction hash and nonnegative trace index in trigger_point.'})
+                        continue
+                    except ValueError as exc:
+                        invalid_contract = AgentContractError('trace', 'agent_hypothesis_invalid')
+                        self.memory.append({'role': 'tool', 'tool_call_id': call_id, 'name': func_name,
+                                            'content': self._verification_plan_feedback(exc)})
                         continue
                     self.memory.append({
                         "role": "tool",
@@ -220,6 +259,7 @@ class TraceAgent(AgentBase):
                     })
                     if pending_return_result is None:
                         final_trace = await self.get_current_trace()
+                        self._check_cancelled()
                         self.logger.log_patch_report(fault_report, final_trace, fix_report)
                         pending_return_result = {
                             "reason": "READY_FOR_PATCH",
@@ -556,14 +596,19 @@ class TraceAgent(AgentBase):
                     fault_report = func_args.get("fault_report", "")
                     fix_report = func_args.get("fix_report", "")
                     try:
-                        fix_report = patch_hypothesis(fault_report, fix_report, self.tx_list)
-                        final_trace = await self.get_current_trace()
-                        self.logger.log_patch_report(fault_report, final_trace, fix_report)
-                        pending = {'reason': 'READY_FOR_PATCH', 'data': [fault_report, final_trace, fix_report]}
-                        content = 'Patch hypothesis accepted for generation and evidence review; its effectiveness is not yet verified.'
+                        fix_report = self._prepare_patch_hypothesis(fault_report, fix_report)
                     except AgentContractError as exc:
                         invalid_contract = exc
                         content = 'Invalid patch hypothesis: provide fault_report and fix_report.faulty_functions with valid original trigger hashes and trace indexes.'
+                    except ValueError as exc:
+                        invalid_contract = AgentContractError('trace', 'agent_hypothesis_invalid')
+                        content = self._verification_plan_feedback(exc)
+                    else:
+                        final_trace = await self.get_current_trace()
+                        self._check_cancelled()
+                        self.logger.log_patch_report(fault_report, final_trace, fix_report)
+                        pending = {'reason': 'READY_FOR_PATCH', 'data': [fault_report, final_trace, fix_report]}
+                        content = 'Patch hypothesis accepted for generation and evidence review; its effectiveness is not yet verified.'
                 self.memory.append({'role': 'tool', 'tool_call_id': tool_call.id, 'name': func_name, 'content': content})
             if pending:
                 return pending

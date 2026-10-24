@@ -306,6 +306,255 @@ class SourceFunctionMappingTest(unittest.IsolatedAsyncioTestCase):
                 self.dao._resolve_compiled_source_function(entity, self.selector('read()'), compiled)
 
 
+class PatchSourceTargetMappingTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        from app.attackpilot.entities.contract import ContractEntity
+        from app.attackpilot.entities.trace import MixTraceItem
+        from types import SimpleNamespace
+        self.dao = ContractDao(AsyncMock())
+        if not self.dao._resolve_solc_path('v0.8.20+commit.a1b79de6'):
+            self.skipTest('The Solidity 0.8.20 native compiler is required')
+        self.temp = tempfile.TemporaryDirectory(prefix='attackpilot-patch-source-target-')
+        self.addCleanup(self.temp.cleanup)
+        tmp_patch = patch('app.attackpilot.utils.tmpfile.TMP_FILE_DIR', self.temp.name)
+        tmp_patch.start()
+        self.addCleanup(tmp_patch.stop)
+        self.maker, self.pair, self.other = ['0x' + value * 40 for value in ('1', '2', '3')]
+        self.source = ('// 中文 requires byte offsets\npragma solidity 0.8.20; '
+                       'contract Pair { function swap() external {} } '
+                       'contract Maker { function convert(address p) external { _swap(bridgeFor(p)); } '
+                       'function query(address p) external pure returns(address) { return p; } '
+                       'function _swap(address p) internal { Pair(p).swap(); } '
+                       'function bridgeFor(address p) internal pure returns(address) { return p; } '
+                       'function bridgeFor(uint p) internal pure returns(uint) { return p; } '
+                       'function unused() internal {} }')
+        self.compiled = {}
+        contracts = {}
+        for address, name, file_id in ((self.maker, 'Maker', 19), (self.pair, 'Pair', 7), (self.other, 'Maker', 11)):
+            contract = ContractEntity({
+                'address': address, 'contract_name': name, 'public': True,
+                'compiler_version': 'v0.8.20+commit.a1b79de6',
+                'compiler_settings': {'optimizer': {'enabled': True, 'runs': 200}, 'evmVersion': 'paris'},
+                'source_lookup': {'status': 'available'},
+                'data': {'contract_info': [{'id': file_id, 'path': 'Actual.sol', 'source': self.source}]},
+            })
+            contracts[address] = contract
+            self.compiled[address] = await self.dao.get_compile_item_from_entity(ContractEntityForCompile({
+                'address': address, 'contract_name': name, 'sources': {'Actual.sol': self.source},
+                'compiler_version': contract.compiler_version, 'compiler_settings': contract.compiler_settings,
+            }))
+
+        def frame(address, signature, index, parent=None):
+            contract = contracts[address]
+            entity = ContractEntityForCompile({'contract_name': contract.contract_name,
+                                              'sources': {'Actual.sol': self.source}})
+            function = self.dao.source_functions_at_location(entity, self.compiled[address], signature)[0]
+            data = {'to': address, 'from': parent.to_addr if parent else '0x' + 'a' * 40,
+                    'call_type': 'JUMPDEST' if address == self.maker and parent else 'CALL',
+                    'absolute_position': index, 'function_file_index': contract.contract_info[0]['id'],
+                    'function_code_start': function['code_start'], 'function_code_length': function['code_length']}
+            return MixTraceItem(data, parent=parent)
+
+        self.frame = frame
+        self.root = frame(self.maker, 'Maker.convert(address)', 71)
+        self.swap = frame(self.maker, 'Maker._swap(address)', 8041, self.root)
+        self.trigger = frame(self.pair, 'Pair.swap()', 12015, self.swap)
+        call_start = self.source.encode().index(b'Pair(p).swap()')
+        self.trigger.caller_loc = SimpleNamespace(file_index=19, code_start=call_start, code_length=len(b'Pair(p).swap()'))
+        self.bridge = frame(self.maker, 'Maker.bridgeFor(address)', 7920, self.root)
+        self.tree = SimpleNamespace(contracts=contracts, node_map={
+            frame.absolute_position: frame for frame in (self.root, self.swap, self.trigger, self.bridge)})
+
+    async def test_downstream_pair_call_resolves_internal_caller_not_callee(self):
+        from app.attackpilot.mcp_tools.mcp_server import _resolve_patch_source_target
+        result = await _resolve_patch_source_target(self.tree, self.trigger, 'Maker._swap(address)')
+        self.assertEqual(result['address'], self.maker)
+        self.assertEqual(result['file_index'], 19)
+        self.assertEqual(result['resolved_trigger_index'], 8041)
+        self.assertEqual(result['source_mapping']['function_signature'], '_swap(address)')
+        self.assertEqual(result['source_mapping']['requested_trigger_index'], 12015)
+        self.assertEqual(result['source_mapping']['source_file_id'], 0)
+
+    async def test_direct_callee_and_exact_qualified_signature_still_work(self):
+        from app.attackpilot.mcp_tools.mcp_server import _resolve_patch_source_target
+        result = await _resolve_patch_source_target(self.tree, self.trigger, 'Pair.swap()')
+        self.assertEqual((result['address'], result['file_index'], result['resolved_trigger_index']),
+                         (self.pair, 7, 12015))
+        for expected in ('Other._swap(address)', 'Maker._swap(uint256)', 'Maker.unused()'):
+            with self.subTest(expected=expected), self.assertRaisesRegex(ValueError, 'source_target_unresolved'):
+                await _resolve_patch_source_target(self.tree, self.trigger, expected)
+
+    async def test_bad_trigger_corrects_to_observed_sibling_and_deduplicates_repeated_calls(self):
+        from app.attackpilot.mcp_tools.mcp_server import _resolve_patch_source_target
+        repeated = self.frame(self.maker, 'Maker.bridgeFor(address)', 7959, self.root)
+        self.tree.node_map[7959] = repeated
+        result = await _resolve_patch_source_target(self.tree, self.trigger, 'Maker.bridgeFor(address)')
+        self.assertEqual(result['address'], self.maker)
+        self.assertEqual(result['resolved_trigger_index'], 7920)
+        self.assertEqual(result['source_mapping']['trace_relation'], 'same_transaction_observed_frame')
+
+    async def test_same_named_function_at_unrelated_address_cannot_supply_missing_execution(self):
+        from app.attackpilot.mcp_tools.mcp_server import _resolve_patch_source_target
+        del self.tree.node_map[7920]
+        unrelated = self.frame(self.other, 'Maker.bridgeFor(address)', 9000, self.root)
+        self.tree.node_map[9000] = unrelated
+        with self.assertRaisesRegex(ValueError, 'source_target_unresolved'):
+            await _resolve_patch_source_target(self.tree, self.trigger, 'Maker.bridgeFor(address)')
+
+    async def test_observed_overloads_without_a_signature_are_ambiguous(self):
+        from app.attackpilot.mcp_tools.mcp_server import _resolve_patch_source_target
+        overloaded = self.frame(self.maker, 'Maker.bridgeFor(uint256)', 7900, self.root)
+        self.tree.node_map[7900] = overloaded
+        with self.assertRaisesRegex(ValueError, 'source_target_ambiguous'):
+            await _resolve_patch_source_target(self.tree, self.trigger, 'Maker.bridgeFor')
+        result = await _resolve_patch_source_target(self.tree, self.trigger, 'Maker.bridgeFor(uint256)')
+        self.assertEqual(result['resolved_trigger_index'], 7900)
+
+    async def test_selector_only_entry_cannot_supply_sibling_execution_evidence(self):
+        from app.attackpilot.mcp_tools.mcp_server import _resolve_patch_source_target
+        from eth_utils import keccak
+        from types import SimpleNamespace
+        sibling = self.frame(self.maker, 'Maker.query(address)', 7900, self.root)
+        sibling.call_type = 'CALL'
+        sibling.input_data = '0x' + keccak(text='query(address)')[:4].hex() + '00' * 32
+        sibling.function_loc = SimpleNamespace(file_index=-1, code_start=-1, code_length=-1)
+        self.tree.node_map[7900] = sibling
+        with self.assertRaisesRegex(ValueError, 'source_target_unresolved'):
+            await _resolve_patch_source_target(self.tree, self.trigger, 'Maker.query(address)')
+        direct = await _resolve_patch_source_target(self.tree, sibling, 'Maker.query(address)')
+        self.assertEqual(direct['resolved_trigger_index'], 7900)
+        self.assertEqual(direct['source_mapping']['source_mapping'], 'compiled_ast_function_selector')
+        self.assertEqual(direct['source_mapping']['execution_scope'], 'selected_function_entry')
+
+    async def test_tool_returns_resolved_integer_index_and_never_returns_wrong_callee_on_failure(self):
+        from app.attackpilot.mcp_tools import mcp_server as server
+        from types import SimpleNamespace
+        tx = '0x' + 'a' * 64
+        session = SimpleNamespace(tx2micro={tx: self.tree})
+        with patch.object(server, '_get_session_context', return_value=session):
+            result = await server.get_patch_items.fn('offline', tx + '::12015',
+                                                      expected_function='Maker.bridgeFor(address)')
+            self.assertEqual(result['address'], self.maker)
+            self.assertEqual(result['file_index'], 19)
+            self.assertEqual(result['resolved_trigger_index'], 7920)
+            self.assertEqual(result['source_target']['status'], 'resolved')
+            rejected = await server.get_patch_items.fn('offline', tx + '::12015',
+                                                        expected_function='Other.swap()')
+            self.assertEqual(rejected['source_target']['status'], 'unresolved')
+            self.assertNotIn('address', rejected)
+
+    async def test_missing_compiler_ast_never_uses_model_qualified_name_as_ownership(self):
+        from app.attackpilot.mcp_tools.mcp_server import _resolve_patch_source_target
+        with patch.object(ContractDao, 'get_compile_item_from_entity',
+                          AsyncMock(return_value=ContractCompileItem(self.maker, '6000', {}, []))):
+            with self.assertRaisesRegex(ValueError, 'source_target_unresolved'):
+                await _resolve_patch_source_target(self.tree, self.trigger, 'Maker._swap(address)')
+
+    async def test_retryable_missing_owner_source_returns_only_a_refresh_hint(self):
+        from app.attackpilot.mcp_tools import mcp_server as server
+        from types import SimpleNamespace
+        owner = self.tree.contracts[self.maker]
+        owner.contract_info = []
+        owner.file_map = {}
+        owner.source_lookup = {'status': 'failed', 'retryable': True}
+        tx = '0x' + 'a' * 64
+        with patch.object(server, '_get_session_context', return_value=SimpleNamespace(tx2micro={tx: self.tree})):
+            result = await server.get_patch_items.fn('offline', tx + '::12015',
+                                                      expected_function='Maker._swap(address)')
+        self.assertEqual(result['address'], self.maker)
+        self.assertEqual(result['source_target']['status'], 'unresolved')
+        self.assertEqual(result['file_index'], -1)
+        self.assertNotIn('resolved_trigger_index', result)
+
+    async def test_source_ast_ownership_does_not_depend_on_provider_public_flag(self):
+        from app.attackpilot.mcp_tools.mcp_server import _resolve_patch_source_target
+        for value in (None, False):
+            self.tree.contracts[self.maker].public = value
+            result = await _resolve_patch_source_target(self.tree, self.trigger, 'Maker._swap(address)')
+            self.assertEqual(result['address'], self.maker)
+
+    async def test_invalid_expected_function_returns_structured_rejection(self):
+        from app.attackpilot.mcp_tools import mcp_server as server
+        from types import SimpleNamespace
+        tx = '0x' + 'a' * 64
+        with patch.object(server, '_get_session_context', return_value=SimpleNamespace(tx2micro={tx: self.tree})):
+            result = await server.get_patch_items.fn('offline', tx + '::12015', expected_function=123)
+        self.assertEqual(result['source_target']['reason_code'], 'source_target_function_invalid')
+        self.assertNotIn('address', result)
+
+    async def test_legacy_compact_ast_named_functions_resolve_but_constructors_and_fallback_do_not(self):
+        if not self.dao._resolve_solc_path('v0.4.23+commit.124ca40d'):
+            self.skipTest('The Solidity 0.4.23 native compiler is required')
+        source = ('// 中文 byte offsets\npragma solidity 0.4.23; contract Example { '
+                  'function Example() public {} function bid(uint x) public pure returns(uint) { return x; } '
+                  'function () public payable {} }')
+        entity = ContractEntityForCompile({
+            'address': self.maker, 'contract_name': 'Example', 'sources': {'Legacy.sol': source},
+            'compiler_version': 'v0.4.23+commit.124ca40d',
+            'compiler_settings': {'optimizer': {'enabled': True, 'runs': 200}},
+        })
+        compiled = await self.dao.get_compile_item_from_entity(entity)
+        self.assertTrue(compiled.is_success(), compiled.errors)
+        owner = next(node for node in compiled.ast['Legacy.sol']['nodes']
+                     if node.get('nodeType') == 'ContractDefinition')
+        function = next(node for node in owner['nodes'] if node.get('name') == 'bid')
+        self.assertNotIn('kind', function)
+        self.assertIs(function['isConstructor'], False)
+        start, length, _ = map(int, function['src'].split(':'))
+        matches = self.dao.source_functions_at_location(
+            entity, compiled, 'Example.bid(uint256)', filename='Legacy.sol', start=start, length=length)
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]['function_signature'], 'bid(uint256)')
+        self.assertEqual(source.encode()[matches[0]['code_start']:matches[0]['code_start'] + matches[0]['code_length']],
+                         b'function bid(uint x) public pure returns(uint) { return x; }')
+        self.assertEqual(self.dao.source_functions_at_location(entity, compiled, 'Example.Example()'), [])
+        fallback = next(node for node in owner['nodes']
+                        if node.get('nodeType') == 'FunctionDefinition' and node.get('name') == '')
+        fallback_start, fallback_length, _ = map(int, fallback['src'].split(':'))
+        self.assertEqual(self.dao.source_functions_at_location(
+            entity, compiled, 'Example.bid(uint256)', filename='Legacy.sol',
+            start=fallback_start, length=fallback_length), [])
+
+    async def test_user_defined_parameter_types_keep_qualified_identity_and_internal_overloads(self):
+        if not self.dao._resolve_solc_path('v0.6.12+commit.27d51765'):
+            self.skipTest('The Solidity 0.6.12 native compiler is required')
+        source = ('pragma solidity 0.6.12; interface IERC20 {} interface IERC721 {} '
+                  'contract Example { struct Box { uint value; } enum Flag { Off, On } '
+                  'function take(IERC20 token) internal pure returns(address) { return address(token); } '
+                  'function take(IERC721 token) internal pure returns(address) { return address(token); } '
+                  'function use20(IERC20 token) external pure returns(address) { return take(token); } '
+                  'function use721(IERC721 token) external pure returns(address) { return take(token); } '
+                  'function many(IERC20[] memory tokens) internal pure returns(uint) { return tokens.length; } '
+                  'function inspect(Box memory box, Flag flag) internal pure returns(uint) { '
+                  'return box.value + uint(flag); } }')
+        entity = ContractEntityForCompile({
+            'address': self.maker, 'contract_name': 'Example', 'sources': {'Types.sol': source},
+            'compiler_version': 'v0.6.12+commit.27d51765',
+            'compiler_settings': {'optimizer': {'enabled': True, 'runs': 200}},
+        })
+        compiled = await self.dao.get_compile_item_from_entity(entity)
+        self.assertTrue(compiled.is_success(), compiled.errors)
+        erc20 = self.dao.source_functions_at_location(entity, compiled, 'Example.take(IERC20)')
+        erc721 = self.dao.source_functions_at_location(entity, compiled, 'Example.take(IERC721)')
+        self.assertEqual(len(erc20), 1)
+        self.assertEqual(len(erc721), 1)
+        self.assertNotEqual(erc20[0]['code_start'], erc721[0]['code_start'])
+        self.assertEqual(erc20[0]['function_signature'], 'take(IERC20)')
+        self.assertEqual(erc721[0]['function_signature'], 'take(IERC721)')
+        self.assertEqual(len(self.dao.source_functions_at_location(entity, compiled, 'Example.take')), 2)
+        self.assertEqual(self.dao.source_functions_at_location(entity, compiled, 'Example.take(address)'), [])
+        self.assertEqual(self.dao.source_functions_at_location(
+            entity, compiled, 'Example.take(IERC721)', filename='Types.sol',
+            start=erc20[0]['code_start'], length=erc20[0]['code_length']), [])
+        self.assertEqual(self.dao.source_functions_at_location(
+            entity, compiled, 'Example.many(IERC20[])')[0]['function_signature'], 'many(IERC20[])')
+        self.assertEqual(self.dao.source_functions_at_location(
+            entity, compiled, 'Example.inspect(Example.Box,Example.Flag)')[0]['function_signature'],
+                         'inspect(Example.Box,Example.Flag)')
+        self.assertEqual(self.dao.source_functions_at_location(
+            entity, compiled, 'Example.inspect(Other.Box,Example.Flag)'), [])
+
+
 class PatchGuardAttributionCompilerTest(unittest.IsolatedAsyncioTestCase):
     address = '0x' + '7' * 40
     original_source = (
@@ -802,6 +1051,9 @@ class RuntimeIntegrityTest(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(code=code):
                 agent = FixAgent.__new__(FixAgent)
+                agent.chain_id = 1
+                agent.processed_data = {'dapp': {'platform': 'Ethereum'},
+                                        'transaction_hash_list': [self.transaction_hash]}
                 agent._check_cancelled = Mock()
                 agent.session_id = 'offline-source-preconditions'
                 agent.mcp_client = Mock()
@@ -823,6 +1075,7 @@ class RuntimeIntegrityTest(unittest.IsolatedAsyncioTestCase):
     async def test_original_runtime_mismatch_stops_before_generation_or_remote_replay(self):
         from app.attackpilot.agents.FixAgent import FixAgent
         agent = FixAgent.__new__(FixAgent)
+        agent.chain_id = 1
         agent._check_cancelled = Mock()
         agent.session_id = 'offline-integrity'
         agent.processed_data = {'transaction_hash_list': [self.transaction_hash],
@@ -850,6 +1103,7 @@ class RuntimeIntegrityTest(unittest.IsolatedAsyncioTestCase):
     async def test_changed_storage_with_creation_code_cannot_fall_back_to_deployment(self):
         from app.attackpilot.agents.FixAgent import FixAgent
         agent = FixAgent.__new__(FixAgent)
+        agent.chain_id = 1
         agent._check_cancelled = Mock()
         agent.session_id = 'offline-integrity'
         agent.metrics_collector = None
@@ -885,6 +1139,7 @@ class RuntimeIntegrityTest(unittest.IsolatedAsyncioTestCase):
     async def test_successful_runtime_preparation_binds_exact_codes_and_applied_patch(self):
         from app.attackpilot.agents.FixAgent import FixAgent
         agent = FixAgent.__new__(FixAgent)
+        agent.chain_id = 1
         agent._check_cancelled = Mock()
         agent.session_id = 'offline-integrity'
         agent.metrics_collector = None

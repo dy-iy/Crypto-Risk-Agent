@@ -21,6 +21,12 @@ class TransactionInput(BaseModel):
     tx_hashes: list[str] = Field(default_factory=list, max_length=50)
     chain: Literal["ethereum", "bnbchain"] = "ethereum"
     modules: list[str] = Field(default_factory=list)
+    verification_plan: dict | None = None
+
+    @field_validator("verification_plan")
+    @classmethod
+    def plan_valid(cls, value):
+        return normalize_input_verification_plan(value)
 
     @field_validator("modules")
     @classmethod
@@ -30,6 +36,12 @@ class TransactionInput(BaseModel):
 class CaseTaskInput(BaseModel):
     dapp_name: str = Field(min_length=1, max_length=255)
     modules: list[str] = Field(default_factory=list)
+    verification_plan: dict | None = None
+
+    @field_validator("verification_plan")
+    @classmethod
+    def plan_valid(cls, value):
+        return normalize_input_verification_plan(value)
 
     @field_validator("dapp_name")
     @classmethod
@@ -43,6 +55,20 @@ class CaseTaskInput(BaseModel):
     @classmethod
     def modules_valid(cls, value: list[str]) -> list[str]:
         return normalize_modules(value)
+
+
+def normalize_input_verification_plan(value, *, network_id=None, transaction_hashes=None):
+    """Validate submitted rules without granting an input investigation authority."""
+    from app.attackpilot.utils.security_checks import validate_verification_plan
+    plan = validate_verification_plan(value, network_id=network_id)
+    if plan is None:
+        return None
+    if plan['authority']['kind'] != 'user_declared':
+        raise ValueError('提交的验证计划必须声明为 user_declared')
+    if transaction_hashes is not None and set(plan['attack_transaction_hashes']) != {
+            tx.lower() for tx in transaction_hashes}:
+        raise ValueError('验证计划须覆盖本次提交的全部攻击序列交易')
+    return plan
 
 class SearchInput(BaseModel):
     query: str = Field(min_length=1, max_length=2000)

@@ -26,7 +26,10 @@ class JudgeAgent(AgentBase):
             state = adjudicate_patch_verification(result, judge_data["replay_logs"], judge_data["patches"])
             result["verification"] = state
             result["evidence_review_attempts"] = attempt + 1
-            if state.get("next_action") != "review_same_evidence":
+            # Declared sequential verification is decided by the coordinator's
+            # execution checks. Preserve this model interpretation without
+            # querying again to obtain a different textual verdict.
+            if state.get("evidence_version") == 2 or state.get("next_action") != "review_same_evidence":
                 break
             if attempt:
                 state.update(terminal=True, retryable=False, next_action="inspect_judge_evidence")
@@ -36,9 +39,14 @@ class JudgeAgent(AgentBase):
             review = (
                 "The coordinator has completed its deterministic checks for the supplied trigger inputs. "
                 "Review these check references and your previous interpretation against the same evidence. "
-                "Do not require a sequential state replay, profit valuation, normal-function regression, "
-                "or proof of every patch hunk to judge the narrower recorded trigger interception. "
-                "Keep UNVERIFIED if a required interception check remains unsupported.\n"
+                "Respect the reported scope and deterministic dimensions. The declared_attack_chain scope "
+                "requires passing sequence_replay, attack_interception, and security_properties dimensions. "
+                "When no normal cases are declared, normal_regression=not_run does not block that attack-scoped "
+                "verdict and does not establish normal-function coverage. The declared_attack_chain_and_normal_cases "
+                "scope additionally requires recorded normal cases with passing business assertions. "
+                "A security result must preserve every declared invariant and eliminate at least one observed "
+                "original violation. Profit valuation is supplementary. "
+                "Keep UNVERIFIED if any required dimension remains unsupported.\n"
                 + json.dumps({"coordinator_verification": state, "previous_interpretation": {
                     key: result.get(key) for key in ('verdict', 'reason', 'evidence_refs', 'target_checks')
                 }}, ensure_ascii=False)
@@ -60,9 +68,15 @@ class JudgeAgent(AgentBase):
         result["analysis_details"] = details
 
         if self.metrics_collector and isinstance(result, dict):
-            verdict = result.get("verdict") if result["verification"].get("evidence_validated") else "UNVERIFIED"
-            if verdict:
+            state = result["verification"]
+            if state.get("evidence_version") == 2:
+                verdict = ("VERIFIED" if state.get("status") == "verified"
+                           and state.get("evidence_validated") is True else "UNVERIFIED")
+                feedback = str(state.get("reason", ""))
+            else:
+                verdict = result.get("verdict") if state.get("evidence_validated") else "UNVERIFIED"
                 feedback = str(result.get("reason", "")) + " " + str(result.get("feedback_to_agent", ""))
+            if verdict:
                 self.metrics_collector.record_judge_result(
                     case_name=self.unique_id,
                     verdict=verdict,

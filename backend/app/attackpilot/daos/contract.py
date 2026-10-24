@@ -269,6 +269,105 @@ class ContractDao:
         return self._resolve_compiled_source_function(entity, calldata[:10].lower(), compiled)
 
     @staticmethod
+    def source_functions_at_location(entity, compiled, expected_function, *, filename=None, start=None, length=None):
+        """Match a declared function to compiler byte ranges, including internal functions.
+
+        Provider source IDs are deliberately not compared to compiler IDs: the
+        filename joins the two independently numbered source collections.
+        """
+        match = (re.fullmatch(r'(?:(\w+)\.)?([A-Za-z_$][\w$]*)(?:\(([^()]*)\))?', expected_function)
+                 if isinstance(expected_function, str) else None)
+        if not match:
+            raise ValueError('source_target_function_invalid')
+        qualifier, function_name, parameters = match.groups()
+
+        def canonical(value):
+            value = re.sub(r'\s+(memory|storage|calldata)(?:\s+(pointer|ref))?', '', value.strip())
+            # AST typeString adds categories absent from source declarations.
+            # Keep qualified type names and array suffixes: distinct interface
+            # types can overload an internal function despite sharing ABI address.
+            value = re.sub(r'\b(?:contract|struct|enum)\s+', '', value)
+            value = value.replace('address payable', 'address')
+            value = re.sub(r'\buint\b', 'uint256', value)
+            value = re.sub(r'\bint\b', 'int256', value)
+            return re.sub(r'\s+', '', value)
+
+        signature = None if parameters is None else ','.join(canonical(p) for p in parameters.split(','))
+
+        def source_range(node):
+            raw = node.get('src') if isinstance(node, dict) else None
+            if not isinstance(raw, str) or not re.fullmatch(r'\d+:\d+:\d+', raw):
+                raise ValueError('source_target_location_unavailable')
+            return tuple(map(int, raw.split(':')))
+
+        contracts, files = {}, {}
+        if not compiled.is_success() or any(e.get('severity') == 'error' for e in compiled.errors):
+            raise ValueError('source_target_compilation_failed')
+        for path, unit in compiled.ast.items():
+            if path not in entity.sources or not isinstance(unit, dict) or unit.get('nodeType') != 'SourceUnit':
+                raise ValueError('source_target_ast_unavailable')
+            _, _, file_id = source_range(unit)
+            if file_id in files:
+                raise ValueError('source_target_ambiguous_source')
+            files[file_id] = path
+            for node in unit.get('nodes', []):
+                if node.get('nodeType') == 'ContractDefinition':
+                    if type(node.get('id')) is not int or node['id'] in contracts:
+                        raise ValueError('source_target_ambiguous_contract')
+                    contracts[node['id']] = node
+        targets = [node for node in contracts.values() if node.get('name') == entity.contract_name]
+        if len(targets) != 1:
+            raise ValueError('source_target_ambiguous_contract')
+        target = targets[0]
+        bases = target.get('linearizedBaseContracts')
+        if (not isinstance(bases, list) or not bases or bases[0] != target['id']
+                or len(set(bases)) != len(bases) or any(ident not in contracts for ident in bases)):
+            raise ValueError('source_target_inheritance_unavailable')
+        if filename is not None and (type(start) is not int or type(length) is not int or start < 0 or length <= 0):
+            return []
+        matches = []
+        for ident in bases:
+            owner = contracts[ident]
+            if qualifier is not None and qualifier not in {owner.get('name'), entity.contract_name}:
+                continue
+            for function in owner.get('nodes', []):
+                ordinary_function = (function.get('kind') == 'function' or (
+                    function.get('kind') is None and function.get('isConstructor') is False
+                    and isinstance(function.get('name'), str) and bool(function['name'])))
+                if (function.get('nodeType') != 'FunctionDefinition' or not ordinary_function
+                        or function.get('name') != function_name or not isinstance(function.get('body'), dict)):
+                    continue
+                types = [parameter.get('typeDescriptions', {}).get('typeString')
+                         for parameter in function.get('parameters', {}).get('parameters', [])]
+                if any(not isinstance(value, str) for value in types):
+                    raise ValueError('source_target_signature_unavailable')
+                actual_signature = ','.join(canonical(value) for value in types)
+                if signature is not None and signature != actual_signature:
+                    continue
+                function_start, function_length, file_id = source_range(function)
+                body_start, body_length, body_id = source_range(function['body'])
+                path = files.get(file_id)
+                if (path is None or function_length <= 0 or body_length <= 0 or body_id != file_id
+                        or body_start < function_start or body_start + body_length > function_start + function_length):
+                    raise ValueError('source_target_location_unavailable')
+                content = entity.sources[path].encode('utf-8')
+                if function_start + function_length > len(content):
+                    raise ValueError('source_target_location_unavailable')
+                content[function_start:function_start + function_length].decode('utf-8')
+                if filename is not None and (path != filename or start < function_start
+                                            or start + length > function_start + function_length):
+                    continue
+                matches.append({
+                    'filename': path, 'source_file_id': file_id, 'code_start': function_start,
+                    'code_length': function_length, 'function_name': function_name,
+                    'function_signature': f'{function_name}({actual_signature})',
+                    'declaring_contract': owner.get('name'),
+                    'line_number': content[:function_start].decode('utf-8').count('\n') + 1,
+                    'source_mapping': 'compiled_ast_observed_source_range',
+                })
+        return matches
+
+    @staticmethod
     def _resolve_compiled_source_function(
             entity: ContractEntityForCompile, selector: str, compiled: ContractCompileItem,
     ) -> Dict:

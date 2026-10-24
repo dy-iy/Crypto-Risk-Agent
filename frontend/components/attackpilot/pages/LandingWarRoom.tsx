@@ -99,15 +99,16 @@ function readLoginDraft() {
   return "";
 }
 
-function parseSavedInput(value: string): { rows: string[]; chain: string; modules: string[] } {
+function parseSavedInput(value: string): { rows: string[]; chain: string; modules: string[]; verificationPlan: string } {
   try {
     const saved: unknown = JSON.parse(value);
     if (saved && typeof saved === "object" && "rows" in saved && "chain" in saved && Array.isArray(saved.rows) && saved.rows.every(row => typeof row === "string")) {
       const modules = "modules" in saved && Array.isArray(saved.modules) ? saved.modules.filter((module): module is string => typeof module === "string" && analysisModules.some(item => item.id === module)) : analysisModules.map(module => module.id);
-      return { rows: saved.rows.length ? saved.rows : [""], chain: saved.chain === "bnbchain" ? "bnbchain" : "ethereum", modules: modulesForRequest(modules) };
+      return { rows: saved.rows.length ? saved.rows : [""], chain: saved.chain === "bnbchain" ? "bnbchain" : "ethereum", modules: modulesForRequest(modules),
+        verificationPlan: "verificationPlan" in saved && typeof saved.verificationPlan === "string" ? saved.verificationPlan : "" };
     }
   } catch { /* 首次访问或旧草稿无效时从空白输入开始。 */ }
-  return { rows: [""], chain: "ethereum", modules: analysisModules.map(module => module.id) };
+  return { rows: [""], chain: "ethereum", modules: analysisModules.map(module => module.id), verificationPlan: "" };
 }
 
 const analysisModules = [
@@ -165,6 +166,8 @@ const LandingWarRoom: React.FC = () => {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [draftModules, setSelectedModules] = useState<string[] | null>(null);
   const selectedModules = draftModules ?? savedDraft.modules;
+  const [draftVerificationPlan, setVerificationPlan] = useState<string | null>(null);
+  const verificationPlan = draftVerificationPlan ?? savedDraft.verificationPlan;
   const [txDetection, setTxDetection] = useState<TxDetectResponse | null>(null);
   const [txDetectLoading, setTxDetectLoading] = useState(false);
   const [txReview, setTxReview] = useState<TxReviewResponse | null>(null);
@@ -193,12 +196,12 @@ const LandingWarRoom: React.FC = () => {
 
   const requestLogin = useCallback(() => {
     if (!userId && txRows.some(row => row.trim())) {
-      sessionStore.setItem(LOGIN_DRAFT_KEY, JSON.stringify({ rows: txRows, chain, modules: selectedModules, origin: "guest", expiresAt: Date.now() + 15 * 60 * 1000 }));
+      sessionStore.setItem(LOGIN_DRAFT_KEY, JSON.stringify({ rows: txRows, chain, modules: selectedModules, verificationPlan, origin: "guest", expiresAt: Date.now() + 15 * 60 * 1000 }));
     } else if (!userId) {
       sessionStore.removeItem(LOGIN_DRAFT_KEY);
     }
     onLogin();
-  }, [chain, onLogin, selectedModules, txRows, userId]);
+  }, [chain, onLogin, selectedModules, txRows, userId, verificationPlan]);
 
   useEffect(() => {
     let cancelled = false;
@@ -393,7 +396,7 @@ const LandingWarRoom: React.FC = () => {
     submissionRef.current = controller;
     setTxDetectLoading(true);
     try {
-      localStore.setItem(inputStorageKey, JSON.stringify({ rows: txHashes, chain, modules: selectedModules }));
+      localStore.setItem(inputStorageKey, JSON.stringify({ rows: txHashes, chain, modules: selectedModules, verificationPlan }));
       clearReview();
       const payload = buildDeepAnalysisRequest(txHashes, chain, selectedModules);
       const result = txHashes.length === 1 ? await reviewTransaction(payload, controller.signal) : await detectTransactions(payload, controller.signal);
@@ -415,7 +418,7 @@ const LandingWarRoom: React.FC = () => {
       if (submissionRef.current === controller) submissionRef.current = null;
       if (!controller.signal.aborted) setTxDetectLoading(false);
     }
-  }, [chain, clearReview, inputError, inputStorageKey, message, requestLogin, selectedModules, txHashes, userId, validInput]);
+  }, [chain, clearReview, inputError, inputStorageKey, message, requestLogin, selectedModules, txHashes, userId, validInput, verificationPlan]);
 
   const handleStartDeepAnalysis = useCallback(async () => {
     if (!userId) { requestLogin(); return; }
@@ -430,8 +433,9 @@ const LandingWarRoom: React.FC = () => {
     submissionRef.current = controller;
     setDeepAnalysisLoading(true);
     try {
-      localStore.setItem(inputStorageKey, JSON.stringify({ rows: txHashes, chain, modules: selectedModules }));
-      const task = await startTransactionDeepAnalysis(buildDeepAnalysisRequest(txHashes, chain, selectedModules), controller.signal);
+      const payload = buildDeepAnalysisRequest(txHashes, chain, selectedModules, verificationPlan);
+      localStore.setItem(inputStorageKey, JSON.stringify({ rows: txHashes, chain, modules: selectedModules, verificationPlan }));
+      const task = await startTransactionDeepAnalysis(payload, controller.signal);
       if (controller.signal.aborted) return;
       message.success("深度分析任务已启动。");
       navigate(`/tasks/${task.task_id}`);
@@ -441,7 +445,7 @@ const LandingWarRoom: React.FC = () => {
       if (submissionRef.current === controller) submissionRef.current = null;
       if (!controller.signal.aborted) setDeepAnalysisLoading(false);
     }
-  }, [chain, inputError, inputStorageKey, message, navigate, requestLogin, selectedModules, txHashes, userId, validInput]);
+  }, [chain, inputError, inputStorageKey, message, navigate, requestLogin, selectedModules, txHashes, userId, validInput, verificationPlan]);
 
   const scrollToSection = useCallback((sectionId: string) => {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -525,6 +529,16 @@ const LandingWarRoom: React.FC = () => {
                   ))}
                 </Checkbox.Group>
               </div>
+
+              {selectedModules.includes("patch_verification") ? <details className="workflow-module-box">
+                <summary>补充攻击交易安全条件（可选）</summary>
+                <Typography.Paragraph type="secondary">
+                  可提交验证计划 JSON，指定本次攻击交易的资金、权限或存储安全条件。金额使用原始整数的字符串，避免精度损失。留空时从调查结果取得计划。
+                </Typography.Paragraph>
+                <Input.TextArea aria-label="验证计划 JSON" value={verificationPlan} disabled={busy}
+                  autoSize={{ minRows: 4, maxRows: 14 }} maxLength={100_000}
+                  onChange={event => setVerificationPlan(event.target.value)} placeholder="粘贴验证计划 JSON" />
+              </details> : null}
 
               <div className="hero-action-buttons">
                 <Button className="tx-detect-primary-btn" type="primary" icon={<Search size={16} />} disabled={!validInput || busy} loading={txDetectLoading} onClick={handleTxDetect}>

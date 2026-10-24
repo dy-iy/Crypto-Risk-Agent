@@ -1,5 +1,6 @@
 import ast
 import asyncio
+from copy import deepcopy
 import hashlib
 import json
 import re
@@ -10,7 +11,7 @@ from app.attackpilot.agents.AgentBase import AgentBase
 from app.attackpilot.daos.contract import ContractDao, ContractCompileItem
 from app.attackpilot.daos.tenderly import BundleTenderlyDao
 from app.attackpilot.downloaders.contract import ContractSourceDownloader, ContractBytecodeDownloader
-from app.attackpilot.downloaders.trans import BlockTimestampDownloader, TxDownloader
+from app.attackpilot.downloaders.trans import BlockTimestampDownloader, TxDownloader, TxReceiptDownloader
 from app.attackpilot.entities.contract import ContractEntityForCompile
 from app.attackpilot.errors import HistoricalReplayValidationError, TenderlyAPIError, failure_message
 from app.attackpilot.privacy import redact_text
@@ -96,12 +97,18 @@ class FixAgent(AgentBase):
         sources = getattr(self, "_runtime_source_evidence", None)
         if isinstance(sources, dict):
             self.verification["runtime_source_evidence"] = dict(sources)
+        resolutions = getattr(self, '_patch_source_resolutions', None)
+        if isinstance(resolutions, list) and resolutions:
+            self.verification['source_target_resolutions'] = deepcopy(resolutions)
         rejected = getattr(self, '_rejected_patch_candidates', None)
         if isinstance(rejected, dict) and rejected:
             self.verification['rejected_patch_candidates'] = [
                 {**item, 'generation_requests': list(item['generation_requests'])}
                 for item in rejected.values()
             ]
+        plan = getattr(self, '_verification_plan', None)
+        if isinstance(plan, dict):
+            self.verification['verification_plan'] = deepcopy(plan)
 
     def _stop(self, status, stage, reason_code, reason, *, patches="", retry_count=0,
               replay_attempted=False, replay_completed=False, terminal=True):
@@ -129,10 +136,26 @@ class FixAgent(AgentBase):
             status, reason_code = "blocked", f"baseline_{exc.status}"
         elif isinstance(exc, TenderlyAPIError) and exc.error_code:
             reason_code = f"tenderly_{exc.error_code}"
+        sequence_diagnostic = getattr(exc, 'sequence_validation_diagnostic', None)
+        historical_sequence_mismatch = (
+            isinstance(exc, HistoricalReplayValidationError)
+            and exc.reason_code in {'execution_mismatch', 'event_mismatch'}
+            and isinstance(sequence_diagnostic, dict)
+            and sequence_diagnostic.get('role') == 'control'
+        )
+        reason = (str(exc) if isinstance(exc, (PatchReplayBudgetError, HistoricalRuntimeError, RuntimeIntegrityError))
+                  else failure_message(exc, "补丁处理"))
+        if historical_sequence_mismatch:
+            reason_code = 'historical_sequence_result_mismatch'
+            reason = '原版连续回放未还原历史执行结果；需要核对攻击步骤之间的链上状态变化，当前尚不能判断补丁效果。'
         stopped = self._stop(status, stage, reason_code,
-                             str(exc) if isinstance(exc, (PatchReplayBudgetError, HistoricalRuntimeError, RuntimeIntegrityError))
-                             else failure_message(exc, "补丁处理"),
+                             reason,
                              patches=patches, retry_count=retry_count, replay_attempted=replay_attempted)
+        if isinstance(sequence_diagnostic, dict):
+            self.verification['sequence_validation_diagnostic'] = deepcopy(sequence_diagnostic)
+        if historical_sequence_mismatch:
+            self.verification['retryable'] = False
+            self.verification['next_action'] = 'restore_historical_sequence_context'
         if isinstance(exc, PatchReplayBudgetError):
             self.verification["request_budget"] = {
                 "max_requests_per_task": MAX_REPLAY_REQUESTS,
@@ -209,8 +232,10 @@ class FixAgent(AgentBase):
                 pass
         return stopped
 
-    async def _get_patch_item(self, faulty_index):
+    async def _get_patch_item(self, faulty_index, *, expected_function=None):
         arguments = {"session_id": self.session_id, "faulty_index": faulty_index}
+        if expected_function is not None:
+            arguments['expected_function'] = expected_function
         item = await self.mcp_client.call_tool("get_patch_items", arguments)
         self._check_cancelled()
         if not isinstance(item, dict):
@@ -243,7 +268,9 @@ class FixAgent(AgentBase):
         self._required_replay_triggers = []
         self._replay_scope = ()
         self._runtime_source_evidence = {}
+        self._patch_source_resolutions = []
         self._runtime_integrity = None
+        self._verification_plan = None
         if not hasattr(self, "_replayed_patch_digests"):
             self._replayed_patch_digests = set()
         if not hasattr(self, '_rejected_patch_candidates'):
@@ -263,11 +290,24 @@ class FixAgent(AgentBase):
             return self._stop("blocked", "preconditions", "invalid_fix_report",
                               "The patch report is missing or malformed; replay was not started.")
 
+        if verify:
+            try:
+                self._verification_plan = self._resolve_verification_plan(fix_report)
+            except (ValueError, OSError, TypeError) as exc:
+                from app.attackpilot.utils.security_checks import verification_plan_diagnostic
+                dapp = self.processed_data.get('dapp') or {}
+                explicit = dapp.get('verification_plan', self.processed_data.get('verification_plan'))
+                stopped = self._stop('blocked', 'preconditions', 'invalid_verification_plan',
+                                     f'验证计划未通过输入及证据校验：{exc}；尚未生成或回放补丁。')
+                self.verification['plan_diagnostic'] = verification_plan_diagnostic(
+                    exc, origin='user_declared' if explicit is not None else 'investigation_derived')
+                return stopped
+
         faulty_functions = fix_report.get("faulty_functions")
         if not isinstance(faulty_functions, list) or not faulty_functions:
             return self._stop("blocked", "preconditions", "no_patch_targets",
                               "No source patch targets were identified; replay was not started.")
-        faulty_indexes = []
+        faulty_targets = []
         for faulty_function in faulty_functions:
             trigger = faulty_function.get("trigger_point") if isinstance(faulty_function, dict) else None
             if not isinstance(trigger, dict):
@@ -287,8 +327,15 @@ class FixAgent(AgentBase):
                                   "A patch target has no original transaction hash; replay was not started.")
             transaction_hash = transaction_hash.lower()
             faulty_index = f"{transaction_hash}::{index}"
-            if faulty_index not in faulty_indexes:
-                faulty_indexes.append(faulty_index)
+            expected_function = faulty_function.get('function_name')
+            if expected_function is not None:
+                if not isinstance(expected_function, str) or not expected_function.strip():
+                    return self._stop('blocked', 'preconditions', 'invalid_fix_report',
+                                      'A declared patch function must have a valid function name.')
+                expected_function = expected_function.strip()
+            target = (faulty_index, expected_function)
+            if target not in faulty_targets:
+                faulty_targets.append(target)
 
         address2contracts: Dict[str, ContractEntityForCompile] = {}
         uid2faults: Dict[str, list] = {}
@@ -296,20 +343,39 @@ class FixAgent(AgentBase):
         self._patch_trigger_transactions = {}
         # Validate every target before compilation, bytecode fetching, or model calls.
         # Patching a subset silently would leave the reported hypothesis untested.
-        for faulty_index in faulty_indexes:
+        for faulty_index, expected_function in faulty_targets:
             self._check_cancelled()
             try:
-                patch_item = await self._get_patch_item(faulty_index)
+                patch_item = (await self._get_patch_item(faulty_index) if expected_function is None else
+                              await self._get_patch_item(faulty_index, expected_function=expected_function))
             except Exception as exc:
                 return self._stop_error(exc, "source_lookup", "patch_source_lookup_error")
             self._check_cancelled()
             if not isinstance(patch_item, dict) or not patch_item:
                 return self._stop("blocked", "preconditions", "unmappable_patch_target",
                                   f"Source mapping is unavailable for trace target {faulty_index}; replay was not started.")
+            source_target = patch_item.get('source_target')
+            if isinstance(source_target, dict) and source_target.get('status') == 'unresolved':
+                stopped = self._stop('blocked', 'preconditions', 'unmappable_patch_target',
+                    f'声明函数 {expected_function} 无法与这笔交易已执行的源码唯一对应；尚未生成或回放补丁。')
+                self.verification['source_target_diagnostic'] = deepcopy(source_target)
+                return stopped
             address = patch_item.get("address")
             if not isinstance(address, str) or not address.strip():
                 return self._stop("blocked", "preconditions", "unmappable_patch_target",
                                   "A patch target has no contract address; replay was not started.")
+            resolved_index = patch_item.get('resolved_trigger_index')
+            if resolved_index is not None:
+                if type(resolved_index) is not int or resolved_index < 0:
+                    return self._stop('blocked', 'preconditions', 'unmappable_patch_target',
+                                      'The source target has an invalid observed trace position.')
+                original_index = faulty_index
+                faulty_index = f"{faulty_index.rsplit('::', 1)[0]}::{resolved_index}"
+                self._patch_source_resolutions.append({
+                    'expected_function': expected_function, 'requested_trigger': original_index,
+                    'resolved_trigger': faulty_index, 'address': address.lower(),
+                    'source_mapping': deepcopy(patch_item.get('source_mapping')),
+                })
             self._patch_trigger_transactions.setdefault(address.lower(), set()).add(faulty_index.rsplit('::', 1)[0].lower())
             contract_info = patch_item.get("contract_info")
             if not isinstance(contract_info, list) or not any(
@@ -430,7 +496,9 @@ class FixAgent(AgentBase):
                 proposal = await self.query(prompt.format(
                     fault_report=fault_data.get("fault_report", ""),
                     final_trace=fault_data.get("final_trace", ""),
-                    fix_report=fault_data.get("fix_report", ""),
+                    fix_report=json.dumps({**fix_report, 'verification_plan': self._verification_plan},
+                                          ensure_ascii=False) if self._verification_plan is not None
+                               else fault_data.get("fix_report", ""),
                     contract_code=format_contracts, last_error=last_error,
                 ), _format="str", temperature=1.0)
                 parse_success, parse_logs, patched_contracts = SolidityCodePatcher(uid2source).apply_patches(proposal)
@@ -460,8 +528,12 @@ class FixAgent(AgentBase):
                 )
                 continue
             replay_key = (patch_digest, getattr(self, '_replay_scope', ()))
+            if getattr(self, '_verification_plan', None) is not None:
+                from app.attackpilot.utils.security_checks import plan_digest
+                replay_key += (plan_digest(self._verification_plan),)
             previous_scopes = [set(key[1]) for key in self._replayed_patch_digests
-                               if isinstance(key, tuple) and len(key) == 2 and key[0] == patch_digest]
+                               if isinstance(key, tuple) and len(key) == len(replay_key)
+                               and key[0] == patch_digest and key[2:] == replay_key[2:]]
             already_tested = (patch_digest in self._replayed_patch_digests or previous_scopes
                               and not set().union(*previous_scopes) < set(replay_key[1]))
             if verify and already_tested:
@@ -583,7 +655,7 @@ class FixAgent(AgentBase):
                                   "The replay service did not return usable execution evidence; patch effectiveness is unknown.",
                                   patches=patches, retry_count=retry_count, replay_attempted=True)
                 return (stopped[0], replay_logs, stopped[2], stopped[3]) if isinstance(replay_logs, dict) else stopped
-            if (not isinstance(replay_logs, dict) or replay_logs.get("schema_version") != 1
+            if (not isinstance(replay_logs, dict) or replay_logs.get("schema_version") not in (1, 2)
                     or replay_logs.get("status") != "completed"
                     or replay_logs.get("control_validation") != "validated"
                     or not isinstance(replay_logs.get("transactions"), list)
@@ -639,7 +711,7 @@ class FixAgent(AgentBase):
         return {address: contracts_copy[address] for address in changed_addresses}
 
     def _replay_selection(self):
-        """Preserve original order while covering candidates and mapped triggers."""
+        """Keep every submitted step, including preparations labelled auxiliary."""
         tx_list = self.processed_data.get("transaction_hash_list", [])
         tx2detail = self.processed_data.get("transaction_to_detail", {})
         candidates = self.processed_data.get("attack_transactions", [])
@@ -650,7 +722,7 @@ class FixAgent(AgentBase):
             raise HistoricalReplayValidationError('unavailable', 'missing_evidence',
                                                   details={'field': 'replay_selection'})
         required = {tx for group in triggers.values() for tx in group}
-        requested = list(candidates) + list(required)
+        requested = list(tx_list) + list(candidates) + list(required)
         if any(not isinstance(tx, str) or re.fullmatch(r'0x[0-9a-fA-F]{64}', tx) is None
                for tx in tx_list + requested + list(tx2detail)):
             raise HistoricalReplayValidationError('unavailable', 'missing_evidence',
@@ -674,8 +746,42 @@ class FixAgent(AgentBase):
         self._required_replay_triggers = [tx for tx in ordered if tx in required]
         return [(tx, details[tx]) for tx in ordered if tx in selected]
 
+    def _resolve_verification_plan(self, fix_report):
+        from app.attackpilot.utils.security_checks import resolve_task_verification_plan
+        dapp = self.processed_data.get('dapp') or {}
+        explicit = dapp.get('verification_plan', self.processed_data.get('verification_plan'))
+        known = self.processed_data.get('transaction_hash_list') or dapp.get('transaction_hash') or []
+        proposed = fix_report.get('verification_plan')
+        if proposed is None and explicit is None:
+            return None
+        return resolve_task_verification_plan(proposed, explicit=explicit, network_id=self.chain_id,
+                                              transaction_hashes=known)
+
+    async def _prepare_normal_regression_contexts(self):
+        """Fetch explicitly declared normal inputs, outside attack classification."""
+        from app.attackpilot.utils.replay_validation import validate_original_transaction
+        plan = getattr(self, '_verification_plan', None)
+        cases = plan.get('normal_regression_cases', []) if isinstance(plan, dict) else []
+        hashes = list(dict.fromkeys(tx for case in cases for tx in case['transaction_hashes']))
+        blocks = []
+        for transaction_hash in hashes:
+            self._check_cancelled()
+            rpc_url = await self.rpc_bucket.get()
+            transaction = await TxDownloader(rpc_url=rpc_url).download(transaction_hash=transaction_hash)
+            self._check_cancelled()
+            receipt = await TxReceiptDownloader(rpc_url=rpc_url).download(transaction_hash=transaction_hash)
+            self._check_cancelled()
+            context = validate_original_transaction(transaction_hash, self.chain_id, transaction, receipt)
+            blocks.append(context['block_number'])
+        if blocks:
+            timestamps = await self._load_transaction_time(list(dict.fromkeys(blocks)))
+            self._check_cancelled()
+            if any(type(timestamps.get(block)) is not int or timestamps[block] < 0 for block in blocks):
+                raise ValueError('正常业务回归缺少经过校验的历史区块时间戳')
+
     async def prepare_bundle_data(self):
         selection = self._replay_selection()
+        await self._prepare_normal_regression_contexts()
         block_numbers = list(dict.fromkeys(detail["block_number"] for _, detail in selection))
         block2time = await self._load_transaction_time(block_numbers)
         tenderly_transactions = []
@@ -691,19 +797,24 @@ class FixAgent(AgentBase):
 
     async def run_patch_verification_from_tenderly(self, transactions, addr2bytecode):
         dao = BundleTenderlyDao(_platform=self._platform)
+        plan = getattr(self, '_verification_plan', None)
         try:
-            budget = self._preflight_replay_budget(dao, transactions, addr2bytecode)
+            budget = self._preflight_replay_budget(dao, transactions, addr2bytecode,
+                                                   verification_plan=plan)
         except Exception as exc:
             # A preflight failure precedes every paid request, including an
             # invalid source context rather than only an exhausted budget.
             exc.replay_attempted = False
             raise
-        verification_success, verification_result = await dao.bundle_simulate_txs_in_tenderly(transactions, addr2bytecode)
+        arguments = {'verification_plan': deepcopy(plan)} if plan is not None else {}
+        verification_success, verification_result = await dao.bundle_simulate_txs_in_tenderly(
+            transactions, addr2bytecode, **arguments)
+        planned = budget.get('planned_requests', 2 * len(transactions))
         self._last_replay_request_budget = {
             "max_requests_per_task": MAX_REPLAY_REQUESTS,
             "max_transactions": MAX_REPLAY_TRANSACTIONS,
             "new_requests_this_round": budget['required_requests'],
-            "reused_requests_this_round": 2 * len(transactions) - budget['required_requests'],
+            "reused_requests_this_round": planned - budget['required_requests'],
             "remaining_requests": budget['remaining_requests'] - budget['required_requests'],
         }
         if isinstance(verification_result, dict):
@@ -711,13 +822,17 @@ class FixAgent(AgentBase):
         return verification_success, verification_result
 
     @staticmethod
-    def _preflight_replay_budget(dao, transactions, addr2bytecode):
+    def _preflight_replay_budget(dao, transactions, addr2bytecode, verification_plan=None):
         """Do not start a paid round that cannot finish all independent pairs.
 
         Historical controls are immutable and reused across source revisions;
         only cache misses consume the fixed task budget. Reservations in the
         DAO remain the final atomic limit when a request is actually sent.
         """
+        estimate = getattr(type(dao), 'estimate_replay_budget', None)
+        if callable(estimate):
+            return dao.estimate_replay_budget(
+                transactions, addr2bytecode, verification_plan=verification_plan)
         if dao.chain_id is None or not isinstance(transactions, list) or not transactions:
             raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
         if len(transactions) > MAX_REPLAY_TRANSACTIONS:

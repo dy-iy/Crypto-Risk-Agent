@@ -349,16 +349,19 @@ class TenderlyDao:
 
     @staticmethod
     def _source_contract(raw_data, addr, existing):
-        raw_source = raw_data['SourceCode'].strip()
+        raw_source = raw_data['SourceCode']
         compiler_settings = {}
-        if raw_source.startswith('{'):
-            parsed = json.loads(raw_source[1:-1] if raw_source.startswith('{{') else raw_source)
+        # Only trim the JSON transport wrapper. Source whitespace and line
+        # endings participate in compiler metadata and UTF-8 source locations.
+        source_wrapper = raw_source.strip()
+        if source_wrapper.startswith('{'):
+            parsed = json.loads(source_wrapper[1:-1] if source_wrapper.startswith('{{') else source_wrapper)
             compiler_settings = copy.deepcopy(parsed.get('settings') or {})
             source_data = parsed.get('sources', parsed)
             sources = {path: item['content'] for path, item in source_data.items()
                        if isinstance(item, dict) and isinstance(item.get('content'), str)}
         else:
-            sources = {f"{raw_data.get('ContractName') or 'Contract'}.sol": raw_source.replace('\r\n', '\n')}
+            sources = {f"{raw_data.get('ContractName') or 'Contract'}.sol": raw_source}
         if not sources or not any(source.strip() for source in sources.values()):
             raise ValueError('Verified source response has no usable source files')
         optimizer = compiler_settings.setdefault('optimizer', {
@@ -521,100 +524,128 @@ class BundleTenderlyDao:
         self.chain_slug = platform_to_chain.get(_platform)
         self.evidence_store = PatchReplayEvidenceStore()
 
-    async def bundle_simulate_txs_in_tenderly(self, transactions, addr2bytecode):
-        from app.attackpilot.utils.patch_replay import (
-            MAX_REPLAY_REQUESTS, MAX_REPLAY_TRANSACTIONS, execution_summary,
-            historical_payload, public_context, runtime_overrides, validate_patch_context,
-            validate_historical_header, PatchReplayBudgetError,
-        )
-
-        if self.chain_id is None or not isinstance(transactions, list) or not transactions:
+    def _prepare_sequences(self, transactions, addr2bytecode, verification_plan=None):
+        from app.attackpilot.utils.sequence_replay import resolve_sequence, sequence_payload
+        from app.attackpilot.utils.patch_replay import runtime_overrides
+        from app.attackpilot.utils.security_checks import validate_verification_plan
+        if self.chain_id is None:
             raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
-        if len(transactions) > MAX_REPLAY_TRANSACTIONS:
-            raise PatchReplayBudgetError(transaction_limit=True)
         overrides = runtime_overrides(addr2bytecode)
-        patched_addresses = sorted(overrides)
-        originals, seen = [], set()
-        # Resolve every original receipt before any paid simulation is requested.
-        for detail in transactions:
-            if not isinstance(detail, dict):
-                raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
-            original_hash = detail.get('original_transaction_hash') or detail.get('hash')
-            context, raw_transaction = self.evidence_store.original_context(original_hash, self.chain_id)
-            if context['transaction_hash'] in seen:
-                raise TenderlyAPIError('simulate_bundle', error_code='invalid_request')
-            seen.add(context['transaction_hash'])
-            originals.append((context, raw_transaction))
+        plan = validate_verification_plan(verification_plan, network_id=self.chain_id)
+        attack = resolve_sequence(self.evidence_store, transactions, self.chain_id)
+        if plan is not None and plan['attack_transaction_hashes'] != [context['transaction_hash'] for context, _ in attack]:
+            raise ValueError('Verification plan attack sequence does not match submitted transaction order')
+        groups = [(None, attack)]
+        for case in plan.get('normal_regression_cases', []) if plan else []:
+            normal = resolve_sequence(self.evidence_store, [{'hash': tx} for tx in case['transaction_hashes']], self.chain_id)
+            groups.append((case, normal))
+        requests = [sequence_payload(originals, changes, plan) for _, originals in groups for changes in (None, overrides)]
+        return overrides, plan, groups, requests
 
+    def estimate_replay_budget(self, transactions, addr2bytecode, verification_plan=None):
+        from app.attackpilot.utils.patch_replay import MAX_REPLAY_REQUESTS, PatchReplayBudgetError, _digest
+        _, _, _, requests = self._prepare_sequences(transactions, addr2bytecode, verification_plan)
+        missing = {_digest(request) for request in requests if self.evidence_store.cached_response(request) is None}
+        remaining = self.evidence_store.remaining_requests()
+        if len(missing) > remaining:
+            error = PatchReplayBudgetError()
+            error.required_requests, error.remaining_requests = len(missing), remaining
+            raise error
+        return {'planned_requests': len(requests), 'required_requests': len(missing),
+                'remaining_requests': remaining, 'max_requests_per_task': MAX_REPLAY_REQUESTS}
+
+    async def bundle_simulate_txs_in_tenderly(self, transactions, addr2bytecode, *, verification_plan=None):
+        from app.attackpilot.utils.patch_replay import MAX_REPLAY_REQUESTS, MAX_REPLAY_TRANSACTIONS, public_context
+        from app.attackpilot.utils.security_checks import plan_digest
+        from app.attackpilot.utils.sequence_replay import (
+            SEQUENCE_SCOPE, SEQUENCE_MODE, sequence_payload, sequence_descriptor,
+            sequence_pairs, validate_bundle_results, validate_sequence_result, sequence_validation_diagnostic,
+        )
+        overrides, plan, groups, requests = self._prepare_sequences(transactions, addr2bytecode, verification_plan)
         report = {
-            'schema_version': 1, 'scope': 'independent_historical_transaction_pairs',
-            'status': 'incomplete', 'control_validation': 'pending',
-            'transaction_count': len(originals), 'patched_addresses': patched_addresses,
-            'transactions': [], 'profit_usd': None,
-            'normal_regression': {'status': 'not_run', 'reason_code': 'not_provided'},
+            'schema_version': 2, 'scope': SEQUENCE_SCOPE, 'status': 'incomplete',
+            'control_validation': 'pending', 'transaction_count': len(groups[0][1]),
+            'patched_addresses': sorted(overrides), 'transactions': [], 'profit_usd': None,
+            'verification_plan': plan,
+            'verification_plan_sha256': plan_digest(plan) if plan is not None else None,
+            'normal_regression': {'status': 'pending' if len(groups) > 1 else 'not_run',
+                                  'reason_code': None if len(groups) > 1 else 'not_provided',
+                                  'transaction_count': sum(len(items) for _, items in groups[1:]), 'cases': []},
             'request_budget': {'max_requests_per_task': MAX_REPLAY_REQUESTS,
-                               'max_transactions': MAX_REPLAY_TRANSACTIONS},
+                               'max_transactions': MAX_REPLAY_TRANSACTIONS, 'planned_requests': len(requests)},
         }
-        for context, raw_transaction in originals:
-            pair = {
-                'original_transaction_hash': context['transaction_hash'],
-                'context': public_context(context, raw_transaction),
-                'patched_addresses': patched_addresses,
-            }
-            report['transactions'].append(pair)
-            current_payload = None
-            try:
-                control_payload = historical_payload(context, raw_transaction)
-                current_payload = control_payload
-                control_result, control_artifact = await self._recorded_single_replay(
-                    control_payload, role='control', original_hash=context['transaction_hash'])
-                pair['control'] = {'artifact': control_artifact}
-                validate_historical_header(context, control_result)
-                baseline = validate_simulated_transaction(context, control_result)
-                control = execution_summary(control_result, control_artifact, patched_addresses)
-                control['baseline_validation'] = baseline
-                control['control_validation'] = 'validated'
-                pair['control'] = control
+        # All local identity/plan checks and the entire round's reservations
+        # precede the first request. A round cannot pay for only half its scope.
+        try:
+            self.evidence_store.reserve_requests(requests)
+        except Exception as exc:
+            exc.replay_attempted = False
+            exc.replay_evidence = report
+            raise
+        current_payload = None
+        try:
+            for case, originals in groups:
+                sequence = {'mode': SEQUENCE_MODE, 'base_context': public_context(*originals[0]),
+                            'ordered_transaction_hashes': [context['transaction_hash'] for context, _ in originals]}
+                target = report if case is None else {'id': case['id'], 'transactions': []}
+                target['sequence'] = sequence
+                if case is not None:
+                    report['normal_regression']['cases'].append(target)
+                bundles, artifacts = {}, {}
+                for role, changes in (('control', None), ('patched', overrides)):
+                    current_payload = sequence_payload(originals, changes, plan)
+                    results, artifact = await self._recorded_bundle_replay(
+                        current_payload, role=role, original_hash=originals[0][0]['transaction_hash'])
+                    bundles[role], artifacts[role] = results, artifact
+                    sequence[role] = sequence_descriptor(originals, artifact, results, plan)
+                    for index, result in enumerate(results[:len(originals)]):
+                        context, raw = originals[index]
+                        try:
+                            validate_sequence_result({**context, 'access_list': raw.get('accessList', [])},
+                                                     originals[0][0], result, control=role == 'control')
+                        except HistoricalReplayValidationError as exc:
+                            diagnostic = sequence_validation_diagnostic(
+                                context, originals[0][0], result, role=role, index=index, error=exc)
+                            exc.sequence_validation_diagnostic = diagnostic
+                            report['validation_failure'] = diagnostic
+                            raise
+                    if role == 'control' and len(results) < len(originals):
+                        raise HistoricalReplayValidationError('inconsistent', 'control_sequence_stopped',
+                                                              details={'field': 'sequence.control'})
+                target['transactions'] = sequence_pairs(originals, bundles, artifacts, sorted(overrides), overrides, plan)
+            report['status'] = 'completed'
+            report['control_validation'] = 'validated'
+            if len(groups) > 1:
+                report['normal_regression']['status'] = 'completed'
+            return True, report
+        except Exception as exc:
+            if current_payload is not None:
+                self.evidence_store.invalidate_response(current_payload)
+            exc.replay_evidence = report
+            raise
 
-                # A distinct request starts from the same real historical state;
-                # the control and patch never share a cumulative bundle state.
-                patched_payload = historical_payload(context, raw_transaction, overrides)
-                current_payload = patched_payload
-                patched_result, patched_artifact = await self._recorded_single_replay(
-                    patched_payload, role='patched', original_hash=context['transaction_hash'])
-                pair['patched'] = {'artifact': patched_artifact}
-                validate_historical_header(context, patched_result)
-                validate_patch_context(context, patched_result)
-                patched = execution_summary(patched_result, patched_artifact, patched_addresses,
-                                            runtime_codes={address: item['code'] for address, item in overrides.items()})
-                pair['patched'] = patched
-                pair['comparison'] = {
-                    'attack_transaction_reverted': control['status'] == 'success' and patched['status'] == 'revert',
-                    'logs_changed': control['logs']['ordered_logs_sha256'] != patched['logs']['ordered_logs_sha256'],
-                    'gas_changed': control['gas_used'] != patched['gas_used'],
-                    'profit_usd': None,
-                }
-            except Exception as exc:
-                if current_payload is not None:
-                    self.evidence_store.invalidate_response(current_payload)
-                # The caller can retain references to already completed evidence
-                # even if a later control, patch, or budget check blocks progress.
-                exc.replay_evidence = report
-                raise
-        report['status'] = 'completed'
-        report['control_validation'] = 'validated'
-        return True, report
+    async def _recorded_bundle_replay(self, payload: Dict, *, role: str, original_hash: str):
+        from app.attackpilot.utils.sequence_replay import validate_bundle_results
+        cached = self.evidence_store.cached_response(payload)
+        if cached is not None:
+            response, reference = cached
+            results = response.get('simulation_results')
+            validate_bundle_results(results, len(payload['simulations']))
+            return results, reference
+        results = await self.bundle_downloader.download(payload=payload)
+        validate_bundle_results(results, len(payload['simulations']))
+        artifact = self.evidence_store.persist(payload, {'simulation_results': results},
+                                               role=role, original_hash=original_hash)
+        return results, artifact
 
     async def _recorded_single_replay(self, payload: Dict, *, role: str, original_hash: str):
+        """Retained for local legacy artifact review, never used for sequences."""
         cached = self.evidence_store.cached_response(payload)
         if cached is not None:
             return cached
-        # Reservations are task-local and atomic, including across repair retries.
-        # Reusing an identical stored response does not consume another request.
         self.evidence_store.reserve_request(payload)
         results = await self.bundle_downloader.download(payload=payload)
         if not isinstance(results, list) or len(results) != 1 or not isinstance(results[0], dict):
             raise TenderlyAPIError('simulate_bundle', error_code='invalid_response')
-        result = results[0]
-        artifact = self.evidence_store.persist(payload, result, role=role, original_hash=original_hash)
-        return result, artifact
+        artifact = self.evidence_store.persist(payload, results[0], role=role, original_hash=original_hash)
+        return results[0], artifact
